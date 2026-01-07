@@ -1,0 +1,11 @@
+#+title: readme
+
+* Shapeless Editor
+This is an experimental editor written in Jai that mimic the feel of
+my everyday Emacs usage, with inspirations from 4coder's extension
+method.
+
+* Feature
+Jai and Jai only. With how powerful the Jai language is. I feel like
+that the lispy way of extending an editor is not the only way to do
+so.
