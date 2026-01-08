@@ -40,6 +40,7 @@ compile_dll :: (name: string, root_options: Build_Options) {
     copy_commonly_propagated_fields(root_options, *options);
     options.output_executable_name = name;
     options.output_type = .DYNAMIC_LIBRARY;
+    options.dead_code_elimination = .ALL;
     set_build_options(options, w);
     loop(sprint("%.jai", name), w);
 }
