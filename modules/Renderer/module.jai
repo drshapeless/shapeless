@@ -4,12 +4,58 @@ Renderer :: struct {
     surface: VkSurfaceKHR;
     physical_device: VkPhysicalDevice;
     device: VkDevice;
+    queue_indices:    Queue_Family_Indices;
+    graphics_queue:   VkQueue;
+    present_queue:    VkQueue;
+    vma:              VmaAllocator;
+    vka:              *VkAllocationCallbacks;
+
+    max_sample_count: VkSampleCountFlags;
+    sample_count:     VkSampleCountFlags;
+    image_count: u32;
+
 
     Queue_Family_Indices :: struct {
         graphics: u32;
         present:  u32;
     }
 
+    Swapchain :: struct {
+        vk: VkSwapchainKHR;
+        images: [] VkImage;
+        format: VkFormat;
+        extent: VkExtent2D;
+    }
+
+    Frame_Sync :: struct {
+        image_available: VkSemaphore;
+        render_finished: VkSemaphore;
+        in_flight_fence: VkFence;
+    }
+
+    Buffer :: struct {
+        vk:          VkBuffer;
+        allocation:  VmaAllocation;
+        size:        u64;
+    }
+
+    Mesh :: struct {
+        vertex_buffer: Buffer;
+        index_buffer:  Buffer;
+    }
+
+    Image :: struct {
+        vk:         VkImage;
+        allocation: VmaAllocation;
+    }
+
+    Texture :: struct {
+        image:      Image;
+        image_view: VkImageView;
+        format:     VkFormat;
+    }
+
+    assets_directory: string;
 }
 
 // Stolen from JBlow's Vulkan_Renderer
@@ -88,10 +134,10 @@ make_vk_instance_create_info :: (instance_extensions: [] *u8, enable_validation_
     };
 }
 
-make_vk_instance :: (instance_extensions: [] *u8, enable_validation_layers: bool) -> VkInstance, bool {
+make_vk_instance :: (instance_extensions: [] *u8, enable_validation_layers: bool, vka: *VkAllocationCallbacks = null) -> VkInstance, bool {
     instance_create_info := make_vk_instance_create_info(instance_extensions, enable_validation_layers);
     instance: VkInstance;
-    result := check_vk(vkCreateInstance(*instance_create_info, null, *instance));
+    result := check_vk(vkCreateInstance(*instance_create_info, vka, *instance));
     return instance, result == .SUCCESS;
 }
 
@@ -167,13 +213,457 @@ make_vk_device_create_info :: (
         };
     }
 
-    supported_features: VkPhysicalDeviceFeatures;
-    vkGetPhysicalDeviceFeatures(physical_device, *supported_features);
-    enabled_features := New(VkPhysicalDeviceFeatures,, temp);
+    features13 := New(VkPhysicalDeviceVulkan13Features,, temp);
+    features13.dynamicRendering = VK_TRUE;
+    features13.synchronization2 = VK_TRUE;
 
-    // TODO: WIP
+
+    features12 := New(VkPhysicalDeviceVulkan12Features,, temp);
+    features12.pNext = features13;
+    features12.bufferDeviceAddress = VK_TRUE;
+    features12.descriptorIndexing = VK_TRUE;
+
+    device_features := New(VkPhysicalDeviceFeatures2,, temp);
+    device_features.pNext = features12;
+    device_features.features = .{
+        samplerAnisotropy = VK_TRUE,
+        fillModeNonSolid = VK_TRUE,
+    };
+
+    // TODO: Check if the features are available before use. Now it is
+    // not checked.
+
+    return .{
+        pNext = device_features,
+        queueCreateInfoCount = xx queue_create_infos.count,
+        pQueueCreateInfos = queue_create_infos.data,
+        enabledLayerCount = xx ifx enable_validation_layers then validation_layers.count else 0,
+        ppEnabledLayerNames = ifx enable_validation_layers then validation_layers.data else null,
+        enabledExtensionCount = xx device_extensions.count,
+        ppEnabledExtensionNames = device_extensions.data,
+        pEnabledFeatures = null,
+    };
+}
+
+// This will choose a physical device and create a logical device for you
+make_renderer :: (
+    instance: VkInstance,
+    surface: VkSurfaceKHR,
+    enable_validation_layers: bool,
+    sample_count: VkSampleCountFlags = .e1,
+    assets_directory := "",
+    vka: *VkAllocationCallbacks = null,
+) -> Renderer, bool {
+    all_device_extensions: [..] *u8;
+    all_device_extensions.allocator = temp;
+    array_add(*all_device_extensions, ..device_extensions);
+    array_add(*all_device_extensions, VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+
+    physical_device, queue_indices := choose_physical_device(instance, surface, all_device_extensions);
+    if !physical_device {
+        log_error("Vulkan failed to find physical device");
+        if surface vkDestroySurfaceKHR(instance, surface, vka);
+        vkDestroyInstance(instance, vka);
+        return .{}, false;
+    }
+
+    device_create_info := make_vk_device_create_info(
+        physical_device,
+        surface,
+        all_device_extensions,
+        queue_indices,
+        enable_validation_layers = enable_validation_layers,
+        enable_multiview = is_stereo
+    );
+
+    device: VkDevice;
+    if check_vk(vkCreateDevice(physical_device, *device_create_info, vka, *device)) {
+        if surface vkDestroySurfaceKHR(instance, surface, vka);
+        vkDestroyInstance(instance, vka);
+        return .{}, false;
+    }
+
+    renderer, success := make_renderer(
+        instance,
+        physical_device,
+        device,
+        queue_indices,
+        surface,
+        sample_count = sample_count,
+        assets_directory = assets_directory,
+        vka
+    );
+    return renderer, success;
+}
+
+make_renderer :: (
+    instance: VkInstance,
+    physical_device: VkPhysicalDevice,
+    device: VkDevice,
+    queue_indices: Renderer.Queue_Family_Indices,
+    surface: VkSurfaceKHR,
+    sample_count: VkSampleCountFlags = .e1,
+    is_stereo := false,
+    assets_directory := "",
+    vka: *VkAllocationCallbacks = null,
+) -> Renderer, bool {
+    max_sample_count := max_supported_sample_count(physical_device);
+
+    assets := assets_directory;
+    if !assets {
+        assets = path_strip_filename(get_path_of_running_executable());
+    }
+
+    renderer := Renderer.{
+        instance = instance,
+        surface = surface,
+        physical_device = physical_device,
+        device = device,
+        queue_indices = queue_indices,
+        max_sample_count = max_sample_count,
+        sample_count = min(sample_count, max_sample_count),
+        assets_directory = copy_string(assets),
+        vka = vka
+    };
+
+    result: VkResult;
+
+    defer {
+        if result deinit(*renderer);
+    }
+
+    vkGetDeviceQueue(device, queue_indices.graphics, 0, *renderer.graphics_queue);
+    vkGetDeviceQueue(device, queue_indices.present, 0, *renderer.present_queue);
+
+    renderer.vma, result = make_vma(instance, physical_device, device);
+    if result return .{}, false;
+
+
+    // TODO: A lot of things not implemented.
+
+}
+
+deinit :: (using renderer: *Renderer, check_for_memory_leaks := true) {
+    if device vkDeviceWaitIdle(device);
+
+    free(assets_directory);
+
+    // for * models destroy_model_swapchain_resources(renderer, it);
+    // deinit(*models);
+
+    // for meshes destroy_mesh(renderer, it);
+    // deinit(*meshes);
+
+    destroy_swapchain_resources(renderer);
+    // vkDestroyDescriptorSetLayout(device, descriptor_set_layout, null);
+    // destroy_frame_syncs(device, frame_syncs);
+    // vkDestroyCommandPool(device, command_pool, null);
+
+    if check_for_memory_leaks && vma {
+        memory_stats: VmaTotalStatistics;
+        vmaCalculateStatistics(vma, *memory_stats);
+        if memory_stats.total.statistics.allocationCount > 0 {
+            stats_string: *u8;
+            vmaBuildStatsString(vma, *stats_string, detailedMap = VK_TRUE);
+            log_error("Vulkan memory leaks, stats: %", to_string(stats_string));
+            vmaFreeStatsString(vma, stats_string);
+        }
+    }
+
+    vmaDestroyAllocator(vma);
+    vkDestroyDevice(device, vka);
+
+    if surface vkDestroySurfaceKHR(instance, surface, vka);
+
+    vkDestroyInstance(instance, vka);
+}
+
+// Helpers
+
+choose_physical_device() :: (instance: VkInstance, surface: VkSurfaceKHR, device_extensions: [] *u8) -> VkPhysicalDevice, Renderer.Queue_Family_Indices {
+    devices, result := vkEnumeratePhysicalDevices(instance,, temp);
+    if check_vk(result, vkEnumeratePhysicalDevices) return null, .{};
+
+    best_score := 0;
+    best_device: VkPhysicalDevice;
+    best_device_queue_families: Renderer.Queue_Family_Indices;
+    for device: devices {
+        // Make sure the device has necessary queue families and supports required extensions
+        queue_families, found := find_queue_families(device, surface);
+        if !found || !device_supports_extensions(device, device_extensions)
+            then continue;
+
+        // If surface is present, make sure it has swapchain support
+        if surface {
+            swapchain_support := get_swapchain_support(device, surface);
+            if swapchain_support.formats.count == 0
+                || swapchain_support.present_modes.count == 0
+                then continue;
+        }
+
+        score := 0;
+
+        features: VkPhysicalDeviceFeatures;
+        vkGetPhysicalDeviceFeatures(device, *features);
+        if features.samplerAnisotropy {
+            score += 5;
+        }
+
+        properties: VkPhysicalDeviceProperties;
+        vkGetPhysicalDeviceProperties(device, *properties);
+
+        if properties.deviceType == {
+        case .DISCRETE_GPU;
+            score += 100;
+        case .INTEGRATED_GPU;
+            score += 10;
+        }
+
+        if score > best_score {
+            best_score = score;
+            best_device = device;
+            best_device_queue_families = queue_families;
+        }
+    }
+
+    return best_device, best_device_queue_families;
+}
+
+Swapchain_Support :: struct {
+    capabilities: VkSurfaceCapabilitiesKHR;
+    formats: [] VkSurfaceFormatKHR;
+    present_modes: [] VkPresentModeKHR;
+}
+
+get_swapchain_support :: (physical_device: VkPhysicalDevice, surface: VkSurfaceKHR) -> Swapchain_Support {
+    assert(surface != null);
+
+    capabilities: VkSurfaceCapabilitiesKHR;
+    if check_vk(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device, surface, *capabilities)) return .{};
+
+    format_count: u32;
+    if check_vk(vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, *format_count, null)) return .{};
+    formats := NewArray(format_count, VkSurfaceFormatKHR, initialized = false,, temp);
+    if check_vk(vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, *format_count, formats.data)) return .{};
+
+    present_mode_count: u32;
+    if check_vk(vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface, *present_mode_count, null)) return .{};
+    present_modes := NewArray(present_mode_count, VkPresentModeKHR, initialized = false,, temp);
+    if check_vk(vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface, *present_mode_count, present_modes.data)) return .{};
+
+    return .{
+        capabilities = capabilities,
+        formats = formats,
+        present_modes = present_modes
+    };
+}
+
+make_vma :: (instance: VkInstance, physical_device: VkPhysicalDevice, device: VkDevice) -> VmaAllocator, VkResult {
+    vma_vulkan_functions := VmaVulkanFunctions.{
+        vkGetInstanceProcAddr = vkGetInstanceProcAddr,
+        vkGetDeviceProcAddr = vkGetDeviceProcAddr,
+    };
+
+    create_info := VmaAllocatorCreateInfo.{
+        vulkanApiVersion = VK_API_VERSION_1_4,
+        physicalDevice = physical_device,
+        device = device,
+        instance = instance,
+        flags = VMA_BUFFER_DEVICE_ADDRESS,
+        pVulkanFunctions = *vma_vulkan_functions,
+    };
+
+    allocator: VmaAllocator;
+    result := check_vk(vmaCreateAllocator(*create_info, *allocator));
+    return allocator, result;
+}
+
+make_command_pool :: (device: VkDevice, queue_indices: Renderer.Queue_Family_Indices, vka: *VkAllocationCallbacks = null) -> VkCommandPool, VkResult {
+    create_info := VkCommandPoolCreateInfo.{
+        flags = .RESET_COMMAND_BUFFER,
+        queueFamilyIndex = queue_indices.graphics
+    };
+
+    pool: VkCommandPool;
+    result := check_vk(vkCreateCommandPool(device, *create_info, vka, *pool));
+    return pool, result;
+}
+
+make_frame_syncs :: (using renderer: *Renderer) -> ([]Renderer.Frame_Sync, VkResult) {
+    semaphore_info: VkSemaphoreCreateInfo;
+    fence_info := VkFenceCreateInfo.{flags = .SIGNALED};
+
+    syncs := NewArray(image_count, Frame_Sync, initialized = false);
+    result: VkResult;
+
+    defer {
+        if result destroy_frame_syncs(renderer, syncs);
+    }
+
+    for * sync: syncs {
+        result = check_vk(vkCreateSemaphore(device, *semaphore_info, vka, *sync.image_available));
+        if result return syncs, result;
+
+        result = check_vk(vkCreateSemaphore(device, *semaphore_info, vka, *sync.render_finished));
+        if result return syncs, result;
+
+        result = check_vk(vkCreateFence(device, *fence_info, vka, *sync.in_flight_fence));
+        if result return syncs, result;
+    }
+
+    return syncs, .SUCCESS;
+}
+
+destroy_frame_syncs :: (using renderer: *Renderer, syncs: []Renderer.Frame_Sync) {
+    for * sync: syncs {
+        vkDestroySemaphore(device, sync.image_available, vka);
+        vkDestroySemaphore(device, sync.render_finished, vka);
+        vkDestroyFence(device, sync.in_flight_fence, vka);
+    }
+
+    array_free(syncs);
+}
+
+make_swapchain :: (using renderer: *Renderer) -> VkResult {
+    assert(surface != null);
+    support := get_swapchain_support(physical_device, surface);
+
+    format := support.formats[0];
+    for support.formats {
+        if it.format == .B8G8R8A8_UNORM && it.colorSpace == .SRGB_NONLINEAR {
+            format = it;
+            break;
+        }
+    }
+
+    present_mode := VkPresentModeKHR.FIFO;
+    for support.present_modes {
+        if it == .MAILBOX {
+            present_mode = it;
+            break;
+        }
+    }
+
+    // renderer.image_count
+    image_count = support.capabilities.minImageCount + 1;
+    if swapchain_support.capabilities.maxImageCount > 0 && image_count > swapchain_support.capabilities.maxImageCount {
+        image_count = swapchain_support.capabilities.maxImageCount;
+    }
+
+    extent := support.capabilities.currentExtent;
+    if extent.width == U32_MAX {
+        extent = support.capabilities.maxImageExtent;
+    }
+
+    exclusive_queue := queue_indices.graphics == queue_indices.present;
+    queue_indices_array := u32.[queue_indices.graphics, queue_indices.present];
+
+    create_info := VkSwapchainCreateInfoKHR.{
+        surface = surface,
+        minImageCount = image_count,
+        imageFormat = format.format,
+        imageColorSpace = format.colorSpace,
+        imageExtent = extent,
+        imageArrayLayers = 1,
+        imageUsage = .COLOR_ATTACHMENT,
+        imageSharingMode = ifx exclusive_queue then .EXCLUSIVE else .CONCURRENT,
+        queueFamilyIndexCount = xx ifx exclusive_queue then 0 else 2,
+        pQueueFamilyIndices = ifx exclusive_queue then queue_indices_array.data else null,
+        preTransform = support.capabilities.currentTransform,
+        compositeAlpha = .OPAQUE,
+        presentMode = present_mode,
+        clipped = VK_TRUE
+    };
+
+    swapchain = Renderer.Swapchain.{
+        format = format.format,
+        extent = extent
+    };
+
+    result := check_vk(vkCreateSwapchainKHR(device, *create_info, vka, *swapchain.vk));
+    if result return result;
+
+    swapchain_image_count: u32;
+    result = check_vk(vkGetSwapchainImagesKHR(device, swapchain.vk, *swapchain_image_count, null));
+    swapchain.images = NewArray(swapchain_image_count, VkImage, initialized = false);
+    return check_vk(vkGetSwapchainImagesKHR(device, swapchain.vk, *swapchain_image_count, swapchain.images.data));
+}
+
+destroy_swapchain :: (using renderer: *Renderer) {
+    vkDestroySwapchainKHR(device, swapchain.vk, vka);
+    // TODO: Should I free the swapchain.images here?
+    swapchain.vk = null;
+}
+
+make_image :: (
+    renderer: *Renderer,
+    extent: VkExtent2D,
+    format: VkFormat,
+    image_usage: VkImageUsageFlags,
+    memory_usage: VmaMemoryUsage,
+    tiling: VkImageTiling = .OPTIMAL,
+    image_type := VkImageType.e2D,
+    layer_count: u32 = 1,
+    sample_count := VkSampleCountFlags.e1,
+    mip_levels: u32 = 1
+) -> Renderer.Image, VkResult {
+    image_info := VkImageCreateInfo.{
+        imageType = image_type,
+        format = format,
+        extent = .{
+            width = extent.width,
+            height = extent.height,
+            depth = 1
+        },
+        mipLevels = mip_levels,
+        arrayLayers = layer_count,
+        samples = sample_count,
+        usage = image_usage,
+        sharingMode = .EXCLUSIVE,
+        initialLayout = .UNDEFINED
+    };
+
+    alloc_create_info := VmaAllocationCreateInfo.{
+        usage = memory_usage,
+        requiredFlags = .DEVICE_LOCAL, // TODO: Does this work?
+    };
+
+    image: VkImage;
+    allocation: VmaAllocation;
+    result := check_vk(vmaCreateImage(renderer.vma, *image_info, *alloc_create_info, *image, *allocation, null));
+    return .{vk = image, allocation = allocation}, result;
+}
+
+make_image_view :: (renderer: *Renderer, image: VkImage, format: VkFormat, aspect_flags: VkImageAspectFlags, layer_count: u32 = 1, mip_levels: u32 = 1) -> VkImageView, VkResult {
+    create_info := VkImageViewCreateInfo.{
+        image = image,
+        viewType = ifx layer_count > 1 then .e2D_ARRAY else .e2D,
+        format = format,
+        subresourceRange = .{
+            aspectMask = aspect_flags,
+            baseMipLevel = 0,
+            levelCount = mip_levels,
+            baseArrayLayer = 0,
+            layerCount = layer_count
+        }
+    };
+
+    view: VkImageView;
+    result := check_vk(vkCreateImageView(device, *create_info, vka, *view));
+    return view, result;
+}
+
+destroy_image :: (renderer: *Renderer, image: Renderer.Image) {
+    vmaDestroyImage(renderer.vma, image.vk, image.allocation);
+}
+
+destroy_image_view :: (using renderer: *Renderer, image_view: VkImageView) {
+    vkDestroyImageView(device, image_view, vka);
 }
 
 #scope_file
 #import "Vulkan";
+#import "Vulkan_Memory_Allocator";
 #import "Basic";
+#import "String";
+#import "Math";
