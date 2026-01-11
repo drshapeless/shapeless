@@ -1,18 +1,6 @@
 Shapeless_Func :: #type (app: *App, user_data: *void) -> *void;
 Run_After_Load_Func :: #type (app: *App) -> void #c_call;
 
-App :: struct {
-    ctx: #Context;
-    functions: Table(string, Shapeless_Func);
-    variables: Table(string, Any);
-    modes: Table(string, Mode);
-    keybinds: Table(string, Shapeless_Func);
-
-    buffers: [..] Buffer;
-    current_buffer_index: s64;
-    windows: [..] Window;
-}
-
 Mode :: struct {
     name: string;
     after_hooks: []Shapeless_Func;
@@ -25,20 +13,13 @@ Buffer :: struct {
     data: []u8;
 }
 
-Window :: struct {
-    buffer_index: s64;
-    cursor: s64;
-    pos_x: s32;
-    pos_y: s32;
-    width: s32;
-    height: s32;
-}
-
-init :: (app: *App) {
-    app.ctx = context;
-}
-
-
-
+#load "app.jai";
+#load "window.jai";
+#load "frame.jai";
 #scope_file
 #import "Hash_Table";
+#import "Renderer";
+#import "SDL3";
+#import "String";
+#import "Basic";
+#import "Vulkan";

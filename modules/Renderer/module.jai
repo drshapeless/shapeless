@@ -14,6 +14,36 @@ Renderer :: struct {
     sample_count:     VkSampleCountFlags;
     image_count: u32;
 
+    command_pool: VkCommandPool;
+    descriptor_set_layout: VkDescriptorSetLayout;
+
+    // Synchronization
+    max_frames_in_flight: u32;
+    frame_syncs: [] Frame_Sync;
+    frame_sync_index := 0;
+
+    assets_directory: string;
+
+    // Buffers that need to be destroyed are queued here to ensure that they are not
+    // destroyed while being used for rendering
+    buffers_queued_for_destruction: [] [..] Buffer;
+
+    // Swapchain resources
+    swapchain: Swapchain;
+    swapchain_image_views: [] VkImageView;
+    depth_image: Texture;
+    // renderpass and framebuffer are no longer needed with dynamic
+    // rendering
+    command_buffers: [] VkCommandBuffer;
+    image_fences_in_flight: [] VkFence;
+
+    next_descriptor_pool_id: Descriptor_Pool.ID = 1;
+    current_descriptor_pool_id: Descriptor_Pool.ID;
+    descriptor_pools: Table(Descriptor_Pool.ID, Descriptor_Pool);
+
+    next_pipeline_id: Pipeline.ID = 1;
+    current_pipeline_id: Pipeline.ID;
+    pipelines: Table(Pipeline.ID, Pipeline);
 
     Queue_Family_Indices :: struct {
         graphics: u32;
@@ -25,6 +55,13 @@ Renderer :: struct {
         images: [] VkImage;
         format: VkFormat;
         extent: VkExtent2D;
+    }
+
+    Pipeline :: struct {
+        ID :: #type,distinct u64;
+        id: ID;
+        vk: VkPipeline;
+        layout: VkPipelineLayout;
     }
 
     Frame_Sync :: struct {
@@ -55,7 +92,20 @@ Renderer :: struct {
         format:     VkFormat;
     }
 
-    assets_directory: string;
+    Descriptor_Pool :: struct {
+        ID :: #type,distinct u64;
+        id:              ID;
+        vk:              VkDescriptorPool;
+        allocated_count: int;
+    }
+
+    Model :: struct {
+        mesh_key: string;
+        pipeline_id: Pipeline.ID;
+        descriptor_pool_id: Descriptor_Pool.ID;
+        uniform_buffers: [] Buffer;
+        descriptor_sets: [] VkDescriptorSet;
+    }
 }
 
 // Stolen from JBlow's Vulkan_Renderer
@@ -122,7 +172,7 @@ application_info :: VkApplicationInfo.{
     apiVersion         = VK_API_VERSION_1_4
 };
 
-validation_layers :: (*u8).[VK_EXT_DEBUG_UTILS_EXTENSION_NAME];
+validation_layers :: (*u8).["VK_LAYER_KHRONOS_validation"];
 
 make_vk_instance_create_info :: (instance_extensions: [] *u8, enable_validation_layers: bool) -> VkInstanceCreateInfo {
     return .{
@@ -168,7 +218,7 @@ find_queue_families :: (physical_device: VkPhysicalDevice, surface: VkSurfaceKHR
     vkGetPhysicalDeviceQueueFamilyProperties(physical_device, *queue_families_count, queue_families.data);
 
     for queue_families {
-        if it.queueFlags & .GRAPHICS_BIT {
+        if it.queueFlags & .GRAPHICS {
             graphics = xx it_index;
         }
 
@@ -195,8 +245,7 @@ make_vk_device_create_info :: (
     surface: VkSurfaceKHR,
     device_extensions: [] *u8,
     queue_indices: Renderer.Queue_Family_Indices,
-    enable_validation_layers: bool,
-    enable_multiview: bool,
+    enable_validation_layers: bool
 ) -> VkDeviceCreateInfo {
     indices_array := u32.[queue_indices.graphics, queue_indices.present];
 
@@ -249,10 +298,11 @@ make_vk_device_create_info :: (
 make_renderer :: (
     instance: VkInstance,
     surface: VkSurfaceKHR,
+    device_extensions: [] *u8,
     enable_validation_layers: bool,
     sample_count: VkSampleCountFlags = .e1,
     assets_directory := "",
-    vka: *VkAllocationCallbacks = null,
+    vka: *VkAllocationCallbacks = null
 ) -> Renderer, bool {
     all_device_extensions: [..] *u8;
     all_device_extensions.allocator = temp;
@@ -273,7 +323,6 @@ make_renderer :: (
         all_device_extensions,
         queue_indices,
         enable_validation_layers = enable_validation_layers,
-        enable_multiview = is_stereo
     );
 
     device: VkDevice;
@@ -282,6 +331,9 @@ make_renderer :: (
         vkDestroyInstance(instance, vka);
         return .{}, false;
     }
+
+    // TODO: I think it is out of place to be here.
+    vk_load_device_functions(device);
 
     renderer, success := make_renderer(
         instance,
@@ -305,7 +357,7 @@ make_renderer :: (
     sample_count: VkSampleCountFlags = .e1,
     is_stereo := false,
     assets_directory := "",
-    vka: *VkAllocationCallbacks = null,
+    vka: *VkAllocationCallbacks = null
 ) -> Renderer, bool {
     max_sample_count := max_supported_sample_count(physical_device);
 
@@ -341,6 +393,8 @@ make_renderer :: (
 
     // TODO: A lot of things not implemented.
 
+    // TODO: Swapchain here
+    return renderer, true;
 }
 
 deinit :: (using renderer: *Renderer, check_for_memory_leaks := true) {
@@ -354,7 +408,7 @@ deinit :: (using renderer: *Renderer, check_for_memory_leaks := true) {
     // for meshes destroy_mesh(renderer, it);
     // deinit(*meshes);
 
-    destroy_swapchain_resources(renderer);
+    // destroy_swapchain_resources(renderer);
     // vkDestroyDescriptorSetLayout(device, descriptor_set_layout, null);
     // destroy_frame_syncs(device, frame_syncs);
     // vkDestroyCommandPool(device, command_pool, null);
@@ -378,86 +432,6 @@ deinit :: (using renderer: *Renderer, check_for_memory_leaks := true) {
     vkDestroyInstance(instance, vka);
 }
 
-// Helpers
-
-choose_physical_device() :: (instance: VkInstance, surface: VkSurfaceKHR, device_extensions: [] *u8) -> VkPhysicalDevice, Renderer.Queue_Family_Indices {
-    devices, result := vkEnumeratePhysicalDevices(instance,, temp);
-    if check_vk(result, vkEnumeratePhysicalDevices) return null, .{};
-
-    best_score := 0;
-    best_device: VkPhysicalDevice;
-    best_device_queue_families: Renderer.Queue_Family_Indices;
-    for device: devices {
-        // Make sure the device has necessary queue families and supports required extensions
-        queue_families, found := find_queue_families(device, surface);
-        if !found || !device_supports_extensions(device, device_extensions)
-            then continue;
-
-        // If surface is present, make sure it has swapchain support
-        if surface {
-            swapchain_support := get_swapchain_support(device, surface);
-            if swapchain_support.formats.count == 0
-                || swapchain_support.present_modes.count == 0
-                then continue;
-        }
-
-        score := 0;
-
-        features: VkPhysicalDeviceFeatures;
-        vkGetPhysicalDeviceFeatures(device, *features);
-        if features.samplerAnisotropy {
-            score += 5;
-        }
-
-        properties: VkPhysicalDeviceProperties;
-        vkGetPhysicalDeviceProperties(device, *properties);
-
-        if properties.deviceType == {
-        case .DISCRETE_GPU;
-            score += 100;
-        case .INTEGRATED_GPU;
-            score += 10;
-        }
-
-        if score > best_score {
-            best_score = score;
-            best_device = device;
-            best_device_queue_families = queue_families;
-        }
-    }
-
-    return best_device, best_device_queue_families;
-}
-
-Swapchain_Support :: struct {
-    capabilities: VkSurfaceCapabilitiesKHR;
-    formats: [] VkSurfaceFormatKHR;
-    present_modes: [] VkPresentModeKHR;
-}
-
-get_swapchain_support :: (physical_device: VkPhysicalDevice, surface: VkSurfaceKHR) -> Swapchain_Support {
-    assert(surface != null);
-
-    capabilities: VkSurfaceCapabilitiesKHR;
-    if check_vk(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device, surface, *capabilities)) return .{};
-
-    format_count: u32;
-    if check_vk(vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, *format_count, null)) return .{};
-    formats := NewArray(format_count, VkSurfaceFormatKHR, initialized = false,, temp);
-    if check_vk(vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, *format_count, formats.data)) return .{};
-
-    present_mode_count: u32;
-    if check_vk(vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface, *present_mode_count, null)) return .{};
-    present_modes := NewArray(present_mode_count, VkPresentModeKHR, initialized = false,, temp);
-    if check_vk(vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface, *present_mode_count, present_modes.data)) return .{};
-
-    return .{
-        capabilities = capabilities,
-        formats = formats,
-        present_modes = present_modes
-    };
-}
-
 make_vma :: (instance: VkInstance, physical_device: VkPhysicalDevice, device: VkDevice) -> VmaAllocator, VkResult {
     vma_vulkan_functions := VmaVulkanFunctions.{
         vkGetInstanceProcAddr = vkGetInstanceProcAddr,
@@ -478,7 +452,7 @@ make_vma :: (instance: VkInstance, physical_device: VkPhysicalDevice, device: Vk
     return allocator, result;
 }
 
-make_command_pool :: (device: VkDevice, queue_indices: Renderer.Queue_Family_Indices, vka: *VkAllocationCallbacks = null) -> VkCommandPool, VkResult {
+make_command_pool :: (using renderer: *Renderer) -> VkCommandPool, VkResult {
     create_info := VkCommandPoolCreateInfo.{
         flags = .RESET_COMMAND_BUFFER,
         queueFamilyIndex = queue_indices.graphics
@@ -522,6 +496,84 @@ destroy_frame_syncs :: (using renderer: *Renderer, syncs: []Renderer.Frame_Sync)
     }
 
     array_free(syncs);
+}
+
+make_descriptor_set_layout :: (renderer: *Renderer) -> VkDescriptorSetLayout, VkResult {
+    uniform_layout_binding := VkDescriptorSetLayoutBinding.{
+        binding = 0,
+        descriptorType = .UNIFORM_BUFFER,
+        descriptorCount = 1,
+        stageFlags = .VERTEX | .FRAGMENT
+    };
+
+    bindings := VkDescriptorSetLayoutBinding.[
+        uniform_layout_binding,
+        //sampler_layout_binding
+    ];
+
+    layout_info := VkDescriptorSetLayoutCreateInfo.{
+        bindingCount = xx bindings.count,
+        pBindings = bindings.data
+    };
+
+    layout: VkDescriptorSetLayout;
+    result := check_vk(vkCreateDescriptorSetLayout(device, *layout_info, vka, *layout));
+    return layout, result;
+}
+
+make_image_texture_sampler :: (renderer: *Renderer) -> VkSampler, VkResult {
+    sampler_info := VkSamplerCreateInfo.{
+        magFilter = .LINEAR,
+        minFilter = .LINEAR,
+        mipmapMode = .LINEAR,
+        addressModeU = .REPEAT,
+        addressModeV = .REPEAT,
+        addressModeW = .REPEAT,
+        mipLodBias = 0,
+        anisotropyEnable = VK_TRUE,
+        maxAnisotropy = 16,
+        compareEnable = VK_FALSE,
+        compareOp = .ALWAYS,
+        minLod = 0,
+        maxLod = VK_LOD_CLAMP_NONE,
+        borderColor = .INT_OPAQUE_BLACK,
+        unnormalizedCoordinates = VK_FALSE
+    };
+
+    sampler: VkSampler;
+    result := check_vk(vkCreateSampler(device, *sampler_info, null, *sampler));
+    return sampler, result;
+}
+
+resize_for_swapchain :: (renderer: *Renderer, array: *[] $T) {
+    if array.count != renderer.swapchain.images.count {
+        array_free(array.*);
+        array.* = NewArray(renderer.swapchain.images.count, T);
+    }
+}
+
+make_swapchain_resources :: (using renderer: *Renderer) -> VkResult {
+    result: VkResult;
+    assert(surface != NULL, "You don't have a surface yet");
+    result = make_swapchain(renderer);
+    if result return result;
+
+    images := swapchain.images;
+    assert(images.count > 0, "Swapchain should have images");
+
+    resize_for_swapchain(renderer, *swapchain_image_views);
+
+    for 0..images.count - 1 {
+        view:, result = make_image_view(renderer, images[it], swapchain.format, .COLOR);
+        if result return result;
+        swapchain_image_views[it] = view;
+    }
+
+    resize_for_swapchain(renderer, *image_fences_in_flight);
+
+    // TODO: implement multisample
+
+
 }
 
 make_swapchain :: (using renderer: *Renderer) -> VkResult {
@@ -661,9 +713,192 @@ destroy_image_view :: (using renderer: *Renderer, image_view: VkImageView) {
     vkDestroyImageView(device, image_view, vka);
 }
 
+destroy_texture :: (using renderer: *Renderer, texture: Renderer.Texture) {
+    destroy_image_view(renderer, texture.image_view);
+    destroy_image(renderer, texture.image);
+}
+
+find_depth_format :: (physical_device: VkPhysicalDevice) -> VkFormat, bool {
+    candidates := VkFormat.[
+        .D24_UNORM_S8_UINT,
+        .D32_SFLOAT_S8_UINT,
+        .D32_SFLOAT
+    ];
+
+    for format: candidates {
+        properties: VkFormatProperties;
+        vkGetPhysicalDeviceFormatProperties(physical_device, format, *properties);
+        if properties.optimalTilingFeatures & .DEPTH_STENCIL_ATTACHMENT {
+            return format, true;
+        }
+    }
+
+    return .UNDEFINED, false;
+}
+
+make_depth_image :: (using renderer: *Renderer) -> VkResult {
+    format, found := find_depth_format(physical_device);
+
+    image, result := make_image(
+        vma,
+        swapchain.extent,
+        format,
+        .DEPTH_STENCIL_ATTACHMENT,
+        .GPU_ONLY,
+    );
+    if result return result;
+
+    flags := VkImageAspectFlags.DEPTH;
+    // TODO: Ignore stencil for now
+    view:, result = make_image_view(device, image.vk, format, flags);
+    if result destroy_image(vma, image);
+
+    depth_image = .{image, view, format};
+    return result;
+}
+
+make_command_buffers :: (using renderer: *Renderer) -> VkResult {
+    resize_for_swapchain(renderer, *command_buffers);
+
+    alloc_info := VkCommandBufferAllocateInfo.{
+        commandPool = command_pool,
+        level = .PRIMARY,
+        commandBufferCount = xx swapchain.images.count
+    };
+
+    return check_vk(vkAllocateCommandBuffer(device, *alloc_info, command_buffers.data));
+}
+
+make_descriptor_pool :: (renderer: *Renderer, capacity: u32) -> VkDescriptorPool, VkResult {
+    uniform_pool_size := VkDescriptorPoolSize.{
+        type = .UNIFORM_BUFFER,
+        descriptorCount = capacity
+    };
+
+    pool_sizes := VkDescriptorPoolSize.[ uniform_pool_size ];
+    pool_info := VkDescriptorPoolCreateInfo.{
+        maxSets = capacity,
+        poolSizeCount = xx pool_sizes.count,
+        pPoolSizes = pool_sizes.data
+    };
+
+    pool: VkDescriptorPool;
+    result := check_vk(vkCreateDescriptorPool(device, *pool_info, vka, *pool));
+    return pool, result;
+}
+
 #scope_file
+// Helpers
+
+choose_physical_device :: (instance: VkInstance, surface: VkSurfaceKHR, device_extensions: [] *u8) -> VkPhysicalDevice, Renderer.Queue_Family_Indices {
+    device_count: u32;
+    if check_vk(vkEnumeratePhysicalDevices(instance, *device_count, null)) return null, .{};
+    devices := NewArray(device_count, VkPhysicalDevice, initialized = false,, temp);
+    if check_vk(vkEnumeratePhysicalDevices(instance, *device_count, devices.data))  return null, .{};
+
+    best_score := 0;
+    best_device: VkPhysicalDevice;
+    best_device_queue_families: Renderer.Queue_Family_Indices;
+    for device: devices {
+        // Make sure the device has necessary queue families and supports required extensions
+        queue_families, found := find_queue_families(device, surface);
+        if !found || !device_supports_extensions(device, device_extensions)
+            then continue;
+
+        // If surface is present, make sure it has swapchain support
+        if surface {
+            swapchain_support := get_swapchain_support(device, surface);
+            if swapchain_support.formats.count == 0
+                || swapchain_support.present_modes.count == 0
+                then continue;
+        }
+
+        score := 0;
+
+        features: VkPhysicalDeviceFeatures;
+        vkGetPhysicalDeviceFeatures(device, *features);
+        if features.samplerAnisotropy {
+            score += 5;
+        }
+
+        properties: VkPhysicalDeviceProperties;
+        vkGetPhysicalDeviceProperties(device, *properties);
+
+        if properties.deviceType == {
+        case .DISCRETE_GPU;
+            score += 100;
+        case .INTEGRATED_GPU;
+            score += 10;
+        }
+
+        if score > best_score {
+            best_score = score;
+            best_device = device;
+            best_device_queue_families = queue_families;
+        }
+    }
+
+    return best_device, best_device_queue_families;
+}
+
+Swapchain_Support :: struct {
+    capabilities: VkSurfaceCapabilitiesKHR;
+    formats: [] VkSurfaceFormatKHR;
+    present_modes: [] VkPresentModeKHR;
+}
+
+get_swapchain_support :: (physical_device: VkPhysicalDevice, surface: VkSurfaceKHR) -> Swapchain_Support {
+    assert(surface != null);
+
+    capabilities: VkSurfaceCapabilitiesKHR;
+    if check_vk(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device, surface, *capabilities)) return .{};
+
+    format_count: u32;
+    if check_vk(vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, *format_count, null)) return .{};
+    formats := NewArray(format_count, VkSurfaceFormatKHR, initialized = false,, temp);
+    if check_vk(vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, *format_count, formats.data)) return .{};
+
+    present_mode_count: u32;
+    if check_vk(vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface, *present_mode_count, null)) return .{};
+    present_modes := NewArray(present_mode_count, VkPresentModeKHR, initialized = false,, temp);
+    if check_vk(vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface, *present_mode_count, present_modes.data)) return .{};
+
+    return .{
+        capabilities = capabilities,
+        formats = formats,
+        present_modes = present_modes
+    };
+}
+
+device_supports_extensions :: (physical_device: VkPhysicalDevice, extensions: [] *u8) -> bool {
+    available_extension_count: u32;
+    if check_vk(vkEnumerateDeviceExtensionProperties(physical_device, null, *available_extension_count, null)) return false;
+    available_extensions := NewArray(available_extension_count, VkExtensionProperties, false,, temp);
+
+    if check_vk(vkEnumerateDeviceExtensionProperties(physical_device, null, *available_extension_count, available_extensions.data)) return false;
+
+    for extension: extensions {
+        supported := false;
+
+        extension_string := to_string(extension);
+
+        for available: available_extensions {
+            if extension_string == to_string(available.extensionName.data) {
+                supported = true;
+                break;
+            }
+        }
+
+        if !supported return false;
+    }
+
+    return true;
+}
+
 #import "Vulkan";
 #import "Vulkan_Memory_Allocator";
 #import "Basic";
 #import "String";
 #import "Math";
+#import "Compiler";
+#import "System";
