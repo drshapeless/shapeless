@@ -787,6 +787,48 @@ make_descriptor_pool :: (renderer: *Renderer, capacity: u32) -> VkDescriptorPool
     return pool, result;
 }
 
+access_descriptor_pool :: (using renderer: *Renderer) -> *Renderer.Descriptor_Pool, VkResult {
+    pool_capacity := swapchain.images.count * 1024;
+
+    if current_descriptor_pool_id {
+        pool := table_find_pointer(*descriptor_pools, current_descriptor_pool_id);
+        if pool.allocated_count < pool_capacity {
+            return pool, .SUCCESS;
+        }
+    }
+
+    for * descriptor_pools {
+        if it.allocated_count < pool_capacity {
+            current_descriptor_pool_id = it.id;
+            return it, .SUCCESS;
+        }
+    }
+
+    pool, result := make_descriptor_pool(device, pool_capacity);
+    if result return null, result;
+
+    id := next_descriptor_pool_id;
+    next_descriptor_pool_id += 1;
+
+    return table_add(*descriptor_pools, key = id, value = .{id = id, vk = pool}), .SUCCESS;
+}
+
+make_shader_module :: (using renderer: *Renderer, name: string) -> VkShaderModule, VkResult {
+    file := tprint("%/shaders/%", assets_directory, name);
+
+    shader_code := read_entire_file(file);
+    defer free(shader_code);
+
+    create_info := VkShaderModuleCreateInfo.{
+        codeSize = xx shader_code.count,
+        pCode = cast(*u32) shader_code.data
+    };
+
+    module: VkShaderModule;
+    result := check_vk(vkCreateShaderModule(device, *create_info, vka, *module));
+    return module, result;
+}
+
 #scope_file
 // Helpers
 
@@ -902,3 +944,4 @@ device_supports_extensions :: (physical_device: VkPhysicalDevice, extensions: []
 #import "Math";
 #import "Compiler";
 #import "System";
+#import "Hash_Table";
