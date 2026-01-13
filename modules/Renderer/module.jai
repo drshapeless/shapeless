@@ -108,6 +108,15 @@ Renderer :: struct {
     }
 }
 
+offset_of :: ($T: Type, $member: string) -> int {
+    for type_info(T).members {
+        if it.name == member return it.offset_in_bytes;
+    }
+
+    assert(false, "Type '%' does not have member '%'", T, member);
+    return -1;
+}
+
 // Stolen from JBlow's Vulkan_Renderer
 // Generic api result logging helper, useful for Khronos apis
 check_api_result :: (result: $Result, api: string, $call := #caller_code, loc := #caller_location) -> Result {
@@ -572,8 +581,15 @@ make_swapchain_resources :: (using renderer: *Renderer) -> VkResult {
     resize_for_swapchain(renderer, *image_fences_in_flight);
 
     // TODO: implement multisample
+    result = make_depth_image(renderer);
+    if result return result;
 
+    result = make_command_buffers(renderer);
+    if result return result;
 
+    // TODO: pipeline
+
+    return result;
 }
 
 make_swapchain :: (using renderer: *Renderer) -> VkResult {
@@ -829,6 +845,32 @@ make_shader_module :: (using renderer: *Renderer, name: string) -> VkShaderModul
     return module, result;
 }
 
+make_graphics_pipeline :: (using renderer: *Renderer, id: Renderer.Pipeline.ID, vertex_shader: string, fragment_shader: string, blend_enabled := false) -> Renderer.Pipeline, VkResult {
+    vertex_module, result := make_shader_module(renderer, vertex_shader);
+    if result return .{}, result;
+
+    defer vkDestroyShaderModule(device, vertex_module, vka);
+
+    fragment_module:, result = make_shader_module(renderer, fragment_shader);
+    if result return .{}, result;
+
+    defer vkDestroyShaderModule(device, fragment_module, vka);
+
+    shader_stages := VkPipelineShaderStageCreateInfo.[
+        .{
+            stage = .VERTEX,
+            module = vertex_module,
+            pName = "main"
+        },
+        .{
+            stage = .FRAGMENT,
+            module = fragment_module,
+            pName = "main"
+        }
+    ];
+
+}
+
 #scope_file
 // Helpers
 
@@ -937,6 +979,7 @@ device_supports_extensions :: (physical_device: VkPhysicalDevice, extensions: []
     return true;
 }
 
+#load "pipeline.jai";
 #import "Vulkan";
 #import "Vulkan_Memory_Allocator";
 #import "Basic";
