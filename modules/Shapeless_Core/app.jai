@@ -33,11 +33,7 @@ appinit :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
 
     vk_load_global_functions(xx SDL_Vulkan_GetVkGetInstanceProcAddr());
 
-    instance_extensions: []*u8;
-    instance_extension_count: u32;
-    instance_extension_data := SDL_Vulkan_GetInstanceExtensions(*instance_extension_count);
-    instance_extensions.count = instance_extension_count;
-    instance_extensions.data = instance_extension_data;
+    instance_extensions := get_vk_instance_extensions();
 
     instance:, ok = make_vk_instance(instance_extensions, true);
     assert(ok, "Cannot create vk instance");
@@ -80,4 +76,13 @@ appquit :: (appstate: *void, result: SDL_AppResult) {
 
     deinit(*app.renderer);
     SDL_Quit();
+}
+
+#scope_file
+get_vk_instance_extensions :: () -> [] *u8 {
+    instance_extensions: []*u8;
+    instance_extension_count: u32;
+    instance_extension_data := SDL_Vulkan_GetInstanceExtensions(*instance_extension_count);
+    instance_extensions.count = instance_extension_count;
+    instance_extensions.data = instance_extension_data;
 }
