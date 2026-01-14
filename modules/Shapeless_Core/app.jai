@@ -26,26 +26,13 @@ appinit :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
     app := New(App);
     appstate.* = app;
     ok := SDL_Init(.VIDEO);
-    assert(ok, "Cannot create vk instance");
-    using app;
-    win = SDL_CreateWindow("Shapeless", 800, 600, .RESIZABLE | .VULKAN);
-    assert(win != null, "cannot create window %", to_string(SDL_GetError()));
+    assert(ok, "Cannot init SDL %", to_string(SDL_GetError()));
 
-    vk_load_global_functions(xx SDL_Vulkan_GetVkGetInstanceProcAddr());
+    app.win = SDL_CreateWindow("Shapeless", 800, 600, .RESIZABLE | .VULKAN);
+    assert(app.win != null, "Cannot create window %", to_string(SDL_GetError()));
 
-    instance_extensions := get_vk_instance_extensions();
-
-    instance:, ok = make_vk_instance(instance_extensions, true);
-    assert(ok, "Cannot create vk instance");
-
-    vk_load_instance_functions(instance);
-
-    surface: VkSurfaceKHR;
-    ok = SDL_Vulkan_CreateSurface(win, instance, null, *surface);
-    assert(ok, "Cannot create vk surface");
-
-    renderer, ok = make_renderer(instance, surface, ENABLED_EXTENSION_NAMES, true);
-    assert(ok, "Cannot create renderer");
+    ok = init(*app.renderer, app.win);
+    if !ok return .FAILURE;
 
     return .CONTINUE;
 }
@@ -68,7 +55,8 @@ appevent :: (appstate: *void, event: *SDL_Event) -> SDL_AppResult {
 
 appiter :: (appstate: *void) -> SDL_AppResult {
     app := cast(*App)appstate;
-    return .CONTINUE;
+    // return .CONTINUE;
+    return .SUCCESS;
 }
 
 appquit :: (appstate: *void, result: SDL_AppResult) {
@@ -76,13 +64,4 @@ appquit :: (appstate: *void, result: SDL_AppResult) {
 
     deinit(*app.renderer);
     SDL_Quit();
-}
-
-#scope_file
-get_vk_instance_extensions :: () -> [] *u8 {
-    instance_extensions: []*u8;
-    instance_extension_count: u32;
-    instance_extension_data := SDL_Vulkan_GetInstanceExtensions(*instance_extension_count);
-    instance_extensions.count = instance_extension_count;
-    instance_extensions.data = instance_extension_data;
 }
