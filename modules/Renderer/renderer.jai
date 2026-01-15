@@ -16,6 +16,9 @@ Renderer :: struct {
     swapchain:       Swapchain;
     frames:          [] Frame_Data;
 
+    draw_image:      Texture;
+    depth_image:     Texture;
+
     Queue_Family_Indices :: struct {
         graphics: u32;
         present:  u32;
@@ -39,6 +42,12 @@ Renderer :: struct {
     Image :: struct {
         vk:         VkImage;
         allocation: VmaAllocation;
+    }
+
+    Texture :: struct {
+        image: Image;
+        image_view: VkImageView;
+        format: VkFormat;
     }
 }
 
@@ -610,4 +619,9 @@ make_image :: (
     allocation: VmaAllocation;
     result := check_vk(vmaCreateImage(vma, *image_info, *alloc_info, *image, *allocation, null));
     return result, .{vk = image, allocation = allocation};
+}
+
+// The word image here is not the same as Renderer.Image, it also
+// includes an image view.
+make_draw_images :: (using renderer: *Renderer) {
 }
