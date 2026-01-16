@@ -192,12 +192,16 @@ begin_draw :: (using renderer: *Renderer) -> bool {
 
     if check_vk(vkBeginCommandBuffer(cmd, *cmd_begin_info)) return false;
 
-    // Image Layout is no longer relevant in modern hardware, with
-    // device extension of VK_KHR_unified_image_layouts.
-    // https://www.khronos.org/blog/so-long-image-layouts-simplifying-vulkan-synchronisation
-
-    transition_image(cmd, draw_texture.image.vk, .UNDEFINED, .GENERAL);
-    transition_image(cmd, depth_texture.image.vk, .UNDEFINED, .GENERAL);
+    transition_image(cmd, draw_texture.image.vk, .UNDEFINED, .GENERAL, .COLOR);
+    #if UNIFIED_IMAGE_LAYOUT {
+        // Image Layout is no longer relevant in modern hardware, with
+        // device extension of VK_KHR_unified_image_layouts.
+        // https://www.khronos.org/blog/so-long-image-layouts-simplifying-vulkan-synchronisation
+        // Sadly, this is not supported in MoltenVK yet.
+        transition_image(cmd, depth_texture.image.vk, .UNDEFINED, .GENERAL, .DEPTH);
+    } else {
+        transition_image(cmd, depth_texture.image.vk, .UNDEFINED, .DEPTH_ATTACHMENT_OPTIMAL, .DEPTH);
+    }
 
     color_attachment := VkRenderingAttachmentInfo.{
         imageView   = draw_texture.image_view,
@@ -216,6 +220,10 @@ begin_draw :: (using renderer: *Renderer) -> bool {
             depthStencil = .{depth = 1}
         }
     };
+
+    #if !UNIFIED_IMAGE_LAYOUT {
+        depth_attachment.imageLayout = .DEPTH_ATTACHMENT_OPTIMAL;
+    }
 
     rendering_info := VkRenderingInfo.{
         renderArea = .{offset = .{0, 0}, extent = swapchain.extent},
@@ -254,8 +262,19 @@ end_draw :: (using renderer: *Renderer) {
     vkCmdEndRendering(cmd);
 
     current_image := swapchain.images[image_index];
+    #if UNIFIED_IMAGE_LAYOUT {
+        transition_image(cmd, current_image, .UNDEFINED, .GENERAL, .COLOR);
+    } else {
+        transition_image(cmd, draw_image.image, .GENERAL, .TRANSFER_SRC_OPTIMAL);
+        transition_image(cmd, current_image, .UNDEFINED, .TRANSFER_DST_OPTIMAL);
+    }
     copy_image(cmd, draw_texture.image.vk, current_image, swapchain.extent, swapchain.extent);
-    transition_image(cmd, current_image, .UNDEFINED, .PRESENT_SRC_KHR);
+
+    #if UNIFIED_IMAGE_LAYOUT {
+        transition_image(cmd, current_image, .GENERAL, .PRESENT_SRC_KHR, .COLOR);
+    } else {
+        transition_image(cmd, current_image, .TRANSFER_DST_OPTIMAL, .PRESENT_SRC_KHR, .COLOR);
+    }
 
     if check_vk(vkEndCommandBuffer(cmd)) return;
 
@@ -355,14 +374,7 @@ copy_image :: (cmd: VkCommandBuffer, src_image: VkImage, dst_image: VkImage, src
     vkCmdBlitImage2(cmd, *blit_info);
 }
 
-transition_image :: (cmd: VkCommandBuffer, image: VkImage, old_layout: VkImageLayout, new_layout: VkImageLayout) {
-    aspect_mask : VkImageAspectFlags;
-    if new_layout == .DEPTH_ATTACHMENT_OPTIMAL {
-        aspect_mask = .DEPTH;
-    } else {
-        aspect_mask = .COLOR;
-    }
-
+transition_image :: (cmd: VkCommandBuffer, image: VkImage, old_layout: VkImageLayout, new_layout: VkImageLayout, aspect_mask: VkImageAspectFlags) {
     sub_image := VkImageSubresourceRange.{
         aspectMask     = aspect_mask,
         baseMipLevel   = 0,
