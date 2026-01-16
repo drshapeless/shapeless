@@ -264,15 +264,13 @@ end_draw :: (using renderer: *Renderer) {
     current_image := swapchain.images[image_index];
     #if UNIFIED_IMAGE_LAYOUT {
         transition_image(cmd, current_image, .UNDEFINED, .GENERAL, .COLOR);
-    } else {
-        transition_image(cmd, draw_image.image, .GENERAL, .TRANSFER_SRC_OPTIMAL);
-        transition_image(cmd, current_image, .UNDEFINED, .TRANSFER_DST_OPTIMAL);
-    }
-    copy_image(cmd, draw_texture.image.vk, current_image, swapchain.extent, swapchain.extent);
-
-    #if UNIFIED_IMAGE_LAYOUT {
+        copy_image(cmd, draw_texture.image.vk, current_image, swapchain.extent, swapchain.extent);
         transition_image(cmd, current_image, .GENERAL, .PRESENT_SRC_KHR, .COLOR);
     } else {
+        transition_image(cmd, draw_texture.image.vk, .GENERAL, .TRANSFER_SRC_OPTIMAL, .COLOR);
+        transition_image(cmd, current_image, .UNDEFINED, .TRANSFER_DST_OPTIMAL, .COLOR);
+
+        copy_image(cmd, draw_texture.image.vk, current_image, swapchain.extent, swapchain.extent, .TRANSFER_SRC_OPTIMAL, .TRANSFER_DST_OPTIMAL);
         transition_image(cmd, current_image, .TRANSFER_DST_OPTIMAL, .PRESENT_SRC_KHR, .COLOR);
     }
 
@@ -333,7 +331,7 @@ set_clear_color :: (using renderer: *Renderer, color: [4]float) {
     clear_color.color.float32_ = color;
 }
 
-copy_image :: (cmd: VkCommandBuffer, src_image: VkImage, dst_image: VkImage, src_extent: VkExtent2D, dst_extent: VkExtent2D) {
+copy_image :: (cmd: VkCommandBuffer, src_image: VkImage, dst_image: VkImage, src_extent: VkExtent2D, dst_extent: VkExtent2D, src_image_layout: VkImageLayout = .GENERAL, dst_image_layout: VkImageLayout = .GENERAL) {
     blit_region := VkImageBlit2.{
         srcSubresource = .{
             aspectMask     = .COLOR,
@@ -363,9 +361,9 @@ copy_image :: (cmd: VkCommandBuffer, src_image: VkImage, dst_image: VkImage, src
 
     blit_info := VkBlitImageInfo2.{
         srcImage       = src_image,
-        srcImageLayout = .GENERAL,
+        srcImageLayout = src_image_layout,
         dstImage       = dst_image,
-        dstImageLayout = .GENERAL,
+        dstImageLayout = dst_image_layout,
         regionCount    = 1,
         pRegions       = *blit_region,
         filter         = .LINEAR,
