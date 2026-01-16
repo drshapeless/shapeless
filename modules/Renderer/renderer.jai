@@ -13,6 +13,8 @@ Renderer :: struct {
     command_pool:    VkCommandPool;
     descriptor_set_layout: VkDescriptorSetLayout;
 
+    buffers_queued_for_destruction: [] [..] Buffer;
+
     swapchain:       Swapchain;
     frames:          [] Frame_Data;
     frame_index:     u32;
@@ -66,6 +68,29 @@ Renderer :: struct {
         vk:              VkDescriptorPool;
         allocated_count: u64;
     }
+
+    Buffer :: struct {
+        vk:         VkBuffer;
+        allocation: VmaAllocation;
+        size:       u64;
+    }
+
+    Mesh :: struct {
+        vertex_buffer: Buffer;
+        index_buffer:  Buffer;
+    }
+}
+
+Vertex :: struct {
+    position: Vector3;
+    color:    Vector3;
+    uv:       Vector2;
+}
+
+Mesh :: struct {
+    name: string;
+    vertices: [] Vertex;
+    indices:  [] u32;
 }
 
 init :: (using renderer: *Renderer, window: *SDL_Window) -> ok:bool {
@@ -400,6 +425,146 @@ transition_image :: (cmd: VkCommandBuffer, image: VkImage, old_layout: VkImageLa
     vkCmdPipelineBarrier2(cmd, *dep_info);
 }
 
+make_buffer :: (vma: VmaAllocator, size: VkDeviceSize, buffer_usage: VkBufferUsageFlags, memory_usage: VmaMemoryUsage) -> VkResult, Renderer.Buffer {
+    buffer_info := VkBufferCreateInfo.{
+        size = size,
+        usage = buffer_usage,
+        sharingMode = .EXCLUSIVE
+    };
+
+    alloc_create_info := VmaAllocationCreateInfo.{
+        usage = memory_usage,
+        xx VmaAllocationCreateFlagBits.MAPPED_BIT
+    };
+
+    buffer: Renderer.Buffer;
+    alloc_info: VmaAllocationInfo; // TODO: Why are you here?
+    result := check_vk(vmaCreateBuffer(vma, *buffer_info, *alloc_create_info, *buffer.vk, *buffer.allocation, *alloc_info));
+    return result, buffer;
+}
+
+destroy_buffer :: (vma: VmaAllocator, buffer: Renderer.Buffer) {
+    vmaDestroyBuffer(vma, buffer.vk, buffer.allocation);
+}
+
+copy_to_device_memory :: (vma: VmaAllocator, allocation: VmaAllocation, source: *void, size: VkDeviceSize) -> VkResult {
+    data: *void;
+    result := check_vk(vmaMapMemory(vma, allocation, *data));
+    if result return result;
+
+    memcpy(data, source, xx size);
+    vmaUnmapMemory(vma, allocation);
+
+    return .SUCCESS;
+}
+
+copy_buffer :: (cmd: VkCommandBuffer, source: Renderer.Buffer, destination: Renderer.Buffer) {
+    assert(source.size == destination.size);
+    region := VkBufferCopy.{size = xx source.size};
+    vkCmdCopyBuffer(command_buffer, source.vk, destination.vk, 1, *region);
+}
+
+make_buffer_copying_data :: (using renderer: *Renderer, cmd: VkCommandBuffer, data: [] $T, buffer_usage: VkBufferUsageFlags) -> VkResult, Renderer.Buffer {
+    size: VkDeviceSize = xx (data.count * size_of(T));
+    staging_buffer, result := make_buffer(vma, size, .TRANSFER_SRC, .CPU_ONLY);
+    if result return result, .{};
+
+    result = copy_to_device_memory(vma, staging_buffer.allocation, data.data, size);
+    if result {
+        destroy_buffer(vma, staging_buffer);
+        return result, .{};
+    }
+
+    buffer:, result = make_buffer(vma, size, .TRANSFER_DST_BIT | buffer_usage, .GPU_ONLY);
+    if result {
+        destroy_buffer(vma, staging_buffer);
+        return result, .{};
+    }
+
+    array_add(*buffers_queued_for_destruction[frame_index], staging_buffer);
+    copy_buffer(cmd, staging_buffer, buffer);
+    return result, buffer;
+}
+
+// This is the variation that uses single time command, which is the
+// default in all tutorials.
+make_buffer_copying_data :: (using renderer: *Renderer, data: [] $T, buffer_usage: VkBufferUsageFlags) -> VkResult, Renderer.Buffer {
+    size: VkDeviceSize = xx (data.count * size_of(T));
+    staging_buffer, result := make_buffer(vma, size, .TRANSFER_SRC, .CPU_ONLY);
+    if result return result, .{};
+
+    result = copy_to_device_memory(vma, staging_buffer.allocation, data.data, size);
+    if result {
+        destroy_buffer(vma, staging_buffer);
+        return result, .{};
+    }
+
+    buffer:, result = make_buffer(vma, size, .TRANSFER_DST_BIT | buffer_usage, .GPU_ONLY);
+    if result {
+        destroy_buffer(vma, staging_buffer);
+        return result, .{};
+    }
+
+    result=, command := begin_single_time_commands(renderer);
+    if result {
+        destroy_buffer(vma, staging_buffer);
+        destroy_buffer(vma, buffer);
+        return result, .{};
+    }
+
+    copy_buffer(command, staging_buffer, buffer);
+    result = end_single_time_commands(renderer);
+    if result {
+        destroy_buffer(vma, staging_buffer);
+        destroy_buffer(vma, buffer);
+        return result, .{};
+    }
+
+    destroy_buffer(vma, staging_buffer);
+    return .SUCCESS, buffer;
+}
+
+begin_single_time_commands :: (using renderer: *Renderer) -> VkResult, VkCommandBuffer {
+    cmd_alloc_info := VkCommandBufferAllocateInfo.{
+        commandPool = graphics_command_pool,
+        commandBufferCount = 1,
+        level = .PRIMARY,
+    };
+    command: VkCommandBuffer;
+    result: VkResult;
+    result = check_vk(vkAllocateCommandBuffers(dev, *cmd_alloc_info, *command));
+    if result return result, null;
+
+    cmd_begin_info := VkCommandBufferBeginInfo.{
+        flags = .ONE_TIME_SUBMIT,
+    };
+    result = check_vk(vkBeginCommandBuffer(command, *cmd_begin_info));
+    if result return result, null;
+
+    return .SUCCESS, command;
+}
+
+end_single_time_commands :: (using renderer: *Renderer, command: VkCommandBuffer) -> VkResult {
+    result: VkResult;
+    result = check_vk(vkEndCommandBuffer(command));
+    if result return result;
+
+    cmdinfo := VkCommandBufferSubmitInfo.{
+        commandBuffer = command,
+    };
+    submit := VkSubmitInfo2.{
+        commandBufferInfoCount = 1,
+        pCommandBufferInfos = *cmdinfo,
+    };
+    result = check_vk(vkQueueSubmit2(graphics_queue, 1, *submit, null));
+    if result return result;
+    result = vkQueueWaitIdle(graphics_queue);
+    if result return result;
+    vkFreeCommandBuffers(dev, command_pool, 1, *command);
+    return .SUCCESS;
+}
+
+
 #scope_file
 // Initialization helpers
 application_info :: VkApplicationInfo.{
@@ -650,6 +815,8 @@ make_swapchain_resources :: (using renderer: *Renderer) -> VkResult {
 
     resize_for_swapchain(renderer, *frames);
 
+    resize_for_swapchain(renderer, *buffers_queued_for_destruction);
+
     // TODO: Omit multisample for now
     result = make_frames(renderer);
 
@@ -659,6 +826,11 @@ make_swapchain_resources :: (using renderer: *Renderer) -> VkResult {
 destroy_swapchain_resources :: (using renderer: *Renderer) {
     destroy_frames(renderer);
     destroy_swapchain(renderer);
+
+    for *buffers: buffers_queued_for_destruction {
+        for buffers.* destroy_buffer(vma, it);
+        array_reset(buffers);
+    }
 }
 
 make_swapchain :: (using renderer: *Renderer) -> VkResult {
