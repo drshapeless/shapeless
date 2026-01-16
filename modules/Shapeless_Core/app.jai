@@ -21,11 +21,15 @@ appinit :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
     ok := SDL_Init(.VIDEO);
     assert(ok, "Cannot init SDL %", to_string(SDL_GetError()));
 
-    app.win = SDL_CreateWindow("Shapeless", 800, 600, .RESIZABLE | .VULKAN);
-    assert(app.win != null, "Cannot create window %", to_string(SDL_GetError()));
+    using app;
 
-    ok = init(*app.renderer, app.win);
+    win = SDL_CreateWindow("Shapeless", 800, 600, .RESIZABLE | .VULKAN);
+    assert(win != null, "Cannot create window %", to_string(SDL_GetError()));
+
+    ok = init(*renderer, win);
     if !ok return .FAILURE;
+
+    set_clear_color(*renderer, .[0.8, 0.4, 0.3, 1.0]);
 
     return .CONTINUE;
 }
@@ -50,7 +54,6 @@ appiter :: (appstate: *void) -> SDL_AppResult {
     app := cast(*App)appstate;
     using app;
 
-    set_clear_color(*renderer, .[0.8, 0.4, 0.3, 1.0]);
     if begin_draw(*renderer) {
         end_draw(*renderer);
     }
