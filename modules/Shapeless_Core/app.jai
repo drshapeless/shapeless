@@ -15,13 +15,6 @@ App :: struct {
 
 }
 
-#if OS == .MACOS {
-    ENABLED_EXTENSION_NAMES :: (*u8).[VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME, VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME];
-} else {
-    ENABLED_EXTENSION_NAMES :: (*u8).[VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME];
-}
-
-
 appinit :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
     app := New(App);
     appstate.* = app;
