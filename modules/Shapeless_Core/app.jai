@@ -55,8 +55,14 @@ appevent :: (appstate: *void, event: *SDL_Event) -> SDL_AppResult {
 
 appiter :: (appstate: *void) -> SDL_AppResult {
     app := cast(*App)appstate;
-    // return .CONTINUE;
-    return .SUCCESS;
+    using app;
+
+    set_clear_color(*renderer, .[0.8, 0.4, 0.3, 1.0]);
+    if begin_draw(*renderer) {
+        end_draw(*renderer);
+    }
+    return .CONTINUE;
+    // return .SUCCESS;
 }
 
 appquit :: (appstate: *void, result: SDL_AppResult) {

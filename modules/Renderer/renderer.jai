@@ -15,8 +15,8 @@ Renderer :: struct {
 
     swapchain:       Swapchain;
     frames:          [] Frame_Data;
-    frame_index:     u64;
-    image_index:     u64;
+    frame_index:     u32;
+    image_index:     u32;
 
     draw_texture:      Texture;
     depth_texture:     Texture;
@@ -196,6 +196,9 @@ begin_draw :: (using renderer: *Renderer) -> bool {
     // device extension of VK_KHR_unified_image_layouts.
     // https://www.khronos.org/blog/so-long-image-layouts-simplifying-vulkan-synchronisation
 
+    transition_image(cmd, draw_texture.image.vk, .UNDEFINED, .GENERAL);
+    transition_image(cmd, depth_texture.image.vk, .UNDEFINED, .GENERAL);
+
     color_attachment := VkRenderingAttachmentInfo.{
         imageView   = draw_texture.image_view,
         imageLayout = .GENERAL,
@@ -205,7 +208,7 @@ begin_draw :: (using renderer: *Renderer) -> bool {
     };
 
     depth_attachment := VkRenderingAttachmentInfo.{
-        imageView = depth_texture.image_view,
+        imageView   = depth_texture.image_view,
         imageLayout = .GENERAL,
         loadOp      = .CLEAR,
         storeOp     = .STORE,
@@ -252,6 +255,7 @@ end_draw :: (using renderer: *Renderer) {
 
     current_image := swapchain.images[image_index];
     copy_image(cmd, draw_texture.image.vk, current_image, swapchain.extent, swapchain.extent);
+    transition_image(cmd, current_image, .UNDEFINED, .PRESENT_SRC_KHR);
 
     if check_vk(vkEndCommandBuffer(cmd)) return;
 
@@ -259,13 +263,13 @@ end_draw :: (using renderer: *Renderer) {
         commandBuffer = cmd,
     };
     wait_info := VkSemaphoreSubmitInfo.{
-        semaphore = current_frame.swapchain_semaphore,
+        semaphore = frame.swapchain_semaphore,
         value = 1,
         stageMask = .COLOR_ATTACHMENT_OUTPUT,
     };
 
     signal_info := VkSemaphoreSubmitInfo.{
-        semaphore = current_frame.render_semaphore,
+        semaphore = frame.render_semaphore,
         value = 1,
         stageMask = .ALL_GRAPHICS,
     };
@@ -339,9 +343,9 @@ copy_image :: (cmd: VkCommandBuffer, src_image: VkImage, dst_image: VkImage, src
     };
 
     blit_info := VkBlitImageInfo2.{
-        srcImage       = src_img,
+        srcImage       = src_image,
         srcImageLayout = .GENERAL,
-        dstImage       = dst_img,
+        dstImage       = dst_image,
         dstImageLayout = .GENERAL,
         regionCount    = 1,
         pRegions       = *blit_region,
@@ -349,6 +353,41 @@ copy_image :: (cmd: VkCommandBuffer, src_image: VkImage, dst_image: VkImage, src
     };
 
     vkCmdBlitImage2(cmd, *blit_info);
+}
+
+transition_image :: (cmd: VkCommandBuffer, image: VkImage, old_layout: VkImageLayout, new_layout: VkImageLayout) {
+    aspect_mask : VkImageAspectFlags;
+    if new_layout == .DEPTH_ATTACHMENT_OPTIMAL {
+        aspect_mask = .DEPTH;
+    } else {
+        aspect_mask = .COLOR;
+    }
+
+    sub_image := VkImageSubresourceRange.{
+        aspectMask     = aspect_mask,
+        baseMipLevel   = 0,
+        levelCount     = VK_REMAINING_MIP_LEVELS,
+        baseArrayLayer = 0,
+        layerCount     = VK_REMAINING_ARRAY_LAYERS,
+    };
+
+    image_barrier := VkImageMemoryBarrier2.{
+        srcStageMask     = .ALL_COMMANDS,
+        srcAccessMask    = .MEMORY_WRITE,
+        dstStageMask     = .ALL_COMMANDS,
+        dstAccessMask    = .MEMORY_WRITE | .MEMORY_READ,
+        oldLayout        = old_layout,
+        newLayout        = new_layout,
+        image            = image,
+        subresourceRange = sub_image,
+    };
+
+    dep_info := VkDependencyInfo.{
+        imageMemoryBarrierCount = 1,
+        pImageMemoryBarriers    = *image_barrier,
+    };
+
+    vkCmdPipelineBarrier2(cmd, *dep_info);
 }
 
 #scope_file
@@ -528,10 +567,13 @@ make_device_create_info :: (physical_device: VkPhysicalDevice, surface: VkSurfac
         };
     }
 
+    feature_unified_image_layouts := New(VkPhysicalDeviceUnifiedImageLayoutsFeaturesKHR,, temp);
+    feature_unified_image_layouts.unifiedImageLayouts = VK_TRUE;
+
     features13 := New(VkPhysicalDeviceVulkan13Features,, temp);
     features13.dynamicRendering = VK_TRUE;
     features13.synchronization2 = VK_TRUE;
-
+    features13.pNext = feature_unified_image_layouts;
 
     features12 := New(VkPhysicalDeviceVulkan12Features,, temp);
     features12.pNext = features13;
@@ -647,7 +689,7 @@ make_swapchain :: (using renderer: *Renderer) -> VkResult {
         imageColorSpace = format.colorSpace,
         imageExtent = extent,
         imageArrayLayers = 1,
-        imageUsage = .COLOR_ATTACHMENT,
+        imageUsage = .TRANSFER_DST | .COLOR_ATTACHMENT,
         imageSharingMode = ifx exclusive_queue then .EXCLUSIVE else .CONCURRENT,
         queueFamilyIndexCount = xx ifx exclusive_queue then 0 else 2,
         pQueueFamilyIndices = ifx exclusive_queue then queue_indices_array.data else null,
@@ -794,7 +836,7 @@ make_image :: (
 // The word image here is not the same as Renderer.Image, it also
 // includes an image view.
 make_draw_images :: (using renderer: *Renderer) -> VkResult {
-    result, draw_image := make_image(vma, swapchain.extent, swapchain.format, SWAPCHAIN_IMAGE_USAGE, .GPU_ONLY);
+    result, draw_image := make_image(vma, swapchain.extent, swapchain.format, .TRANSFER_SRC | .COLOR_ATTACHMENT, .GPU_ONLY);
     if result return result;
 
     result=, draw_image_view := make_image_view(renderer, draw_image.vk, swapchain.format, .COLOR);
