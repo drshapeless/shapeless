@@ -15,9 +15,19 @@ Renderer :: struct {
 
     swapchain:       Swapchain;
     frames:          [] Frame_Data;
+    frame_index:     u64;
+    image_index:     u64;
 
-    draw_image:      Texture;
-    depth_image:     Texture;
+    draw_texture:      Texture;
+    depth_texture:     Texture;
+
+    next_descriptor_pool_id: Descriptor_Pool.ID = 1;
+    current_descriptor_pool_id: Descriptor_Pool.ID;
+    descriptor_pools: Table(Descriptor_Pool.ID, Descriptor_Pool);
+
+    // This is for dynamic rendering
+    cmd: VkCommandBuffer;
+    clear_color: VkClearValue;
 
     Queue_Family_Indices :: struct {
         graphics: u32;
@@ -48,6 +58,13 @@ Renderer :: struct {
         image: Image;
         image_view: VkImageView;
         format: VkFormat;
+    }
+
+    Descriptor_Pool :: struct {
+        ID :: #type,distinct u64;
+        id:              ID;
+        vk:              VkDescriptorPool;
+        allocated_count: u64;
     }
 }
 
@@ -102,7 +119,16 @@ init :: (using renderer: *Renderer, window: *SDL_Window) -> ok:bool {
     result, vma = make_vma(instance, physical_device, device);
     if result return false;
 
+    result, command_pool = make_command_pools(renderer);
+    if result return false;
+
+    result, descriptor_set_layout = make_descriptor_set_layout(renderer);
+    if result return false;
+
     result = make_swapchain_resources(renderer);
+    if result return false;
+
+    result = make_draw_images(renderer);
     if result return false;
 
     return true;
@@ -110,6 +136,10 @@ init :: (using renderer: *Renderer, window: *SDL_Window) -> ok:bool {
 
 deinit :: (using renderer: *Renderer) {
     if device vkDeviceWaitIdle(device);
+
+    destroy_descriptor_set_layout(renderer);
+    destroy_command_pools(renderer);
+    destroy_draw_images(renderer);
     destroy_swapchain_resources(renderer);
     vkDestroySurfaceKHR(instance, surface, vka);
     vmaDestroyAllocator(vma);
@@ -117,72 +147,211 @@ deinit :: (using renderer: *Renderer) {
     vkDestroyInstance(instance, vka);
 }
 
-#scope_file
-offset_of :: ($T: Type, $member: string) -> int {
-    for type_info(T).members {
-        if it.name == member return it.offset_in_bytes;
-    }
+// This is deprecated in Vulkan 1.4
+make_shader_module :: (using renderer: *Renderer, file_path: string) -> ok:bool, VkShaderModule {
+    shader_code := read_entire_file(file);
+    defer free(shader_code);
 
-    assert(false, "Type '%' does not have member '%'", T, member);
-    return -1;
+    create_info := VkShaderModuleCreateInfo.{
+        codeSize = xx shader_code.count,
+        pCode = cast(*u32) shader_code.data
+    };
+
+    module: VkShaderModule;
+    result := check_vk(vkCreateShaderModule(device, *create_info, vka, *module));
+    return result == .SUCCESS, module;
 }
 
-// Stolen from JBlow's Vulkan_Renderer
-// Generic api result logging helper, useful for Khronos apis
-check_api_result :: (result: $Result, api: string, $call := #caller_code, loc := #caller_location) -> Result {
-    call_string :: #run -> string {
-        root := compiler_get_nodes(call);
+destroy_shader_module :: (using renderer: *Renderer, module: VkShaderModule) {
+    vkDestroyShaderModule(device, module, vka);
+}
 
-        if root.kind == {
-        case .PROCEDURE_CALL;
-            proc_call := cast(*Code_Procedure_Call) root;
-            expression := proc_call.arguments_sorted[0];
+begin_draw :: (using renderer: *Renderer) -> bool {
+    frame := *frames[frame_index];
 
-            if expression.kind != .PROCEDURE_CALL {
-                return "";
-            }
+    result: VkResult;
+    if check_vk(vkWaitForFences(device, 1, *frame.render_fence, VK_TRUE, U64_MAX)) return false;
+    if check_vk(vkResetFences(device, 1, *frame.render_fence)) return false;
 
-            call := cast(*Code_Procedure_Call) expression;
-            if call.procedure_expression.kind != .IDENT {
-                return "";
-            }
+    if check_vk(vkResetCommandPool(device, frame.command_pool, 0)) return false;
 
-            return (cast(*Code_Ident) call.procedure_expression).name;
+    cmd_alloc_info := VkCommandBufferAllocateInfo.{
+        commandPool = frame.command_pool,
+        commandBufferCount = 1
+    };
 
-        case .IDENT;
-            return (cast(*Code_Ident) root).name;
+    result = check_vk(vkAllocateCommandBuffers(device, *cmd_alloc_info, *cmd));
+    if result return false;
 
-        case;
-            return "";
+    ok := acquire_next_image_index(renderer);
+    if !ok return false;
+
+    cmd_begin_info := VkCommandBufferBeginInfo.{
+        flags = .ONE_TIME_SUBMIT,
+    };
+
+    if check_vk(vkBeginCommandBuffer(cmd, *cmd_begin_info)) return false;
+
+    // Image Layout is no longer relevant in modern hardware, with
+    // device extension of VK_KHR_unified_image_layouts.
+    // https://www.khronos.org/blog/so-long-image-layouts-simplifying-vulkan-synchronisation
+
+    color_attachment := VkRenderingAttachmentInfo.{
+        imageView   = draw_texture.image_view,
+        imageLayout = .GENERAL,
+        loadOp      = .CLEAR,
+        storeOp     = .STORE,
+        clearValue  = clear_color
+    };
+
+    depth_attachment := VkRenderingAttachmentInfo.{
+        imageView = depth_texture.image_view,
+        imageLayout = .GENERAL,
+        loadOp      = .CLEAR,
+        storeOp     = .STORE,
+        clearValue  = .{
+            depthStencil = .{depth = 1}
         }
     };
 
-    if result != .SUCCESS {
-        action := ifx call_string else api;
+    rendering_info := VkRenderingInfo.{
+        renderArea = .{offset = .{0, 0}, extent = swapchain.extent},
+        layerCount = 1,
+        colorAttachmentCount = 1,
+        pColorAttachments = *color_attachment,
+        pDepthAttachment = *depth_attachment,
+        pStencilAttachment = null,
+    };
 
-        result_string: string;
-        {
-            info := type_info(VkResult);
-            for info.values {
-                if xx result == it {
-                    result_string = info.names[it_index];
-                    break;
-                }
-            }
-        }
-        printed_result := ifx result_string
-            then cast(Any) result_string
-            else cast(Any) result;
-        log_error("% '%' failed: %", api, action, printed_result, loc = loc);
-        return result;
+    vkCmdBeginRendering(cmd, *rendering_info);
+
+    viewport := VkViewport.{
+        x = 0,
+        y = 0,
+        width = xx swapchain.extent.width,
+        height = xx swapchain.extent.height,
+        minDepth = 0,
+        maxDepth = 1,
+    };
+
+    vkCmdSetViewport(cmd, 0, 1, *viewport);
+
+    scissor := VkRect2D.{
+        offset = .{0, 0},
+        extent = swapchain.extent,
+    };
+    vkCmdSetScissor(cmd, 0, 1, *scissor);
+
+    return true;
+}
+
+end_draw :: (using renderer: *Renderer) {
+    defer cmd = null;
+    frame := frames[frame_index];
+    vkCmdEndRendering(cmd);
+
+    current_image := swapchain.images[image_index];
+    copy_image(cmd, draw_texture.image.vk, current_image, swapchain.extent, swapchain.extent);
+
+    if check_vk(vkEndCommandBuffer(cmd)) return;
+
+    cmd_info := VkCommandBufferSubmitInfo.{
+        commandBuffer = cmd,
+    };
+    wait_info := VkSemaphoreSubmitInfo.{
+        semaphore = current_frame.swapchain_semaphore,
+        value = 1,
+        stageMask = .COLOR_ATTACHMENT_OUTPUT,
+    };
+
+    signal_info := VkSemaphoreSubmitInfo.{
+        semaphore = current_frame.render_semaphore,
+        value = 1,
+        stageMask = .ALL_GRAPHICS,
+    };
+
+    submit := VkSubmitInfo2.{
+        waitSemaphoreInfoCount = 1,
+        pWaitSemaphoreInfos = *wait_info,
+        commandBufferInfoCount = 1,
+        pCommandBufferInfos = *cmd_info,
+        signalSemaphoreInfoCount = 1,
+        pSignalSemaphoreInfos = *signal_info,
+    };
+
+    if check_vk(vkQueueSubmit2(graphics_queue, 1, *submit, frame.render_fence)) return;
+
+    // TODO: Should I separate present from end_draw?
+    present_info := VkPresentInfoKHR.{
+        waitSemaphoreCount = 1,
+        pWaitSemaphores = *frame.render_semaphore,
+        swapchainCount = 1,
+        pSwapchains = *swapchain.vk,
+        pImageIndices = *image_index,
+    };
+
+    result := vkQueuePresentKHR(graphics_queue, *present_info);
+    if result == {
+    case .ERROR_OUT_OF_DATE_KHR;
+        ;
+    case .SUBOPTIMAL_KHR;
+        ;
+    case .SUCCESS;
+        ;
+    case;
+        log_error("present failed");
+        return;
     }
-    return .SUCCESS;
+
+    frame_index = (frame_index + 1) % xx swapchain.images.count;
 }
 
-check_vk :: (result: VkResult, $call := #caller_code, loc := #caller_location) -> VkResult {
-    return check_api_result(result, "Vulkan call", call, loc);
+set_clear_color :: (using renderer: *Renderer, color: [4]float) {
+    clear_color.color.float32_ = color;
 }
 
+copy_image :: (cmd: VkCommandBuffer, src_image: VkImage, dst_image: VkImage, src_extent: VkExtent2D, dst_extent: VkExtent2D) {
+    blit_region := VkImageBlit2.{
+        srcSubresource = .{
+            aspectMask     = .COLOR,
+            baseArrayLayer = 0,
+            layerCount     = 1,
+            mipLevel       = 0,
+        },
+        dstSubresource = .{
+            aspectMask     = .COLOR,
+            baseArrayLayer = 0,
+            layerCount     = 1,
+            mipLevel       = 0,
+        },
+    };
+
+    blit_region.srcOffsets[1] = .{
+        x = xx src_extent.width,
+        y = xx src_extent.height,
+        z = 1,
+    };
+
+    blit_region.dstOffsets[1] = .{
+        x = xx dst_extent.width,
+        y = xx dst_extent.height,
+        z = 1,
+    };
+
+    blit_info := VkBlitImageInfo2.{
+        srcImage       = src_img,
+        srcImageLayout = .GENERAL,
+        dstImage       = dst_img,
+        dstImageLayout = .GENERAL,
+        regionCount    = 1,
+        pRegions       = *blit_region,
+        filter         = .LINEAR,
+    };
+
+    vkCmdBlitImage2(cmd, *blit_info);
+}
+
+#scope_file
 // Initialization helpers
 application_info :: VkApplicationInfo.{
     pApplicationName   = "Shapeless",
@@ -577,7 +746,8 @@ destroy_frames :: (using renderer: *Renderer) {
     }
 }
 
-remake_swapchain :: (using renderer: *Renderer) -> VkResult {
+remake_swapchain_resources :: (using renderer: *Renderer) -> VkResult {
+    vkDeviceWaitIdle(device);
     destroy_swapchain_resources(renderer);
     return make_swapchain_resources(renderer);
 }
@@ -623,5 +793,161 @@ make_image :: (
 
 // The word image here is not the same as Renderer.Image, it also
 // includes an image view.
-make_draw_images :: (using renderer: *Renderer) {
+make_draw_images :: (using renderer: *Renderer) -> VkResult {
+    result, draw_image := make_image(vma, swapchain.extent, swapchain.format, SWAPCHAIN_IMAGE_USAGE, .GPU_ONLY);
+    if result return result;
+
+    result=, draw_image_view := make_image_view(renderer, draw_image.vk, swapchain.format, .COLOR);
+    if result return result;
+
+    draw_texture = .{
+        image = draw_image,
+        image_view = draw_image_view,
+        format = swapchain.format
+    };
+
+    // TODO: Should I select a depth format instead of hardcoding as D32_SFLOAT?
+    result=, depth_image := make_image(vma, swapchain.extent, .D32_SFLOAT, .DEPTH_STENCIL_ATTACHMENT, .GPU_ONLY);
+    if result return result;
+
+    result=, depth_image_view := make_image_view(renderer, depth_image.vk, .D32_SFLOAT, .DEPTH);
+    if result return result;
+
+    depth_texture = .{
+        image = depth_image,
+        image_view = depth_image_view,
+        format = swapchain.format
+    };
+
+    return .SUCCESS;
+}
+
+destroy_texture :: (using renderer: *Renderer, texture: Renderer.Texture) {
+    vkDestroyImageView(device, texture.image_view, vka);
+    vmaDestroyImage(vma, texture.image.vk, texture.image.allocation);
+}
+
+destroy_draw_images :: (using renderer: *Renderer) {
+    destroy_texture(renderer, draw_texture);
+    destroy_texture(renderer, depth_texture);
+}
+
+make_command_pools :: (using renderer: *Renderer) -> VkResult, VkCommandPool {
+    create_info := VkCommandPoolCreateInfo.{
+        flags = .TRANSIENT | .RESET_COMMAND_BUFFER,
+        queueFamilyIndex = queue_indices.graphics
+    };
+
+    pool: VkCommandPool;
+    result := check_vk(vkCreateCommandPool(device, *create_info, vka, *pool));
+    return result, pool;
+}
+
+destroy_command_pools :: (using renderer: *Renderer) {
+    vkDestroyCommandPool(device, command_pool, vka);
+}
+
+make_descriptor_set_layout :: (using renderer: *Renderer) -> VkResult, VkDescriptorSetLayout {
+    uniform_layout_binding := VkDescriptorSetLayoutBinding.{
+        binding = 0,
+        descriptorType = .UNIFORM_BUFFER,
+        descriptorCount = 1,
+        stageFlags = .VERTEX | .FRAGMENT
+    };
+
+    bindings := VkDescriptorSetLayoutBinding.[
+        uniform_layout_binding,
+    ];
+
+    layout_info := VkDescriptorSetLayoutCreateInfo.{
+        bindingCount = xx bindings.count,
+        pBindings = bindings.data
+    };
+
+    layout: VkDescriptorSetLayout;
+    result := check_vk(vkCreateDescriptorSetLayout(device, *layout_info, vka, *layout));
+    return result, layout;
+}
+
+destroy_descriptor_set_layout :: (using renderer: *Renderer) {
+    vkDestroyDescriptorSetLayout(device, descriptor_set_layout, vka);
+}
+
+make_descriptor_pool :: (renderer: *Renderer, capacity: u32) -> VkResult, VkDescriptorPool {
+    uniform_pool_size := VkDescriptorPoolSize.{
+        type = .UNIFORM_BUFFER,
+        descriptorCount = capacity
+    };
+
+    pool_sizes := VkDescriptorPoolSize.[
+        uniform_pool_size
+    ];
+
+    pool_info := VkDescriptorPoolCreateInfo.{
+        maxSets = capacity,
+        poolSizeCount = xx pool_sizes.count,
+        pPoolSizes = pool_sizes.data
+    };
+
+    pool: VkDescriptorPool;
+    result := check_vk(vkCreateDescriptorPool(device, *pool_info, vka, *pool));
+    return result, pool;
+}
+
+access_descriptor_pool :: (using renderer: *Renderer) -> VkResult, *Renderer.Descriptor_Pool {
+    pool_capacity := swapchain.images.count * 1024;
+
+    if current_descriptor_pool_id {
+        pool := table_find_pointer(*descriptor_pools, current_descriptor_pool_id);
+        if pool.allocated_count < pool_capacity {
+            return .SUCCESS, pool;
+        }
+    }
+
+    for * descriptor_pools {
+        if it.allocated_count < pool_capacity {
+            current_descriptor_pool_id = it.id;
+            return .SUCCESS, it;
+        }
+    }
+
+    result, pool := make_descriptor_pool(renderer, pool_capacity);
+    if result return result, null;
+
+    id := next_descriptor_pool_id;
+    next_descriptor_pool_id += 1;
+
+    return .SUCCESS, table_add(*descriptor_pools, key = id, value = .{id = id, vk = pool});
+}
+
+acquire_next_image_index :: (using renderer: *Renderer) -> bool {
+    info := VkAcquireNextImageInfoKHR.{
+        swapchain = swapchain.vk,
+        timeout = U64_MAX,
+        semaphore = frames[frame_index].swapchain_semaphore,
+        fence = null,
+        deviceMask = 1
+    };
+
+    result: VkResult;
+
+    result = check_vk(vkAcquireNextImage2KHR(device, *info, *image_index));
+
+    if result == {
+    case .ERROR_OUT_OF_DATE_KHR;
+        result = remake_swapchain_resources(renderer);
+        if result return false;
+
+        result = check_vk(vkAcquireNextImage2KHR(device, *info, *image_index));
+        if result return false;
+
+    case .SUBOPTIMAL_KHR;
+        ;
+    case .SUCCESS;
+        ;
+    case;
+        return false;
+    }
+
+    return true;
 }
