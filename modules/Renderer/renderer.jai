@@ -404,6 +404,7 @@ validation_layers :: (*u8).["VK_LAYER_KHRONOS_validation"];
 
 make_instance_create_info :: (instance_extensions: [] *u8) -> VkInstanceCreateInfo {
     return .{
+        flags = ifx OS == .MACOS then VkInstanceCreateFlags.ENUMERATE_PORTABILITY_KHR else 0,
         pApplicationInfo = *application_info,
         enabledLayerCount = xx ifx VALIDATION then 1 else 0,
         ppEnabledLayerNames = ifx VALIDATION then validation_layers.data else null,
