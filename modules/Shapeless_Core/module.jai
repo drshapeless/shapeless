@@ -16,10 +16,16 @@ Buffer :: struct {
 #load "app.jai";
 #load "window.jai";
 #load "frame.jai";
+#load "font.jai";
+
 #scope_file
 #import "Hash_Table";
 #import "Renderer";
 #import "SDL3";
+#import "SDL3_image";
+#import "SDL3_ttf";
 #import "String";
 #import "Basic";
 #import "Vulkan";
+#import "Vulkan_Memory_Allocator";
+#import "Json";

@@ -585,13 +585,13 @@ make_buffer_copying_data :: (using renderer: *Renderer, data: [] $T, buffer_usag
 
 begin_single_time_commands :: (using renderer: *Renderer) -> VkResult, VkCommandBuffer {
     cmd_alloc_info := VkCommandBufferAllocateInfo.{
-        commandPool = graphics_command_pool,
+        commandPool = command_pool,
         commandBufferCount = 1,
         level = .PRIMARY,
     };
     command: VkCommandBuffer;
     result: VkResult;
-    result = check_vk(vkAllocateCommandBuffers(dev, *cmd_alloc_info, *command));
+    result = check_vk(vkAllocateCommandBuffers(device, *cmd_alloc_info, *command));
     if result return result, null;
 
     cmd_begin_info := VkCommandBufferBeginInfo.{
@@ -619,7 +619,7 @@ end_single_time_commands :: (using renderer: *Renderer, command: VkCommandBuffer
     if result return result;
     result = vkQueueWaitIdle(graphics_queue);
     if result return result;
-    vkFreeCommandBuffers(dev, command_pool, 1, *command);
+    vkFreeCommandBuffers(device, command_pool, 1, *command);
     return .SUCCESS;
 }
 
@@ -963,7 +963,6 @@ make_image_view :: (using renderer: *Renderer, image: VkImage, format: VkFormat,
 }
 
 make_frames :: (renderer: *Renderer) -> VkResult, [] Renderer.Frame_Data {
-    log("image count", renderer.swapchain.images.count);
     frames := NewArray(renderer.swapchain.images.count, Renderer.Frame_Data);
     cmd_pool_info := VkCommandPoolCreateInfo.{
         flags = .RESET_COMMAND_BUFFER,

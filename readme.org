@@ -9,3 +9,8 @@ method.
 Jai and Jai only. With how powerful the Jai language is. I feel like
 that the lispy way of extending an editor is not the only way to do
 so.
+
+* msdf script
+#+begin_src shell
+  msdf-atlas-gen -font ./Hack-Regular.ttf -allglyphs -format png -size 32 -imageout hack.png -json hack.json
+#+end_src
