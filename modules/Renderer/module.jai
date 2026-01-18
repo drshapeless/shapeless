@@ -1,18 +1,8 @@
 #module_parameters(VALIDATION := true);
 
-#if OS == .MACOS {
-    ENABLED_DEVICE_EXTENSION_NAMES :: (*u8).[
+ENABLED_DEVICE_EXTENSION_NAMES :: (*u8).[
     VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME
-    ];
-
-    UNIFIED_IMAGE_LAYOUT :: false;
-} else {
-    ENABLED_DEVICE_EXTENSION_NAMES :: (*u8).[
-VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME,
-VK_KHR_UNIFIED_IMAGE_LAYOUTS_EXTENSION_NAME // We can now forget about image layout
-    ];
-    UNIFIED_IMAGE_LAYOUT :: true;
-}
+];
 
 SWAPCHAIN_SURFACE_FORMAT : VkFormat : .B8G8R8A8_UNORM;
 SWAPCHAIN_COLOR_SPACE    : VkColorSpaceKHR : .SRGB_NONLINEAR;
@@ -85,6 +75,7 @@ check_vk :: (result: VkResult, $call := #caller_code, loc := #caller_location) -
 
 #load "renderer.jai";
 #load "pipeline.jai";
+#load "descriptor.jai";
 
 #scope_file
 #import "Vulkan";

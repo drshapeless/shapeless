@@ -11,7 +11,6 @@ Renderer :: struct {
     vma:             VmaAllocator;
 
     command_pool:    VkCommandPool;
-    descriptor_set_layout: VkDescriptorSetLayout;
 
     buffers_queued_for_destruction: [] [..] Buffer;
 
@@ -23,13 +22,29 @@ Renderer :: struct {
     draw_texture:      Texture;
     depth_texture:     Texture;
 
-    next_descriptor_pool_id: Descriptor_Pool.ID = 1;
-    current_descriptor_pool_id: Descriptor_Pool.ID;
-    descriptor_pools: Table(Descriptor_Pool.ID, Descriptor_Pool);
+    // There are two bindless approach in descriptor set, Descriptor
+    // indexing and descriptor buffer.
+    //
+    // Descriptor indexing is widely supported and is the standard in
+    // the industry, while descriptor buffer is not.
+    //
+    // Descriptor Pool completely ditched with VK_EXT_descriptor_buffer.
+    // https://github.com/KhronosGroup/Vulkan-Samples/tree/main/samples/extensions/descriptor_buffer_basic
+    //
+    // However, in my use case, which need to run well on both mac and
+    // linux, we use descriptor indexing, it still need a descriptor
+    // pool, but the same descriptor set can be reuse over and over
+    // again. Complicated logic is no longer needed.
+    //
+    // Descriptor Pool should live outside the renderer for this
+    // reason.
+
+    next_pipeline_id: Pipeline.ID = 1;
+    pipelines: Table(Pipeline.ID, Pipeline);
 
     // This is for dynamic rendering
     cmd: VkCommandBuffer;
-    clear_color: VkClearValue;
+    clear_color: [4]float;
 
     Queue_Family_Indices :: struct {
         graphics: u32;
@@ -62,11 +77,11 @@ Renderer :: struct {
         format: VkFormat;
     }
 
-    Descriptor_Pool :: struct {
+    Pipeline :: struct {
         ID :: #type,distinct u64;
-        id:              ID;
-        vk:              VkDescriptorPool;
-        allocated_count: u64;
+        id:     ID;
+        vk:     VkPipeline;
+        layout: VkPipelineLayout;
     }
 
     Buffer :: struct {
@@ -147,9 +162,6 @@ init :: (using renderer: *Renderer, window: *SDL_Window) -> ok:bool {
     result, command_pool = make_command_pools(renderer);
     if result return false;
 
-    result, descriptor_set_layout = make_descriptor_set_layout(renderer);
-    if result return false;
-
     result = make_swapchain_resources(renderer);
     if result return false;
 
@@ -162,7 +174,6 @@ init :: (using renderer: *Renderer, window: *SDL_Window) -> ok:bool {
 deinit :: (using renderer: *Renderer) {
     if device vkDeviceWaitIdle(device);
 
-    destroy_descriptor_set_layout(renderer);
     destroy_command_pools(renderer);
     destroy_draw_images(renderer);
     destroy_swapchain_resources(renderer);
@@ -217,38 +228,69 @@ begin_draw :: (using renderer: *Renderer) -> bool {
 
     if check_vk(vkBeginCommandBuffer(cmd, *cmd_begin_info)) return false;
 
-    transition_image(cmd, draw_texture.image.vk, .UNDEFINED, .GENERAL, .COLOR);
-    #if UNIFIED_IMAGE_LAYOUT {
-        // Image Layout is no longer relevant in modern hardware, with
-        // device extension of VK_KHR_unified_image_layouts.
-        // https://www.khronos.org/blog/so-long-image-layouts-simplifying-vulkan-synchronisation
-        // Sadly, this is not supported in MoltenVK yet.
-        transition_image(cmd, depth_texture.image.vk, .UNDEFINED, .GENERAL, .DEPTH);
-    } else {
-        transition_image(cmd, depth_texture.image.vk, .UNDEFINED, .DEPTH_ATTACHMENT_OPTIMAL, .DEPTH);
-    }
+    image_memory_barriers : [2]VkImageMemoryBarrier2;
+    image_memory_barriers[0] = .{
+        srcStageMask     = .ALL_COMMANDS,
+        srcAccessMask    = .MEMORY_WRITE,
+        dstStageMask     = .ALL_COMMANDS,
+        dstAccessMask    = .MEMORY_WRITE | .MEMORY_READ,
+        oldLayout        = .UNDEFINED,
+        newLayout        = .GENERAL,
+        image            = draw_texture.image.vk,
+        subresourceRange = .{
+            aspectMask   = .COLOR,
+            baseMipLevel   = 0,
+            levelCount     = VK_REMAINING_MIP_LEVELS,
+            baseArrayLayer = 0,
+            layerCount     = VK_REMAINING_ARRAY_LAYERS
+        }
+    };
+
+    image_memory_barriers[1] = .{
+        srcStageMask     = .ALL_COMMANDS,
+        srcAccessMask    = .MEMORY_WRITE,
+        dstStageMask     = .ALL_COMMANDS,
+        dstAccessMask    = .MEMORY_WRITE | .MEMORY_READ,
+        oldLayout        = .UNDEFINED,
+        newLayout        = .ATTACHMENT_OPTIMAL,
+        image            = depth_texture.image.vk,
+        subresourceRange = .{
+            aspectMask   = .DEPTH | .STENCIL,
+            baseMipLevel   = 0,
+            levelCount     = VK_REMAINING_MIP_LEVELS,
+            baseArrayLayer = 0,
+            layerCount     = VK_REMAINING_ARRAY_LAYERS
+        }
+    };
+    // Image Layout is no longer relevant in modern hardware, with
+    // device extension of VK_KHR_unified_image_layouts.
+    // https://www.khronos.org/blog/so-long-image-layouts-simplifying-vulkan-synchronisation
+    // Sadly, this is not supported in MoltenVK yet. So we still do it
+    // in old way.
+
+    dependency_info := VkDependencyInfo.{
+        imageMemoryBarrierCount = xx image_memory_barriers.count,
+        pImageMemoryBarriers    = image_memory_barriers.data
+    };
+    vkCmdPipelineBarrier2(cmd, *dependency_info);
 
     color_attachment := VkRenderingAttachmentInfo.{
         imageView   = draw_texture.image_view,
         imageLayout = .GENERAL,
         loadOp      = .CLEAR,
         storeOp     = .STORE,
-        clearValue  = clear_color
+        clearValue  = .{ color.float32_ = clear_color }
     };
 
     depth_attachment := VkRenderingAttachmentInfo.{
         imageView   = depth_texture.image_view,
-        imageLayout = .GENERAL,
+        imageLayout = .ATTACHMENT_OPTIMAL,
         loadOp      = .CLEAR,
         storeOp     = .STORE,
         clearValue  = .{
             depthStencil = .{depth = 1}
         }
     };
-
-    #if !UNIFIED_IMAGE_LAYOUT {
-        depth_attachment.imageLayout = .DEPTH_ATTACHMENT_OPTIMAL;
-    }
 
     rendering_info := VkRenderingInfo.{
         renderArea = .{offset = .{0, 0}, extent = swapchain.extent},
@@ -287,17 +329,99 @@ end_draw :: (using renderer: *Renderer) {
     vkCmdEndRendering(cmd);
 
     current_image := swapchain.images[image_index];
-    #if UNIFIED_IMAGE_LAYOUT {
-        transition_image(cmd, current_image, .UNDEFINED, .GENERAL, .COLOR);
-        copy_image(cmd, draw_texture.image.vk, current_image, swapchain.extent, swapchain.extent);
-        transition_image(cmd, current_image, .GENERAL, .PRESENT_SRC_KHR, .COLOR);
-    } else {
-        transition_image(cmd, draw_texture.image.vk, .GENERAL, .TRANSFER_SRC_OPTIMAL, .COLOR);
-        transition_image(cmd, current_image, .UNDEFINED, .TRANSFER_DST_OPTIMAL, .COLOR);
 
-        copy_image(cmd, draw_texture.image.vk, current_image, swapchain.extent, swapchain.extent, .TRANSFER_SRC_OPTIMAL, .TRANSFER_DST_OPTIMAL);
-        transition_image(cmd, current_image, .TRANSFER_DST_OPTIMAL, .PRESENT_SRC_KHR, .COLOR);
-    }
+    image_memory_barriers : [2]VkImageMemoryBarrier2;
+    image_memory_barriers[0] = .{
+        srcStageMask     = .ALL_COMMANDS,
+        srcAccessMask    = .MEMORY_WRITE,
+        dstStageMask     = .ALL_COMMANDS,
+        dstAccessMask    = .MEMORY_WRITE | .MEMORY_READ,
+        oldLayout        = .GENERAL,
+        newLayout        = .TRANSFER_SRC_OPTIMAL,
+        image            = draw_texture.image.vk,
+        subresourceRange = .{
+            aspectMask   = .COLOR,
+            baseMipLevel   = 0,
+            levelCount     = VK_REMAINING_MIP_LEVELS,
+            baseArrayLayer = 0,
+            layerCount     = VK_REMAINING_ARRAY_LAYERS
+        }
+    };
+    image_memory_barriers[1] = .{
+        srcStageMask     = .ALL_COMMANDS,
+        srcAccessMask    = .MEMORY_WRITE,
+        dstStageMask     = .ALL_COMMANDS,
+        dstAccessMask    = .MEMORY_WRITE | .MEMORY_READ,
+        oldLayout        = .UNDEFINED,
+        newLayout        = .TRANSFER_DST_OPTIMAL,
+        image            = current_image,
+        subresourceRange = .{
+            aspectMask   = .COLOR,
+            baseMipLevel   = 0,
+            levelCount     = VK_REMAINING_MIP_LEVELS,
+            baseArrayLayer = 0,
+            layerCount     = VK_REMAINING_ARRAY_LAYERS
+        }
+    };
+
+    dependency_info := VkDependencyInfo.{
+        imageMemoryBarrierCount = xx image_memory_barriers.count,
+        pImageMemoryBarriers    = image_memory_barriers.data
+    };
+    vkCmdPipelineBarrier2(cmd, *dependency_info);
+
+    blit_region := VkImageBlit2.{
+        srcSubresource = .{
+            aspectMask = .COLOR,
+            layerCount = 1
+        },
+        dstSubresource = .{
+            aspectMask = .COLOR,
+            layerCount = 1
+        },
+    };
+    blit_region.srcOffsets[1] = .{
+        x = xx swapchain.extent.width,
+        y = xx swapchain.extent.height,
+        z = 1
+    };
+    blit_region.dstOffsets[1] = .{
+        x = xx swapchain.extent.width,
+        y = xx swapchain.extent.height,
+        z = 1
+    };
+    blit_info := VkBlitImageInfo2.{
+        srcImage       = draw_texture.image.vk,
+        srcImageLayout = .TRANSFER_SRC_OPTIMAL,
+        dstImage       = current_image,
+        dstImageLayout = .TRANSFER_DST_OPTIMAL,
+        regionCount    = 1,
+        pRegions       = *blit_region,
+        filter         = .LINEAR
+    };
+    vkCmdBlitImage2(cmd, *blit_info);
+
+    present_image_barrier := VkImageMemoryBarrier2.{
+        srcStageMask     = .ALL_COMMANDS,
+        srcAccessMask    = .MEMORY_WRITE,
+        dstStageMask     = .ALL_COMMANDS,
+        dstAccessMask    = .MEMORY_WRITE | .MEMORY_READ,
+        oldLayout        = .TRANSFER_DST_OPTIMAL,
+        newLayout        = .PRESENT_SRC_KHR,
+        image            = current_image,
+        subresourceRange = .{
+            aspectMask   = .COLOR,
+            baseMipLevel   = 0,
+            levelCount     = VK_REMAINING_MIP_LEVELS,
+            baseArrayLayer = 0,
+            layerCount     = VK_REMAINING_ARRAY_LAYERS
+        }
+    };
+    present_barrier_info := VkDependencyInfo.{
+        imageMemoryBarrierCount = 1,
+        pImageMemoryBarriers    = *present_image_barrier
+    };
+    vkCmdPipelineBarrier2(cmd, *present_barrier_info);
 
     if check_vk(vkEndCommandBuffer(cmd)) return;
 
@@ -353,76 +477,7 @@ end_draw :: (using renderer: *Renderer) {
 }
 
 set_clear_color :: (using renderer: *Renderer, color: [4]float) {
-    clear_color.color.float32_ = color;
-}
-
-copy_image :: (cmd: VkCommandBuffer, src_image: VkImage, dst_image: VkImage, src_extent: VkExtent2D, dst_extent: VkExtent2D, src_image_layout: VkImageLayout = .GENERAL, dst_image_layout: VkImageLayout = .GENERAL) {
-    blit_region := VkImageBlit2.{
-        srcSubresource = .{
-            aspectMask     = .COLOR,
-            baseArrayLayer = 0,
-            layerCount     = 1,
-            mipLevel       = 0,
-        },
-        dstSubresource = .{
-            aspectMask     = .COLOR,
-            baseArrayLayer = 0,
-            layerCount     = 1,
-            mipLevel       = 0,
-        },
-    };
-
-    blit_region.srcOffsets[1] = .{
-        x = xx src_extent.width,
-        y = xx src_extent.height,
-        z = 1,
-    };
-
-    blit_region.dstOffsets[1] = .{
-        x = xx dst_extent.width,
-        y = xx dst_extent.height,
-        z = 1,
-    };
-
-    blit_info := VkBlitImageInfo2.{
-        srcImage       = src_image,
-        srcImageLayout = src_image_layout,
-        dstImage       = dst_image,
-        dstImageLayout = dst_image_layout,
-        regionCount    = 1,
-        pRegions       = *blit_region,
-        filter         = .LINEAR,
-    };
-
-    vkCmdBlitImage2(cmd, *blit_info);
-}
-
-transition_image :: (cmd: VkCommandBuffer, image: VkImage, old_layout: VkImageLayout, new_layout: VkImageLayout, aspect_mask: VkImageAspectFlags) {
-    sub_image := VkImageSubresourceRange.{
-        aspectMask     = aspect_mask,
-        baseMipLevel   = 0,
-        levelCount     = VK_REMAINING_MIP_LEVELS,
-        baseArrayLayer = 0,
-        layerCount     = VK_REMAINING_ARRAY_LAYERS,
-    };
-
-    image_barrier := VkImageMemoryBarrier2.{
-        srcStageMask     = .ALL_COMMANDS,
-        srcAccessMask    = .MEMORY_WRITE,
-        dstStageMask     = .ALL_COMMANDS,
-        dstAccessMask    = .MEMORY_WRITE | .MEMORY_READ,
-        oldLayout        = old_layout,
-        newLayout        = new_layout,
-        image            = image,
-        subresourceRange = sub_image,
-    };
-
-    dep_info := VkDependencyInfo.{
-        imageMemoryBarrierCount = 1,
-        pImageMemoryBarriers    = *image_barrier,
-    };
-
-    vkCmdPipelineBarrier2(cmd, *dep_info);
+    clear_color = color;
 }
 
 make_buffer :: (vma: VmaAllocator, size: VkDeviceSize, buffer_usage: VkBufferUsageFlags, memory_usage: VmaMemoryUsage) -> VkResult, Renderer.Buffer {
@@ -564,6 +619,9 @@ end_single_time_commands :: (using renderer: *Renderer, command: VkCommandBuffer
     return .SUCCESS;
 }
 
+make_pipeline :: (renderer: *Renderer, builder: *Pipeline_Builder) -> bool, Renderer.Pipeline.ID {
+
+}
 
 #scope_file
 // Initialization helpers
@@ -789,7 +847,7 @@ make_vma :: (instance: VkInstance, physical_device: VkPhysicalDevice, device: Vk
         physicalDevice = physical_device,
         device = device,
         instance = instance,
-        flags = VMA_BUFFER_DEVICE_ADDRESS,
+        flags = xx VmaAllocatorCreateFlagBits.BUFFER_DEVICE_ADDRESS_BIT,
         pVulkanFunctions = *vma_vulkan_functions,
     };
 
@@ -982,7 +1040,7 @@ make_image :: (
     extent: VkExtent2D,
     format: VkFormat,
     image_usage: VkImageUsageFlags,
-    memory_usage: VmaMemoryUsage,
+    memory_usage: VmaMemoryUsage = .AUTO,
     tiling: VkImageTiling = .OPTIMAL,
     image_type: VkImageType = .e2D,
     layer_count: u32 = 1,
@@ -1006,8 +1064,9 @@ make_image :: (
     };
 
     alloc_info := VmaAllocationCreateInfo.{
+        flags = xx VmaAllocationCreateFlagBits.DEDICATED_MEMORY_BIT,
         usage = memory_usage,
-        requiredFlags = .DEVICE_LOCAL
+        // requiredFlags = .DEVICE_LOCAL
     };
 
     image: VkImage;
@@ -1016,10 +1075,26 @@ make_image :: (
     return result, .{vk = image, allocation = allocation};
 }
 
+find_depth_format :: (using renderer: *Renderer) -> VkFormat {
+    depth_formats :: VkFormat.[.D32_SFLOAT_S8_UINT, .D24_UNORM_S8_UINT];
+
+    format := depth_formats[0];
+    for depth_formats {
+        format_properties : VkFormatProperties2;
+        vkGetPhysicalDeviceFormatProperties2(physical_device, it, *format_properties);
+        if format_properties.formatProperties.optimalTilingFeatures & .DEPTH_STENCIL_ATTACHMENT {
+            format = it;
+            break;
+        }
+    }
+
+    return format;
+}
+
 // The word image here is not the same as Renderer.Image, it also
 // includes an image view.
 make_draw_images :: (using renderer: *Renderer) -> VkResult {
-    result, draw_image := make_image(vma, swapchain.extent, swapchain.format, .TRANSFER_SRC | .COLOR_ATTACHMENT, .GPU_ONLY);
+    result, draw_image := make_image(vma, swapchain.extent, swapchain.format, .TRANSFER_SRC | .COLOR_ATTACHMENT);
     if result return result;
 
     result=, draw_image_view := make_image_view(renderer, draw_image.vk, swapchain.format, .COLOR);
@@ -1031,11 +1106,11 @@ make_draw_images :: (using renderer: *Renderer) -> VkResult {
         format = swapchain.format
     };
 
-    // TODO: Should I select a depth format instead of hardcoding as D32_SFLOAT?
-    result=, depth_image := make_image(vma, swapchain.extent, .D32_SFLOAT, .DEPTH_STENCIL_ATTACHMENT, .GPU_ONLY);
+    depth_format := find_depth_format(renderer);
+    result=, depth_image := make_image(vma, swapchain.extent, depth_format, .DEPTH_STENCIL_ATTACHMENT);
     if result return result;
 
-    result=, depth_image_view := make_image_view(renderer, depth_image.vk, .D32_SFLOAT, .DEPTH);
+    result=, depth_image_view := make_image_view(renderer, depth_image.vk, depth_format, .DEPTH);
     if result return result;
 
     depth_texture = .{
@@ -1070,79 +1145,6 @@ make_command_pools :: (using renderer: *Renderer) -> VkResult, VkCommandPool {
 
 destroy_command_pools :: (using renderer: *Renderer) {
     vkDestroyCommandPool(device, command_pool, vka);
-}
-
-make_descriptor_set_layout :: (using renderer: *Renderer) -> VkResult, VkDescriptorSetLayout {
-    uniform_layout_binding := VkDescriptorSetLayoutBinding.{
-        binding = 0,
-        descriptorType = .UNIFORM_BUFFER,
-        descriptorCount = 1,
-        stageFlags = .VERTEX | .FRAGMENT
-    };
-
-    bindings := VkDescriptorSetLayoutBinding.[
-        uniform_layout_binding,
-    ];
-
-    layout_info := VkDescriptorSetLayoutCreateInfo.{
-        bindingCount = xx bindings.count,
-        pBindings = bindings.data
-    };
-
-    layout: VkDescriptorSetLayout;
-    result := check_vk(vkCreateDescriptorSetLayout(device, *layout_info, vka, *layout));
-    return result, layout;
-}
-
-destroy_descriptor_set_layout :: (using renderer: *Renderer) {
-    vkDestroyDescriptorSetLayout(device, descriptor_set_layout, vka);
-}
-
-make_descriptor_pool :: (renderer: *Renderer, capacity: u32) -> VkResult, VkDescriptorPool {
-    uniform_pool_size := VkDescriptorPoolSize.{
-        type = .UNIFORM_BUFFER,
-        descriptorCount = capacity
-    };
-
-    pool_sizes := VkDescriptorPoolSize.[
-        uniform_pool_size
-    ];
-
-    pool_info := VkDescriptorPoolCreateInfo.{
-        maxSets = capacity,
-        poolSizeCount = xx pool_sizes.count,
-        pPoolSizes = pool_sizes.data
-    };
-
-    pool: VkDescriptorPool;
-    result := check_vk(vkCreateDescriptorPool(device, *pool_info, vka, *pool));
-    return result, pool;
-}
-
-access_descriptor_pool :: (using renderer: *Renderer) -> VkResult, *Renderer.Descriptor_Pool {
-    pool_capacity := swapchain.images.count * 1024;
-
-    if current_descriptor_pool_id {
-        pool := table_find_pointer(*descriptor_pools, current_descriptor_pool_id);
-        if pool.allocated_count < pool_capacity {
-            return .SUCCESS, pool;
-        }
-    }
-
-    for * descriptor_pools {
-        if it.allocated_count < pool_capacity {
-            current_descriptor_pool_id = it.id;
-            return .SUCCESS, it;
-        }
-    }
-
-    result, pool := make_descriptor_pool(renderer, pool_capacity);
-    if result return result, null;
-
-    id := next_descriptor_pool_id;
-    next_descriptor_pool_id += 1;
-
-    return .SUCCESS, table_add(*descriptor_pools, key = id, value = .{id = id, vk = pool});
 }
 
 acquire_next_image_index :: (using renderer: *Renderer) -> bool {
