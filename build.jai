@@ -20,8 +20,9 @@ OUTPUT_EXECUTABLE_NAME := "shapeless";
 
     loop("src/main.jai", w);
 
-    run_command("install_name_tool", "-add_rpath", "/opt/homebrew/lib", OUTPUT_EXECUTABLE_NAME);
-
+    #if OS == .MACOS {
+        run_command("install_name_tool", "-add_rpath", "/opt/homebrew/lib", OUTPUT_EXECUTABLE_NAME);
+    }
     compile_dll("jacky", root_options);
 }
 
