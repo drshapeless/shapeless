@@ -4,3 +4,6 @@
 [submodule "modules/SDL3"]
 	path = modules/SDL3
 	url = https://github.com/drshapeless/jai-sdl3.git
+[submodule "modules/Json"]
+	path = modules/Json
+	url = https://github.com/drshapeless/json-parser.git
