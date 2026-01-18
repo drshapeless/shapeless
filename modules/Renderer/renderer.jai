@@ -162,7 +162,10 @@ init :: (using renderer: *Renderer, window: *SDL_Window) -> ok:bool {
     result, command_pool = make_command_pools(renderer);
     if result return false;
 
-    result = make_swapchain_resources(renderer);
+    result, swapchain = make_swapchain(renderer);
+    if result return false;
+
+    result, frames = make_frames(renderer);
     if result return false;
 
     result = make_draw_images(renderer);
@@ -176,7 +179,8 @@ deinit :: (using renderer: *Renderer) {
 
     destroy_command_pools(renderer);
     destroy_draw_images(renderer);
-    destroy_swapchain_resources(renderer);
+    destroy_frames(renderer);
+    destroy_swapchain(renderer, *swapchain);
     vkDestroySurfaceKHR(instance, surface, vka);
     vmaDestroyAllocator(vma);
     vkDestroyDevice(device, vka);
@@ -856,43 +860,8 @@ make_vma :: (instance: VkInstance, physical_device: VkPhysicalDevice, device: Vk
     return result, allocator;
 }
 
-make_swapchain_resources :: (using renderer: *Renderer) -> VkResult {
-    result := make_swapchain(renderer);
-    if result return result;
-
-    images := swapchain.images;
-    assert(images.count > 0, "Swapchain should have images");
-
-    resize_for_swapchain(renderer, *swapchain.image_views);
-
-    for 0..images.count - 1 {
-        result=, view := make_image_view(renderer, images[it], swapchain.format, .COLOR);
-        if result return result;
-        swapchain.image_views[it] = view;
-    }
-
-    resize_for_swapchain(renderer, *frames);
-
-    resize_for_swapchain(renderer, *buffers_queued_for_destruction);
-
-    // TODO: Omit multisample for now
-    result = make_frames(renderer);
-
-    return result;
-}
-
-destroy_swapchain_resources :: (using renderer: *Renderer) {
-    destroy_frames(renderer);
-    destroy_swapchain(renderer);
-
-    for *buffers: buffers_queued_for_destruction {
-        for buffers.* destroy_buffer(vma, it);
-        array_reset(buffers);
-    }
-}
-
-make_swapchain :: (using renderer: *Renderer) -> VkResult {
-    support := get_swapchain_support(physical_device, surface);
+make_swapchain :: (renderer: *Renderer, old_swapchain: VkSwapchainKHR = null) -> VkResult, Renderer.Swapchain {
+    support := get_swapchain_support(renderer.physical_device, renderer.surface);
 
     format := support.formats[0];
     for support.formats {
@@ -920,11 +889,11 @@ make_swapchain :: (using renderer: *Renderer) -> VkResult {
         extent = support.capabilities.maxImageExtent;
     }
 
-    exclusive_queue := queue_indices.graphics == queue_indices.present;
-    queue_indices_array := u32.[queue_indices.graphics, queue_indices.present];
+    exclusive_queue := renderer.queue_indices.graphics == renderer.queue_indices.present;
+    queue_indices_array := u32.[renderer.queue_indices.graphics, renderer.queue_indices.present];
 
     create_info := VkSwapchainCreateInfoKHR.{
-        surface = surface,
+        surface = renderer.surface,
         minImageCount = image_count,
         imageFormat = format.format,
         imageColorSpace = format.colorSpace,
@@ -937,38 +906,41 @@ make_swapchain :: (using renderer: *Renderer) -> VkResult {
         preTransform = support.capabilities.currentTransform,
         compositeAlpha = .OPAQUE,
         presentMode = present_mode,
-        clipped = VK_TRUE
+        clipped = VK_TRUE,
+        oldSwapchain = old_swapchain
     };
 
-    // Note: providing an old swapchain does little to no help in
-    // creating a new swapchain, so don't bother.
-
-    swapchain = .{
+    swapchain := Renderer.Swapchain.{
         format = format.format,
         extent = extent
     };
 
-    result := check_vk(vkCreateSwapchainKHR(device, *create_info, vka, *swapchain.vk));
-    if result return result;
+    result := check_vk(vkCreateSwapchainKHR(renderer.device, *create_info, renderer.vka, *swapchain.vk));
+    if result return result, .{};
 
-    result, swapchain.images = vkGetSwapchainImagesKHR(device, swapchain.vk);
-    return check_vk(result, vkGetSwapchainImagesKHR);
+    result, swapchain.images = vkGetSwapchainImagesKHR(renderer.device, swapchain.vk);
+    if result return check_vk(result, vkGetSwapchainImagesKHR), swapchain;
+
+    assert(swapchain.images.count > 0, "Swapchain should have images");
+
+    swapchain.image_views = NewArray(image_count, VkImageView);
+    for 0..swapchain.images.count - 1 {
+        result=, view := make_image_view(renderer, swapchain.images[it], swapchain.format, .COLOR);
+        if result return result, .{};
+        swapchain.image_views[it] = view;
+    }
+
+    return .SUCCESS, swapchain;
 }
 
-destroy_swapchain :: (using renderer: *Renderer) {
+destroy_swapchain :: (renderer: *Renderer, swapchain: *Renderer.Swapchain) {
     array_free(swapchain.images);
     for view: swapchain.image_views {
-        vkDestroyImageView(device, view, vka);
+        vkDestroyImageView(renderer.device, view, renderer.vka);
     }
-    vkDestroySwapchainKHR(device, swapchain.vk, vka);
+    array_free(swapchain.image_views);
+    vkDestroySwapchainKHR(renderer.device, swapchain.vk, renderer.vka);
     swapchain.vk = null;
-}
-
-resize_for_swapchain :: (renderer: *Renderer, array: *[] $T) {
-    if array.count != renderer.swapchain.images.count {
-        array_free(array.*);
-        array.* = NewArray(renderer.swapchain.images.count, T);
-    }
 }
 
 make_image_view :: (using renderer: *Renderer, image: VkImage, format: VkFormat, aspect_flag: VkImageAspectFlags, layer_count: u32 = 1, mip_levels: u32 = 1) -> VkResult, VkImageView {
@@ -990,10 +962,12 @@ make_image_view :: (using renderer: *Renderer, image: VkImage, format: VkFormat,
     return result, view;
 }
 
-make_frames :: (using renderer: *Renderer) -> VkResult {
+make_frames :: (renderer: *Renderer) -> VkResult, [] Renderer.Frame_Data {
+    log("image count", renderer.swapchain.images.count);
+    frames := NewArray(renderer.swapchain.images.count, Renderer.Frame_Data);
     cmd_pool_info := VkCommandPoolCreateInfo.{
         flags = .RESET_COMMAND_BUFFER,
-        queueFamilyIndex = queue_indices.graphics
+        queueFamilyIndex = renderer.queue_indices.graphics
     };
 
     fence_info := VkFenceCreateInfo.{
@@ -1004,20 +978,20 @@ make_frames :: (using renderer: *Renderer) -> VkResult {
 
     result: VkResult;
     for * frame: frames {
-        result = check_vk(vkCreateCommandPool(device, *cmd_pool_info, vka, *frame.command_pool));
-        if result return result;
+        result = check_vk(vkCreateCommandPool(renderer.device, *cmd_pool_info, renderer.vka, *frame.command_pool));
+        if result return result, .[];
 
-        result = check_vk(vkCreateFence(device, *fence_info, vka, *frame.render_fence));
-        if result return result;
+        result = check_vk(vkCreateFence(renderer.device, *fence_info, renderer.vka, *frame.render_fence));
+        if result return result, .[];
 
-        result = check_vk(vkCreateSemaphore(device, *semaphore_info, vka, *frame.swapchain_semaphore));
-        if result return result;
+        result = check_vk(vkCreateSemaphore(renderer.device, *semaphore_info, renderer.vka, *frame.swapchain_semaphore));
+        if result return result, .[];
 
-        result = check_vk(vkCreateSemaphore(device, *semaphore_info, vka, *frame.render_semaphore));
-        if result return result;
+        result = check_vk(vkCreateSemaphore(renderer.device, *semaphore_info, renderer.vka, *frame.render_semaphore));
+        if result return result, .[];
     }
 
-    return .SUCCESS;
+    return .SUCCESS, frames;
 }
 
 destroy_frames :: (using renderer: *Renderer) {
@@ -1027,12 +1001,21 @@ destroy_frames :: (using renderer: *Renderer) {
         vkDestroySemaphore(device, frame.render_semaphore, vka);
         vkDestroySemaphore(device, frame.swapchain_semaphore, vka);
     }
+    array_free(frames);
 }
 
-remake_swapchain_resources :: (using renderer: *Renderer) -> VkResult {
-    vkDeviceWaitIdle(device);
-    destroy_swapchain_resources(renderer);
-    return make_swapchain_resources(renderer);
+remake_swapchain :: (renderer: *Renderer) -> VkResult {
+    vkDeviceWaitIdle(renderer.device);
+    result, new_swapchain := make_swapchain(renderer, renderer.swapchain.vk);
+    if result return result;
+
+    destroy_swapchain(renderer, *renderer.swapchain);
+    renderer.swapchain = new_swapchain;
+
+    destroy_frames(renderer);
+    result, renderer.frames = make_frames(renderer);
+    if result return result;
+    return .SUCCESS;
 }
 
 make_image :: (
@@ -1162,7 +1145,7 @@ acquire_next_image_index :: (using renderer: *Renderer) -> bool {
 
     if result == {
     case .ERROR_OUT_OF_DATE_KHR;
-        result = remake_swapchain_resources(renderer);
+        result = remake_swapchain(renderer);
         if result return false;
 
         result = check_vk(vkAcquireNextImage2KHR(device, *info, *image_index));
