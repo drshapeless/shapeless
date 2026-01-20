@@ -79,10 +79,19 @@ appquit :: (appstate: *void, result: SDL_AppResult) {
 make_msdf_texture :: (using renderer: *Renderer) -> Renderer.Texture {
     font_surface := IMG_Load("assets/font/hack/hack.png");
     assert(font_surface != null, "Cannot load hack surface");
+    defer SDL_DestroySurface(font_surface);
+
+    converted_surface := SDL_ConvertSurface(font_surface, .RGBA8888);
+    assert(converted_surface != null, "Cannot convert surface");
+    defer SDL_DestroySurface(converted_surface);
+
+    // My GPU does not support R8G8B8_SRGB
+    texture: Renderer.Texture;
+    texture.format = .R8G8B8A8_SRGB;
 
     image_info := VkImageCreateInfo.{
         imageType = .e2D,
-        format = .R8G8B8A8_SRGB,
+        format = texture.format,
         extent = .{
             width = xx font_surface.w,
             height = xx font_surface.h,
@@ -104,15 +113,15 @@ make_msdf_texture :: (using renderer: *Renderer) -> Renderer.Texture {
 
     image: VkImage;
     allocation: VmaAllocation;
-    result := check_vk(vmaCreateImage(vma, *image_info, *alloc_info, *image, *allocation, null));
+    result := check_vk(vmaCreateImage(vma, *image_info, *alloc_info, *texture.image.vk, *texture.image.allocation, null));
     assert(result == .SUCCESS);
 
-    texture: Renderer.Texture;
-    texture.image.vk = image;
-    texture.image.allocation = allocation;
+
+    staging_buffer: Buffer;
+    staging_buffer.size = xx (font_surface.w * font_surface.h * 4);
 
     staging_info := VkBufferCreateInfo.{
-        size = xx (font_surface.w * font_surface.h * 4),
+        size = staging_buffer.size,
         usage = .TRANSFER_SRC,
         sharingMode = .EXCLUSIVE
     };
@@ -122,11 +131,9 @@ make_msdf_texture :: (using renderer: *Renderer) -> Renderer.Texture {
         usage = .AUTO
     };
 
-    staging_buf: VkBuffer;
-    staging_alloc: VmaAllocation;
     mapped_ptr: *void;
 
-    result = check_vk(vmaCreateBuffer(vma, *staging_info, *staging_alloc_info, *staging_buf, *staging_alloc, null));
+    result = check_vk(vmaCreateBuffer(vma, *staging_info, *staging_alloc_info, *staging_buffer.vk, *staging_buffer.allocation, null));
     assert(result == .SUCCESS);
 
     result=, command := begin_single_time_commands(renderer);
@@ -164,7 +171,7 @@ make_msdf_texture :: (using renderer: *Renderer) -> Renderer.Texture {
     };
 
     copy_info := VkCopyBufferToImageInfo2.{
-        srcBuffer = staging_buf,
+        srcBuffer = staging_buffer.vk,
         dstImage = texture.image.vk,
         dstImageLayout = .TRANSFER_DST_OPTIMAL,
         regionCount = 1,
@@ -175,5 +182,122 @@ make_msdf_texture :: (using renderer: *Renderer) -> Renderer.Texture {
 
     end_single_time_commands(renderer, command);
 
+    result, texture.image_view = make_image_view(renderer, texture.image.vk, texture.format, .COLOR);
+    assert(result == .SUCCESS);
+
+    array_add(*textures_for_destruction, texture);
+    array_add(*buffers_queued_for_destruction[frame_index], staging_buffer);
+
     return texture;
+}
+
+Push_Constant :: struct {
+    mvp: Matrix4;
+    color: Vector4;
+    px_range: float32;
+}
+
+Vertex :: struct {
+    pos: Vector2;
+    uv: Vector2;
+}
+
+make_msdf_resources :: (using renderer: *Renderer) {
+    descriptor_set_layout: VkDescriptorSetLayout;
+    descriptor_pool: VkDescriptorPool;
+    descriptor_set: VkDescriptorSet;
+    sampler: VkSampler;
+
+    texture := make_msdf_texture(*renderer);
+
+    sampler_create_info := VkSamplerCreateInfo.{
+        magFilter = .LINEAR,
+        minFilter = .LINEAR,
+        mipmapMode = .LINEAR,
+        addressModeU = .CLAMP_TO_EDGE,
+        addressModeV = .CLAMP_TO_EDGE,
+        addressModeW = .CLAMP_TO_EDGE,
+        anisotropyEnable = VK_FALSE,
+        borderColor = FLOAT_OPAQUE_BLACK,
+    };
+    vkCreateSampler(device, *sampler_create_info, vka, *sampler);
+
+    binding := VkDescriptorSetLayoutBinding.{
+        descriptorCount = 1,
+        stageFlags = .FRAGMENT,
+        pImmutableSamplers = null
+    };
+
+    layout_create_info := VkDescriptorSetLayoutCreateInfo.{
+        bindingCount = 1,
+        pBindings = *binding
+    };
+
+    result: VkResult;
+    result = check_vk(vkCreateDescriptorSetLayout(device, *layout_create_info, vka, *descriptor_set_layout));
+    if result return;
+
+    pool_size := VkDescriptorPoolSize.{
+        type = .COMBINED_IMAGE_SAMPLER,
+        descriptorCount = 1
+    };
+
+    pool_create_info := VkDescriptorPoolCreateInfo.{
+        poolSizeCount = 1,
+        pPoolSizes = *pool_size,
+        maxSets = 1
+    };
+    result = check_vk(vkCreateDescriptorPool(device, *pool_create_info, vka, *descriptor_pool));
+    if result return;
+
+    allocate_info := VkDescriptorSetAllocateInfo.{
+        descriptorPool = descriptor_pool,
+        descriptorSetCount = 1,
+        pSetLayouts = *descriptor_set_layout
+    };
+    result = check_vk(vkAllocateDescriptorSets(device, *allocate_info, *descriptor_set));
+    if result return;
+
+    descriptor_image_info := VkDescriptorImageInfo.{
+        sampler = sampler,
+        imageView = texture.image_view,
+        imageLayout = SHADER_READ_ONLY_OPTIMAL
+    };
+
+    write := VkWriteDescriptorSet.{
+        dstSet = descriptor_set,
+        dstBinding = 0,
+        descriptorCount = 1,
+        descriptorType = .COMBINED_IMAGE_SAMPLER,
+        pImageInfo = *descriptor_image_info
+    };
+
+    vkUpdateDescriptorSets(device, 1, *write, 0, null);
+
+    push_range := VkPushConstantRange.{
+        stageFlags = .VERTEX | .FRAGMENT,
+        offset = 0,
+        size = size_of(Push_Constant)
+    };
+
+    pipeline_layout: VkPipelineLayout;
+    pipeline_layout_create_info := VkPipelineLayoutCreateInfo.{
+        setLayoutCount = 1,
+        pSetLayouts = *descriptor_set_layout,
+        pushConstantRangeCount = 1,
+        pPushConstantRanges = *push_range
+    };
+    result = check_vk(vkCreatePipelineLayout(device, *pipeline_layout_create_info, vka, *pipeline_layout));
+    if result return;
+
+
+}
+
+make_msdf_pipeline :: (renderer: *Renderer) -> VkResult, Renderer.Pipeline {
+    pb: Pipeline_Builder;
+    init(*pb);
+    defer deinit(*pb);
+
+    set_shaders(*pb, "shaders/msdf.vert.spv", "shaders/msdf.frag.spv");
+
 }

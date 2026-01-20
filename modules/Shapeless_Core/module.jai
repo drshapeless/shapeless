@@ -22,10 +22,9 @@ Buffer :: struct {
 #import "Hash_Table";
 #import "Renderer";
 #import "SDL3";
-#import "SDL3_image";
-#import "SDL3_ttf";
 #import "String";
 #import "Basic";
 #import "Vulkan";
 #import "Vulkan_Memory_Allocator";
 #import "Json";
+#import "Math";
