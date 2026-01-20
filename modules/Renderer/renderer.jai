@@ -97,12 +97,6 @@ Renderer :: struct {
     }
 }
 
-Mesh :: struct {
-    name: string;
-    vertices: [] Vertex;
-    indices:  [] u32;
-}
-
 init :: (using renderer: *Renderer, window: *SDL_Window) -> ok:bool {
     vk_load_global_functions(xx SDL_Vulkan_GetVkGetInstanceProcAddr());
     instance_extensions := get_vk_instance_extensions();
