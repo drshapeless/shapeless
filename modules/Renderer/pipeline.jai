@@ -28,13 +28,13 @@ init :: (using builder: *Pipeline_Builder) {
     shader_stages.allocator          = allocator;
     vertex_bindings.allocator        = allocator;
     vertex_attributes.allocator      = allocator;
-    colo_blend_attachments.allocator = allocator;
+    color_blend_attachments.allocator = allocator;
     dynamic_states.allocator         = allocator;
 
     initialized = true;
 }
 
-builder_to_pipeline :: (using builder: *Pipeline_Builder) -> VkResult, VkPipeline {
+builder_to_pipeline :: (using builder: *Pipeline_Builder, renderer: *Renderer) -> VkResult, VkPipeline {
     vertex_input_info.vertexBindingDescriptionCount = xx vertex_bindings.count;
     vertex_input_info.pVertexBindingDescriptions = vertex_bindings.data;
 
@@ -68,11 +68,11 @@ builder_to_pipeline :: (using builder: *Pipeline_Builder) -> VkResult, VkPipelin
     };
 
     pipeline: VkPipeline;
-    result := check_vk(vkCreateGraphicsPipelines(device, null, 1, *pipeline_info, vka, *pipeline));
+    result := check_vk(vkCreateGraphicsPipelines(renderer.device, null, 1, *pipeline_info, renderer.vka, *pipeline));
     return result, pipeline;
 }
 
-destroy_pipeline_builder :: (using builder: *Pipeline_Builder) {
+deinit :: (using builder: *Pipeline_Builder) {
     fini(*pool);
 }
 

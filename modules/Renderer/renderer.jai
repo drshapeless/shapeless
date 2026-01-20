@@ -13,6 +13,7 @@ Renderer :: struct {
     command_pool:    VkCommandPool;
 
     buffers_queued_for_destruction: [] [..] Buffer;
+    textures_for_destruction: [..] Texture;
 
     swapchain:       Swapchain;
     frames:          [] Frame_Data;
@@ -96,12 +97,6 @@ Renderer :: struct {
     }
 }
 
-Vertex :: struct {
-    position: Vector3;
-    color:    Vector3;
-    uv:       Vector2;
-}
-
 Mesh :: struct {
     name: string;
     vertices: [] Vertex;
@@ -171,11 +166,27 @@ init :: (using renderer: *Renderer, window: *SDL_Window) -> ok:bool {
     result = make_draw_images(renderer);
     if result return false;
 
+    buffers_queued_for_destruction = NewArray(swapchain.images.count, [..] Buffer);
+
     return true;
 }
 
 deinit :: (using renderer: *Renderer) {
     if device vkDeviceWaitIdle(device);
+
+    for texture : textures_for_destruction {
+        destroy_texture(renderer, texture);
+    }
+    array_reset(*textures_for_destruction);
+
+    for * buffers: buffers_queued_for_destruction {
+        for buffers.* {
+            destroy_buffer(vma, it);
+        }
+
+        array_reset(buffers);
+    }
+    array_free(buffers_queued_for_destruction);
 
     destroy_command_pools(renderer);
     destroy_draw_images(renderer);
@@ -231,6 +242,11 @@ begin_draw :: (using renderer: *Renderer) -> bool {
     };
 
     if check_vk(vkBeginCommandBuffer(cmd, *cmd_begin_info)) return false;
+
+    for buffers_queued_for_destruction[frame_index] {
+        destroy_buffer(vma, it);
+    }
+    array_reset(*buffers_queued_for_destruction[frame_index]);
 
     image_memory_barriers : [2]VkImageMemoryBarrier2;
     image_memory_barriers[0] = .{
@@ -623,8 +639,23 @@ end_single_time_commands :: (using renderer: *Renderer, command: VkCommandBuffer
     return .SUCCESS;
 }
 
-make_pipeline :: (renderer: *Renderer, builder: *Pipeline_Builder) -> bool, Renderer.Pipeline.ID {
+make_image_view :: (using renderer: *Renderer, image: VkImage, format: VkFormat, aspect_flag: VkImageAspectFlags, layer_count: u32 = 1, mip_levels: u32 = 1) -> VkResult, VkImageView {
+    view_info := VkImageViewCreateInfo.{
+        image = image,
+        viewType = ifx layer_count > 1 then .e2D_ARRAY else .e2D,
+        format = format,
+        subresourceRange = .{
+            aspectMask = aspect_flag,
+            baseMipLevel = 0,
+            levelCount = mip_levels,
+            baseArrayLayer = 0,
+            layerCount = layer_count,
+        },
+    };
 
+    view: VkImageView;
+    result := check_vk(vkCreateImageView(device, *view_info, vka, *view));
+    return result, view;
 }
 
 #scope_file
@@ -817,6 +848,7 @@ make_device_create_info :: (physical_device: VkPhysicalDevice, surface: VkSurfac
     features12.pNext = features13;
     features12.bufferDeviceAddress = VK_TRUE;
     features12.descriptorIndexing = VK_TRUE;
+    features12.scalarBlockLayout = VK_TRUE;
 
     device_features := New(VkPhysicalDeviceFeatures2,, temp);
     device_features.pNext = features12;
@@ -941,25 +973,6 @@ destroy_swapchain :: (renderer: *Renderer, swapchain: *Renderer.Swapchain) {
     array_free(swapchain.image_views);
     vkDestroySwapchainKHR(renderer.device, swapchain.vk, renderer.vka);
     swapchain.vk = null;
-}
-
-make_image_view :: (using renderer: *Renderer, image: VkImage, format: VkFormat, aspect_flag: VkImageAspectFlags, layer_count: u32 = 1, mip_levels: u32 = 1) -> VkResult, VkImageView {
-    view_info := VkImageViewCreateInfo.{
-        image = image,
-        viewType = ifx layer_count > 1 then .e2D_ARRAY else .e2D,
-        format = format,
-        subresourceRange = .{
-            aspectMask = aspect_flag,
-            baseMipLevel = 0,
-            levelCount = mip_levels,
-            baseArrayLayer = 0,
-            layerCount = layer_count,
-        },
-    };
-
-    view: VkImageView;
-    result := check_vk(vkCreateImageView(device, *view_info, vka, *view));
-    return result, view;
 }
 
 make_frames :: (renderer: *Renderer) -> VkResult, [] Renderer.Frame_Data {
