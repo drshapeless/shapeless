@@ -44,7 +44,7 @@ MSDF_Kerning :: struct {
 }
 
 load_msdf :: (file_path: string) -> MSDF {
-    json, result := parse_json_from_file(file_path);
+    result, json := parse_json_from_file(file_path);
     assert(result == .OK, "Cannot parse json");
 
     msdf: MSDF;
