@@ -31,6 +31,8 @@ init :: (using builder: *Pipeline_Builder) {
     color_blend_attachments.allocator = allocator;
     dynamic_states.allocator         = allocator;
 
+    reset(builder);
+
     initialized = true;
 }
 
@@ -80,7 +82,7 @@ reset :: (using builder: *Pipeline_Builder) {
     array_reset_keeping_memory(*shader_stages);
     array_reset_keeping_memory(*vertex_bindings);
     array_reset_keeping_memory(*vertex_attributes);
-    array_reset_keeping_memory(*colo_blend_attachments);
+    array_reset_keeping_memory(*color_blend_attachments);
     array_reset_keeping_memory(*dynamic_states);
 
     vertex_input_info   = .{};

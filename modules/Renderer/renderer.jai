@@ -127,9 +127,9 @@ init :: (using renderer: *Renderer, window: *SDL_Window) -> ok:bool {
         return false;
     }
 
-    device_create_info := make_device_create_info(physical_device, surface, all_device_extensions, queue_indices);
-
-    if check_vk(vkCreateDevice(physical_device, *device_create_info, vka, *device)) {
+    result: VkResult;
+    result, device = make_device(renderer, all_device_extensions);
+    if result {
         if surface vkDestroySurfaceKHR(instance, surface, vka);
         vkDestroyInstance(instance, vka);
         return false;
@@ -137,7 +137,6 @@ init :: (using renderer: *Renderer, window: *SDL_Window) -> ok:bool {
 
     vk_load_device_functions(device);
 
-    result: VkResult;
     defer {
         if result deinit(renderer);
     }
@@ -192,9 +191,9 @@ deinit :: (using renderer: *Renderer) {
     vkDestroyInstance(instance, vka);
 }
 
-// This is deprecated in Vulkan 1.4
+// This is deprecated in Vulkan 1.4, but it is not yet supported by moltenvk
 make_shader_module :: (using renderer: *Renderer, file_path: string) -> ok:bool, VkShaderModule {
-    shader_code := read_entire_file(file);
+    shader_code := read_entire_file(file_path);
     defer free(shader_code);
 
     create_info := VkShaderModuleCreateInfo.{
@@ -652,6 +651,11 @@ make_image_view :: (using renderer: *Renderer, image: VkImage, format: VkFormat,
     return result, view;
 }
 
+destroy_texture :: (using renderer: *Renderer, texture: Renderer.Texture) {
+    vkDestroyImageView(device, texture.image_view, vka);
+    vmaDestroyImage(vma, texture.image.vk, texture.image.allocation);
+}
+
 #scope_file
 // Initialization helpers
 application_info :: VkApplicationInfo.{
@@ -814,56 +818,68 @@ get_vk_instance_extensions :: () -> [] *u8 {
     return instance_extensions;
 }
 
-make_device_create_info :: (physical_device: VkPhysicalDevice, surface: VkSurfaceKHR, device_extensions: [] *u8, queue_indices: Renderer.Queue_Family_Indices) -> VkDeviceCreateInfo {
-    indices_array := u32.[queue_indices.graphics, queue_indices.present];
+make_device :: (renderer: *Renderer, device_extensions: [] *u8) -> VkResult, VkDevice {
+    indices_array := u32.[renderer.queue_indices.graphics, renderer.queue_indices.present];
 
-    queue_count := ifx queue_indices.graphics == queue_indices.present then 1 else 2;
+    queue_count := ifx renderer.queue_indices.graphics == renderer.queue_indices.present then 1 else 2;
     queue_create_infos := NewArray(queue_count, VkDeviceQueueCreateInfo, initialized = false,, temp);
-    queue_priority := New(float, initialized = false,, temp);
-    queue_priority.* = 1;
+    queue_priority : float32 = 1.0;
 
     for * queue_create_infos {
         it.* = .{
             queueFamilyIndex = indices_array[it_index],
             queueCount = 1,
-            pQueuePriorities = queue_priority
+            pQueuePriorities = *queue_priority
         };
     }
 
-    feature_unified_image_layouts := New(VkPhysicalDeviceUnifiedImageLayoutsFeaturesKHR,, temp);
-    feature_unified_image_layouts.unifiedImageLayouts = VK_TRUE;
+    feature_unified_image_layouts := VkPhysicalDeviceUnifiedImageLayoutsFeaturesKHR.{
+        unifiedImageLayouts = VK_TRUE
+    };
 
-    features13 := New(VkPhysicalDeviceVulkan13Features,, temp);
-    features13.dynamicRendering = VK_TRUE;
-    features13.synchronization2 = VK_TRUE;
-    features13.pNext = feature_unified_image_layouts;
+    features14 := VkPhysicalDeviceVulkan14Features.{
+        pNext = *feature_unified_image_layouts,
+        maintenance5 = VK_TRUE
+    };
 
-    features12 := New(VkPhysicalDeviceVulkan12Features,, temp);
-    features12.pNext = features13;
-    features12.bufferDeviceAddress = VK_TRUE;
-    features12.descriptorIndexing = VK_TRUE;
-    features12.scalarBlockLayout = VK_TRUE;
+    features13 := VkPhysicalDeviceVulkan13Features.{
+        pNext = *feature_unified_image_layouts,
+        dynamicRendering = VK_TRUE,
+        synchronization2 = VK_TRUE
+    };
 
-    device_features := New(VkPhysicalDeviceFeatures2,, temp);
-    device_features.pNext = features12;
-    device_features.features = .{
-        samplerAnisotropy = VK_TRUE,
-        fillModeNonSolid = VK_TRUE,
+    features12 := VkPhysicalDeviceVulkan12Features.{
+        pNext = *features13,
+        bufferDeviceAddress = VK_TRUE,
+        descriptorIndexing = VK_TRUE,
+        scalarBlockLayout = VK_TRUE
+    };
+
+    device_features := VkPhysicalDeviceFeatures2.{
+        pNext = *features12,
+        features = .{
+            samplerAnisotropy = VK_TRUE,
+            fillModeNonSolid = VK_TRUE
+        }
     };
 
     // TODO: Check if the features are available before use. Now it is
     // not checked.
 
-    return .{
-        pNext = device_features,
+    device_create_info := VkDeviceCreateInfo.{
+        pNext = *device_features,
         queueCreateInfoCount = xx queue_create_infos.count,
         pQueueCreateInfos = queue_create_infos.data,
         enabledLayerCount = xx ifx VALIDATION then validation_layers.count else 0,
         ppEnabledLayerNames = ifx VALIDATION then validation_layers.data else null,
         enabledExtensionCount = xx device_extensions.count,
         ppEnabledExtensionNames = device_extensions.data,
-        pEnabledFeatures = null,
+        pEnabledFeatures = null
     };
+
+    device: VkDevice;
+    result := check_vk(vkCreateDevice(renderer.physical_device, *device_create_info, renderer.vka, *device));
+    return result, device;
 }
 
 make_vma :: (instance: VkInstance, physical_device: VkPhysicalDevice, device: VkDevice) -> VkResult, VmaAllocator {
@@ -1109,11 +1125,6 @@ make_draw_images :: (using renderer: *Renderer) -> VkResult {
     };
 
     return .SUCCESS;
-}
-
-destroy_texture :: (using renderer: *Renderer, texture: Renderer.Texture) {
-    vkDestroyImageView(device, texture.image_view, vka);
-    vmaDestroyImage(vma, texture.image.vk, texture.image.allocation);
 }
 
 destroy_draw_images :: (using renderer: *Renderer) {

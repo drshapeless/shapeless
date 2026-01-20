@@ -12,7 +12,8 @@ App :: struct {
     current_buffer_index: s64;
     frames: [..] Frame;
 
-
+    render_resources: Render_Resources;
+    font_atlas: Font_Atlas;
 }
 
 appinit :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
@@ -25,8 +26,8 @@ appinit :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
 
     log("loaded % glyphs", msdf.glyphs.count);
 
-
     using app;
+    font_atlas = msdf_to_font_atlas(msdf);
 
     win = SDL_CreateWindow("Shapeless", 800, 600, .RESIZABLE | .VULKAN);
     assert(win != null, "Cannot create window %", to_string(SDL_GetError()));
@@ -36,9 +37,7 @@ appinit :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
 
     set_clear_color(*renderer, .[0.8, 0.4, 0.3, 1.0]);
 
-    // Create the texture for msdf png
-
-    make_msdf_texture(*renderer);
+    render_resources = make_msdf_resources(*renderer);
 
     return .CONTINUE;
 }
@@ -64,6 +63,22 @@ appiter :: (appstate: *void) -> SDL_AppResult {
     using app;
 
     if begin_draw(*renderer) {
+        vkCmdBindPipeline(renderer.cmd, .GRAPHICS, render_resources.pipeline);
+        vkCmdBindDescriptorSets(renderer.cmd, .GRAPHICS, render_resources.pipeline_layout, 0, 1, *render_resources.descriptor_set, 0, null);
+
+        push_constant: Push_Constant;
+        push_constant.mvp = Matrix4_Identity;
+        push_constant.color = .{1, 1, 1, 1};
+        push_constant.px_range = font_atlas.distance_range;
+        vkCmdPushConstants(renderer.cmd, render_resources.pipeline_layout, .VERTEX | .FRAGMENT, 0, size_of(Push_Constant), *push_constant);
+
+        offsets :VkDeviceSize = 0;
+        // TODO: buffer is not defined yet
+        vkCmdBindVertexBuffers(renderer.cmd, 0, 1, *buffer.vk, *offsets);
+
+        // TODO: vertices is not defined
+        vkCmdDraw(cmd, vertices.count, 1, 0, 0);
+
         end_draw(*renderer);
     }
     return .CONTINUE;
@@ -72,6 +87,7 @@ appiter :: (appstate: *void) -> SDL_AppResult {
 appquit :: (appstate: *void, result: SDL_AppResult) {
     app := cast(*App)appstate;
 
+    destroy_resources(app.render_resources, *app.renderer);
     deinit(*app.renderer);
     SDL_Quit();
 }
@@ -185,7 +201,7 @@ make_msdf_texture :: (using renderer: *Renderer) -> Renderer.Texture {
     result, texture.image_view = make_image_view(renderer, texture.image.vk, texture.format, .COLOR);
     assert(result == .SUCCESS);
 
-    array_add(*textures_for_destruction, texture);
+    // array_add(*textures_for_destruction, texture);
     array_add(*buffers_queued_for_destruction[frame_index], staging_buffer);
 
     return texture;
@@ -202,13 +218,21 @@ Vertex :: struct {
     uv: Vector2;
 }
 
-make_msdf_resources :: (using renderer: *Renderer) {
+// I don't have a better name at the moment.
+Render_Resources :: struct {
     descriptor_set_layout: VkDescriptorSetLayout;
     descriptor_pool: VkDescriptorPool;
     descriptor_set: VkDescriptorSet;
     sampler: VkSampler;
+    texture: Renderer.Texture;
+    pipeline_layout: VkPipelineLayout;
+    pipeline: VkPipeline;
+}
 
-    texture := make_msdf_texture(*renderer);
+make_msdf_resources :: (using renderer: *Renderer) -> Render_Resources {
+    using resources: Render_Resources;
+
+    texture = make_msdf_texture(renderer);
 
     sampler_create_info := VkSamplerCreateInfo.{
         magFilter = .LINEAR,
@@ -218,11 +242,12 @@ make_msdf_resources :: (using renderer: *Renderer) {
         addressModeV = .CLAMP_TO_EDGE,
         addressModeW = .CLAMP_TO_EDGE,
         anisotropyEnable = VK_FALSE,
-        borderColor = FLOAT_OPAQUE_BLACK,
+        borderColor = .FLOAT_OPAQUE_BLACK,
     };
     vkCreateSampler(device, *sampler_create_info, vka, *sampler);
 
     binding := VkDescriptorSetLayoutBinding.{
+        descriptorType = .COMBINED_IMAGE_SAMPLER,
         descriptorCount = 1,
         stageFlags = .FRAGMENT,
         pImmutableSamplers = null
@@ -235,7 +260,7 @@ make_msdf_resources :: (using renderer: *Renderer) {
 
     result: VkResult;
     result = check_vk(vkCreateDescriptorSetLayout(device, *layout_create_info, vka, *descriptor_set_layout));
-    if result return;
+    if result return .{};
 
     pool_size := VkDescriptorPoolSize.{
         type = .COMBINED_IMAGE_SAMPLER,
@@ -248,7 +273,7 @@ make_msdf_resources :: (using renderer: *Renderer) {
         maxSets = 1
     };
     result = check_vk(vkCreateDescriptorPool(device, *pool_create_info, vka, *descriptor_pool));
-    if result return;
+    if result return .{};
 
     allocate_info := VkDescriptorSetAllocateInfo.{
         descriptorPool = descriptor_pool,
@@ -256,12 +281,12 @@ make_msdf_resources :: (using renderer: *Renderer) {
         pSetLayouts = *descriptor_set_layout
     };
     result = check_vk(vkAllocateDescriptorSets(device, *allocate_info, *descriptor_set));
-    if result return;
+    if result return .{};
 
     descriptor_image_info := VkDescriptorImageInfo.{
         sampler = sampler,
         imageView = texture.image_view,
-        imageLayout = SHADER_READ_ONLY_OPTIMAL
+        imageLayout = .SHADER_READ_ONLY_OPTIMAL
     };
 
     write := VkWriteDescriptorSet.{
@@ -280,7 +305,6 @@ make_msdf_resources :: (using renderer: *Renderer) {
         size = size_of(Push_Constant)
     };
 
-    pipeline_layout: VkPipelineLayout;
     pipeline_layout_create_info := VkPipelineLayoutCreateInfo.{
         setLayoutCount = 1,
         pSetLayouts = *descriptor_set_layout,
@@ -288,16 +312,107 @@ make_msdf_resources :: (using renderer: *Renderer) {
         pPushConstantRanges = *push_range
     };
     result = check_vk(vkCreatePipelineLayout(device, *pipeline_layout_create_info, vka, *pipeline_layout));
-    if result return;
+    if result return .{};
 
-
-}
-
-make_msdf_pipeline :: (renderer: *Renderer) -> VkResult, Renderer.Pipeline {
     pb: Pipeline_Builder;
     init(*pb);
     defer deinit(*pb);
 
-    set_shaders(*pb, "shaders/msdf.vert.spv", "shaders/msdf.frag.spv");
+    ok, vert_shader := make_shader_module(renderer, "shaders/msdf.vert.spv");
+    if !ok return .{};
+    defer destroy_shader_module(renderer, vert_shader);
 
+    ok=, frag_shader := make_shader_module(renderer, "shaders/msdf.frag.spv");
+    if !ok return .{};
+    defer destroy_shader_module(renderer, frag_shader);
+
+    set_shaders(*pb, vert_shader, frag_shader);
+    set_layout(*pb, pipeline_layout);
+
+    add_vertex_input_binding(*pb, 0, size_of(Vertex), .VERTEX);
+    add_vertex_input_attribute(*pb, 0, 0, .R32G32_SFLOAT, xx offset_of(Vertex, "pos"));
+    add_vertex_input_attribute(*pb, 1, 0, .R32G32_SFLOAT, xx offset_of(Vertex, "uv"));
+
+    set_input_topology(*pb, .TRIANGLE_STRIP);
+    set_polygon_mode(*pb, .FILL);
+    set_cull_mode(*pb, .NONE, .COUNTER_CLOCKWISE);
+    set_multisampling_none(*pb);
+    enable_blending_alphablend(*pb);
+    add_dynamic_state(*pb, .VIEWPORT);
+    add_dynamic_state(*pb, .SCISSOR);
+
+    result, pipeline = builder_to_pipeline(*pb, renderer);
+    if result return .{};
+
+    return resources;
+}
+
+destroy_resources :: (using resource: Render_Resources, using renderer: *Renderer) {
+    vkDestroyDescriptorSetLayout(device, descriptor_set_layout, vka);
+    vkDestroyDescriptorPool(device, descriptor_pool, vka);
+    vkDestroySampler(device, sampler, vka);
+    destroy_texture(renderer, texture);
+    vkDestroyPipelineLayout(device, pipeline_layout, vka);
+    vkDestroyPipeline(device, pipeline, vka);
+}
+
+build_text_vertices :: (text: string, fontsize: float32, start_x: float32, start_y: float32, font: Font_Atlas) -> [] Vertex {
+    vertices := NewArray(text.count * 4, Vertex);
+
+    count := 0;
+    cursor_x := 0.0;
+    for text {
+        unicode :u64 = xx it;
+
+        glyph :Glyph = table_find(font.glyphs, unicode);
+
+        left := cursor_x + glyph.plane_bounds.x * fontsize;
+        right := cursor_x + glyph.plane_bounds.z * fontsize;
+        bottom := glyph.plane_bounds.y * fontsize;
+        top := glyph.plane_bounds.w * fontsize;
+
+        u_min := glyph.atlas_bounds.x / xx font.width;
+        u_max := glyph.atlas_bounds.z / xx font.width;
+        v_min := glyph.atlas_bounds.y / xx font.height;
+        v_max := glyph.atlas_bounds.w / xx font.height;
+
+        vertices[count] = .{ .{start_x + left, start_y + bottom}, .{u_min, v_min}};
+        count += 1;
+        vertices[count] = .{ .{start_x + right, start_y + bottom}, .{u_max, v_min}};
+        count += 1;
+        vertices[count] = .{ .{start_x + left, start_y + top}, .{u_min, v_max}};
+        count += 1;
+        vertices[count] = .{ .{start_x + right, start_y + top}, .{u_max, v_max}};
+        count += 1;
+
+        cursor_x += glyph.advance * fontsize;
+    }
+
+    return vertices;
+}
+
+create_vertex_buffer :: (vertices: [] Vertex, renderer: *Renderer) -> Renderer.Buffer {
+    buffer: Renderer.Buffer;
+    buffer.size = xx vertices.count * size_of(Vertex);
+
+    buffer_create_info := VkBufferCreateInfo.{
+        size = buffer.size,
+        usage = .VERTEX_BUFFER,
+        sharingMode = .EXCLUSIVE
+    };
+
+    allocation_create_info := VmaAllocationCreateInfo.{
+        usage = .AUTO,
+        flags = VmaAllocationCreateFlagBits.HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VmaAllocationCreateFlagBits.MAPPED_BIT
+    };
+
+    result := check_vk(vmaCreateBuffer(renderer.vma, *buffer_create_info, *allocation_create_info, *buffer.vk, *buffer.allocation, null));
+    if result return .{};
+
+    mapped: *void;
+    if check_vk(vmaMapMemory(renderer.vma, buffer.allocation, *mapped)) return .{};
+    memcpy(mapped, vertices.data, buffer.size);
+    vmaUnmapMemory(renderer.vma, buffer.allocation);
+
+    return buffer;
 }
