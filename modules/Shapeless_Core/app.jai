@@ -14,6 +14,13 @@ App :: struct {
 
     render_resources: Render_Resources;
     font_atlas: Font_Atlas;
+
+    dumb: Dumb;
+}
+
+Dumb :: struct {
+    buffer: Renderer.Buffer;
+    vertices: [] Vertex;
 }
 
 appinit :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
@@ -35,9 +42,14 @@ appinit :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
     ok = init(*renderer, win);
     if !ok return .FAILURE;
 
-    set_clear_color(*renderer, .[0.8, 0.4, 0.3, 1.0]);
+    set_clear_color(*renderer, .[0.1, 0.2, 0.3, 1.0]);
 
     render_resources = make_msdf_resources(*renderer);
+
+    dumb.vertices = build_text_vertices("bello", 1, 0.5, 0.5, *font_atlas);
+
+    result:, dumb.buffer = make_buffer_copying_data(*renderer, dumb.vertices, .VERTEX_BUFFER);
+    if result return .FAILURE;
 
     return .CONTINUE;
 }
@@ -68,16 +80,14 @@ appiter :: (appstate: *void) -> SDL_AppResult {
 
         push_constant: Push_Constant;
         push_constant.mvp = Matrix4_Identity;
-        push_constant.color = .{1, 1, 1, 1};
+        push_constant.color = .{0, 0, 0, 1};
         push_constant.px_range = font_atlas.distance_range;
         vkCmdPushConstants(renderer.cmd, render_resources.pipeline_layout, .VERTEX | .FRAGMENT, 0, size_of(Push_Constant), *push_constant);
 
         offsets :VkDeviceSize = 0;
-        // TODO: buffer is not defined yet
-        vkCmdBindVertexBuffers(renderer.cmd, 0, 1, *buffer.vk, *offsets);
+        vkCmdBindVertexBuffers(renderer.cmd, 0, 1, *dumb.buffer.vk, *offsets);
 
-        // TODO: vertices is not defined
-        vkCmdDraw(cmd, vertices.count, 1, 0, 0);
+        vkCmdDraw(renderer.cmd, xx dumb.vertices.count, 1, 0, 0);
 
         end_draw(*renderer);
     }
@@ -87,6 +97,7 @@ appiter :: (appstate: *void) -> SDL_AppResult {
 appquit :: (appstate: *void, result: SDL_AppResult) {
     app := cast(*App)appstate;
 
+    vkDeviceWaitIdle(app.renderer.device);
     destroy_resources(app.render_resources, *app.renderer);
     deinit(*app.renderer);
     SDL_Quit();
@@ -132,7 +143,6 @@ make_msdf_texture :: (using renderer: *Renderer) -> Renderer.Texture {
     result := check_vk(vmaCreateImage(vma, *image_info, *alloc_info, *texture.image.vk, *texture.image.allocation, null));
     assert(result == .SUCCESS);
 
-
     staging_buffer: Buffer;
     staging_buffer.size = xx (font_surface.w * font_surface.h * 4);
 
@@ -155,10 +165,10 @@ make_msdf_texture :: (using renderer: *Renderer) -> Renderer.Texture {
     result=, command := begin_single_time_commands(renderer);
     assert(result == .SUCCESS);
     barrier := VkImageMemoryBarrier2.{
-        srcStageMask     = .ALL_COMMANDS,
-        srcAccessMask    = .MEMORY_WRITE,
-        dstStageMask     = .ALL_COMMANDS,
-        dstAccessMask    = .MEMORY_WRITE | .MEMORY_READ,
+        srcStageMask     = .TOP_OF_PIPE,
+        srcAccessMask    = 0,
+        dstStageMask     = .TRANSFER,
+        dstAccessMask    = .TRANSFER_WRITE,
         oldLayout        = .UNDEFINED,
         newLayout        = .TRANSFER_DST_OPTIMAL,
         image            = texture.image.vk,
@@ -196,6 +206,14 @@ make_msdf_texture :: (using renderer: *Renderer) -> Renderer.Texture {
 
     vkCmdCopyBufferToImage2(command, *copy_info);
 
+    barrier.oldLayout = .TRANSFER_DST_OPTIMAL;
+    barrier.newLayout = .SHADER_READ_ONLY_OPTIMAL;
+    barrier.srcAccessMask = .TRANSFER_WRITE;
+    barrier.dstAccessMask = .SHADER_READ;
+    barrier.srcStageMask = .TRANSFER;
+    barrier.dstStageMask = .FRAGMENT_SHADER;
+
+    vkCmdPipelineBarrier2(command, *dependency_info);
     end_single_time_commands(renderer, command);
 
     result, texture.image_view = make_image_view(renderer, texture.image.vk, texture.format, .COLOR);
@@ -333,10 +351,13 @@ make_msdf_resources :: (using renderer: *Renderer) -> Render_Resources {
     add_vertex_input_attribute(*pb, 0, 0, .R32G32_SFLOAT, xx offset_of(Vertex, "pos"));
     add_vertex_input_attribute(*pb, 1, 0, .R32G32_SFLOAT, xx offset_of(Vertex, "uv"));
 
+    set_color_attachment_format(*pb, draw_texture.format);
+    set_depth_format(*pb, depth_texture.format);
     set_input_topology(*pb, .TRIANGLE_STRIP);
     set_polygon_mode(*pb, .FILL);
     set_cull_mode(*pb, .NONE, .COUNTER_CLOCKWISE);
     set_multisampling_none(*pb);
+    disable_depthtest(*pb);
     enable_blending_alphablend(*pb);
     add_dynamic_state(*pb, .VIEWPORT);
     add_dynamic_state(*pb, .SCISSOR);
@@ -356,7 +377,7 @@ destroy_resources :: (using resource: Render_Resources, using renderer: *Rendere
     vkDestroyPipeline(device, pipeline, vka);
 }
 
-build_text_vertices :: (text: string, fontsize: float32, start_x: float32, start_y: float32, font: Font_Atlas) -> [] Vertex {
+build_text_vertices :: (text: string, fontsize: float32, start_x: float32, start_y: float32, font: *Font_Atlas) -> [] Vertex {
     vertices := NewArray(text.count * 4, Vertex);
 
     count := 0;
@@ -364,7 +385,8 @@ build_text_vertices :: (text: string, fontsize: float32, start_x: float32, start
     for text {
         unicode :u64 = xx it;
 
-        glyph :Glyph = table_find(font.glyphs, unicode);
+        ok, glyph := table_find(*font.glyphs, unicode);
+        if !ok continue;
 
         left := cursor_x + glyph.plane_bounds.x * fontsize;
         right := cursor_x + glyph.plane_bounds.z * fontsize;

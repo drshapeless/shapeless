@@ -95,6 +95,15 @@ Renderer :: struct {
         vertex_buffer: Buffer;
         index_buffer:  Buffer;
     }
+
+    System :: struct {
+        descriptor_set_layout: VkDescriptorSetLayout;
+        descriptor_pool: VkDescriptorPool;
+        descriptor_set: VkDescriptorSet;
+        sampler: VkSampler;
+        pipeline_layout: VkPipelineLayout;
+        pipeline: VkPipeline;
+    }
 }
 
 init :: (using renderer: *Renderer, window: *SDL_Window) -> ok:bool {
@@ -502,10 +511,11 @@ make_buffer :: (vma: VmaAllocator, size: VkDeviceSize, buffer_usage: VkBufferUsa
 
     alloc_create_info := VmaAllocationCreateInfo.{
         usage = memory_usage,
-        xx VmaAllocationCreateFlagBits.MAPPED_BIT
+        flags = xx VmaAllocationCreateFlagBits.MAPPED_BIT
     };
 
     buffer: Renderer.Buffer;
+    buffer.size = size;
     alloc_info: VmaAllocationInfo; // TODO: Why are you here?
     result := check_vk(vmaCreateBuffer(vma, *buffer_info, *alloc_create_info, *buffer.vk, *buffer.allocation, *alloc_info));
     return result, buffer;
@@ -529,12 +539,12 @@ copy_to_device_memory :: (vma: VmaAllocator, allocation: VmaAllocation, source: 
 copy_buffer :: (cmd: VkCommandBuffer, source: Renderer.Buffer, destination: Renderer.Buffer) {
     assert(source.size == destination.size);
     region := VkBufferCopy.{size = xx source.size};
-    vkCmdCopyBuffer(command_buffer, source.vk, destination.vk, 1, *region);
+    vkCmdCopyBuffer(cmd, source.vk, destination.vk, 1, *region);
 }
 
 make_buffer_copying_data :: (using renderer: *Renderer, cmd: VkCommandBuffer, data: [] $T, buffer_usage: VkBufferUsageFlags) -> VkResult, Renderer.Buffer {
     size: VkDeviceSize = xx (data.count * size_of(T));
-    staging_buffer, result := make_buffer(vma, size, .TRANSFER_SRC, .CPU_ONLY);
+    result, staging_buffer := make_buffer(vma, size, .TRANSFER_SRC, .CPU_ONLY);
     if result return result, .{};
 
     result = copy_to_device_memory(vma, staging_buffer.allocation, data.data, size);
@@ -543,7 +553,7 @@ make_buffer_copying_data :: (using renderer: *Renderer, cmd: VkCommandBuffer, da
         return result, .{};
     }
 
-    buffer:, result = make_buffer(vma, size, .TRANSFER_DST_BIT | buffer_usage, .GPU_ONLY);
+    result=, buffer := make_buffer(vma, size, .TRANSFER_DST | buffer_usage, .GPU_ONLY);
     if result {
         destroy_buffer(vma, staging_buffer);
         return result, .{};
@@ -558,7 +568,7 @@ make_buffer_copying_data :: (using renderer: *Renderer, cmd: VkCommandBuffer, da
 // default in all tutorials.
 make_buffer_copying_data :: (using renderer: *Renderer, data: [] $T, buffer_usage: VkBufferUsageFlags) -> VkResult, Renderer.Buffer {
     size: VkDeviceSize = xx (data.count * size_of(T));
-    staging_buffer, result := make_buffer(vma, size, .TRANSFER_SRC, .CPU_ONLY);
+    result, staging_buffer := make_buffer(vma, size, .TRANSFER_SRC, .CPU_ONLY);
     if result return result, .{};
 
     result = copy_to_device_memory(vma, staging_buffer.allocation, data.data, size);
@@ -567,7 +577,7 @@ make_buffer_copying_data :: (using renderer: *Renderer, data: [] $T, buffer_usag
         return result, .{};
     }
 
-    buffer:, result = make_buffer(vma, size, .TRANSFER_DST_BIT | buffer_usage, .GPU_ONLY);
+    result=, buffer := make_buffer(vma, size, .TRANSFER_DST | buffer_usage, .GPU_ONLY);
     if result {
         destroy_buffer(vma, staging_buffer);
         return result, .{};
@@ -581,7 +591,7 @@ make_buffer_copying_data :: (using renderer: *Renderer, data: [] $T, buffer_usag
     }
 
     copy_buffer(command, staging_buffer, buffer);
-    result = end_single_time_commands(renderer);
+    result = end_single_time_commands(renderer, command);
     if result {
         destroy_buffer(vma, staging_buffer);
         destroy_buffer(vma, buffer);
@@ -839,7 +849,7 @@ make_device :: (renderer: *Renderer, device_extensions: [] *u8) -> VkResult, VkD
 
     features14 := VkPhysicalDeviceVulkan14Features.{
         pNext = *feature_unified_image_layouts,
-        maintenance5 = VK_TRUE
+        hostImageCopy = VK_TRUE
     };
 
     features13 := VkPhysicalDeviceVulkan13Features.{
@@ -1121,7 +1131,7 @@ make_draw_images :: (using renderer: *Renderer) -> VkResult {
     depth_texture = .{
         image = depth_image,
         image_view = depth_image_view,
-        format = swapchain.format
+        format = depth_format
     };
 
     return .SUCCESS;

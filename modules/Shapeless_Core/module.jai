@@ -17,6 +17,7 @@ Buffer :: struct {
 #load "window.jai";
 #load "frame.jai";
 #load "font.jai";
+#load "simple.jai";
 
 #scope_file
 #import "Hash_Table";
