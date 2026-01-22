@@ -98,11 +98,11 @@ Renderer :: struct {
 
     System :: struct {
         descriptor_set_layout: VkDescriptorSetLayout;
-        descriptor_pool: VkDescriptorPool;
-        descriptor_set: VkDescriptorSet;
-        sampler: VkSampler;
-        pipeline_layout: VkPipelineLayout;
-        pipeline: VkPipeline;
+        descriptor_pool:       VkDescriptorPool;
+        descriptor_set:        VkDescriptorSet;
+        sampler:               VkSampler;
+        pipeline_layout:       VkPipelineLayout;
+        pipeline:              VkPipeline;
     }
 }
 
@@ -664,6 +664,28 @@ make_image_view :: (using renderer: *Renderer, image: VkImage, format: VkFormat,
 destroy_texture :: (using renderer: *Renderer, texture: Renderer.Texture) {
     vkDestroyImageView(device, texture.image_view, vka);
     vmaDestroyImage(vma, texture.image.vk, texture.image.allocation);
+}
+
+destroy_system :: (using renderer: *Renderer, using system: Renderer.System) {
+    if descriptor_set_layout {
+        vkDestroyDescriptorSetLayout(device, descriptor_set_layout, vka);
+    }
+
+    if descriptor_pool {
+        vkDestroyDescriptorPool(device, descriptor_pool, vka);
+    }
+
+    if sampler {
+        vkDestroySampler(device, sampler, vka);
+    }
+
+    if pipeline_layout {
+        vkDestroyPipelineLayout(device, pipeline_layout, vka);
+    }
+
+    if pipeline {
+        vkDestroyPipeline(device, pipeline, vka);
+    }
 }
 
 #scope_file

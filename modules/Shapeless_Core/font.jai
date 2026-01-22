@@ -10,7 +10,7 @@ Font_Atlas :: struct {
     line_height: float32;
     width: s32;
     height: s32;
-    glyphs: Table(u64, Glyph); // key is unicode in u64
+    glyphs: Table(u32, Glyph); // key is unicode in u64
 }
 
 MSDF :: struct {
@@ -39,7 +39,7 @@ MSDF_Metrics :: struct {
 }
 
 MSDF_Glyph :: struct {
-    unicode: u64;
+    unicode: u32;
     advance: float32;
     planeBounds: Bound;
     atlasBounds: Bound;

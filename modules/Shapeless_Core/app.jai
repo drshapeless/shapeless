@@ -14,13 +14,14 @@ App :: struct {
 
     render_resources: Render_Resources;
     font_atlas: Font_Atlas;
+    simple_system: Renderer.System;
 
     dumb: Dumb;
 }
 
 Dumb :: struct {
     buffer: Renderer.Buffer;
-    vertices: [] Vertex;
+    vertices: [] Simple_Vertex;
 }
 
 appinit :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
@@ -44,9 +45,13 @@ appinit :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
 
     set_clear_color(*renderer, .[0.1, 0.2, 0.3, 1.0]);
 
-    render_resources = make_msdf_resources(*renderer);
+    simple_system = make_simple_system(*renderer);
 
-    dumb.vertices = build_text_vertices("bello", 1, 0.5, 0.5, *font_atlas);
+    // render_resources = make_msdf_resources(*renderer);
+
+    // dumb.vertices = build_text_vertices("bello", 1, 0.5, 0.5, *font_atlas);
+
+    dumb.vertices = .[.{pos = .{0.5, 0.5}}, .{pos = .{0.0, -0.5}}, .{pos = .{-0.5, 0.5}}];
 
     result:, dumb.buffer = make_buffer_copying_data(*renderer, dumb.vertices, .VERTEX_BUFFER);
     if result return .FAILURE;
@@ -75,14 +80,14 @@ appiter :: (appstate: *void) -> SDL_AppResult {
     using app;
 
     if begin_draw(*renderer) {
-        vkCmdBindPipeline(renderer.cmd, .GRAPHICS, render_resources.pipeline);
-        vkCmdBindDescriptorSets(renderer.cmd, .GRAPHICS, render_resources.pipeline_layout, 0, 1, *render_resources.descriptor_set, 0, null);
+        vkCmdBindPipeline(renderer.cmd, .GRAPHICS, simple_system.pipeline);
+        // vkCmdBindDescriptorSets(renderer.cmd, .GRAPHICS, render_resources.pipeline_layout, 0, 1, *render_resources.descriptor_set, 0, null);
 
-        push_constant: Push_Constant;
-        push_constant.mvp = Matrix4_Identity;
-        push_constant.color = .{0, 0, 0, 1};
-        push_constant.px_range = font_atlas.distance_range;
-        vkCmdPushConstants(renderer.cmd, render_resources.pipeline_layout, .VERTEX | .FRAGMENT, 0, size_of(Push_Constant), *push_constant);
+        // push_constant: Push_Constant;
+        // push_constant.mvp = Matrix4_Identity;
+        // push_constant.color = .{0, 0, 0, 1};
+        // push_constant.px_range = font_atlas.distance_range;
+        // vkCmdPushConstants(renderer.cmd, render_resources.pipeline_layout, .VERTEX | .FRAGMENT, 0, size_of(Push_Constant), *push_constant);
 
         offsets :VkDeviceSize = 0;
         vkCmdBindVertexBuffers(renderer.cmd, 0, 1, *dumb.buffer.vk, *offsets);
@@ -98,7 +103,9 @@ appquit :: (appstate: *void, result: SDL_AppResult) {
     app := cast(*App)appstate;
 
     vkDeviceWaitIdle(app.renderer.device);
-    destroy_resources(app.render_resources, *app.renderer);
+    destroy_system(*app.renderer, app.simple_system);
+    destroy_buffer(app.renderer.vma, app.dumb.buffer);
+    // destroy_resources(app.render_resources, *app.renderer);
     deinit(*app.renderer);
     SDL_Quit();
 }
