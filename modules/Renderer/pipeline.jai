@@ -147,21 +147,18 @@ set_shaders :: (using builder: *Pipeline_Builder, vert_shader_path: string, frag
 // This is deprecated.
 set_shaders :: (using builder: *Pipeline_Builder, vert_shader: VkShaderModule, frag_shader: VkShaderModule) {
     array_reset_keeping_memory(*shader_stages);
-    vert_info := VkPipelineShaderStageCreateInfo.{
-        stage = .VERTEX,
-        module = vert_shader,
-        pName = "main",
+    add_shader(builder, vert_shader, .VERTEX);
+    add_shader(builder, frag_shader, .FRAGMENT);
+}
+
+add_shader :: (using builder: *Pipeline_Builder, shader_module: VkShaderModule, stage: VkShaderStageFlags, entry_point := "main") {
+    pipeline_shader_stage_create_info := VkPipelineShaderStageCreateInfo.{
+        stage = stage,
+        module = shader_module,
+        pName = to_c_string(entry_point,, allocator)
     };
 
-    array_add(*shader_stages, vert_info);
-
-    frag_info := VkPipelineShaderStageCreateInfo.{
-        stage = .FRAGMENT,
-        module = frag_shader,
-        pName = "main",
-    };
-
-    array_add(*shader_stages, frag_info);
+    array_add(*shader_stages, pipeline_shader_stage_create_info);
 }
 
 set_layout :: (builder: *Pipeline_Builder, layout: VkPipelineLayout) {

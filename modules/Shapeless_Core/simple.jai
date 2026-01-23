@@ -11,14 +11,14 @@ SQUARE_VERTICES :: Simple_Vertex.[
     pos = .{0.5, -0.5}, uv = .{1, 0}
 },
 .{
-    pos = .{-0.5, 0.5}, uv = .{0, 0}
+    pos = .{-0.5, -0.5}, uv = .{0, 0}
 },
 .{
-    pos = .{-0.5, -0.5}, uv = .{0, 1}
+    pos = .{-0.5, 0.5}, uv = .{0, 1}
 }
 ];
 
-SQUARE_INDICES :: u32.[0, 1, 2, 0, 2, 3];
+SQUARE_INDICES :: u32.[0, 1, 2, 3, 2, 0];
 
 make_simple_system :: (using renderer: *Renderer) -> Renderer.System {
     system: Renderer.System;
@@ -82,19 +82,17 @@ make_simple_system :: (using renderer: *Renderer) -> Renderer.System {
     init(*pb);
     defer deinit(*pb);
 
-    ok, vert_shader := make_shader_module(renderer, "shaders/simple.vert.spv");
+    ok, shader_module := make_shader_module(renderer, "shaders/texture.slang.spv");
     if !ok return .{};
-    defer destroy_shader_module(renderer, vert_shader);
+    defer destroy_shader_module(renderer, shader_module);
 
-    ok=, frag_shader := make_shader_module(renderer, "shaders/simple.frag.spv");
-    if !ok return .{};
-    defer destroy_shader_module(renderer, frag_shader);
+    add_shader(*pb, shader_module, .VERTEX, "vertex_main");
+    add_shader(*pb, shader_module, .FRAGMENT, "fragment_main");
 
-    set_shaders(*pb, vert_shader, frag_shader);
     set_layout(*pb, system.pipeline_layout);
     add_vertex_input_binding(*pb, 0, size_of(Simple_Vertex), .VERTEX);
     add_vertex_input_attribute(*pb, 0, 0, .R32G32_SFLOAT, 0);
-    add_vertex_input_attribute(*pb, 1, 0, .R32G32_SFLOAT, offset_of(Simple_Vertex, "uv"));
+    add_vertex_input_attribute(*pb, 1, 0, .R32G32_SFLOAT, xx offset_of(Simple_Vertex, "uv"));
 
     set_color_attachment_format(*pb, draw_texture.format);
     set_depth_format(*pb, depth_texture.format);

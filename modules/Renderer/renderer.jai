@@ -502,7 +502,7 @@ set_clear_color :: (using renderer: *Renderer, color: [4]float) {
     clear_color = color;
 }
 
-make_buffer :: (vma: VmaAllocator, size: VkDeviceSize, buffer_usage: VkBufferUsageFlags, memory_usage: VmaMemoryUsage) -> VkResult, Renderer.Buffer {
+make_buffer :: (vma: VmaAllocator, size: VkDeviceSize, buffer_usage: VkBufferUsageFlags, memory_usage: VmaMemoryUsage = .AUTO, flags: VmaAllocationCreateFlags = xx VmaAllocationCreateFlagBits.MAPPED_BIT) -> VkResult, Renderer.Buffer {
     buffer_info := VkBufferCreateInfo.{
         size = size,
         usage = buffer_usage,
@@ -542,7 +542,60 @@ copy_buffer :: (cmd: VkCommandBuffer, source: Renderer.Buffer, destination: Rend
     vkCmdCopyBuffer(cmd, source.vk, destination.vk, 1, *region);
 }
 
-make_buffer_copying_data :: (using renderer: *Renderer, cmd: VkCommandBuffer, data: [] $T, buffer_usage: VkBufferUsageFlags) -> VkResult, Renderer.Buffer {
+copy_buffer_to_image :: (command: VkCommandBuffer, source: Renderer.Buffer, destination: VkImage, extent: VkExtent2D) {
+    barrier := VkImageMemoryBarrier2.{
+        srcStageMask     = .TOP_OF_PIPE,
+        srcAccessMask    = 0,
+        dstStageMask     = .TRANSFER,
+        dstAccessMask    = .TRANSFER_WRITE,
+        oldLayout        = .UNDEFINED,
+        newLayout        = .TRANSFER_DST_OPTIMAL,
+        image            = destination,
+        subresourceRange = .{
+            aspectMask   = .COLOR,
+            baseMipLevel   = 0,
+            levelCount     = 1,
+            baseArrayLayer = 0,
+            layerCount     = 1
+        }
+    };
+
+    dependency_info := VkDependencyInfo.{
+        imageMemoryBarrierCount = 1,
+        pImageMemoryBarriers    = *barrier
+    };
+    vkCmdPipelineBarrier2(command, *dependency_info);
+
+    region := VkBufferImageCopy2.{
+        bufferOffset = 0,
+        bufferRowLength = 0,
+        bufferImageHeight = 0,
+        imageSubresource = .{.COLOR, 0, 0, 1},
+        imageOffset = .{0, 0, 0},
+        imageExtent = .{width = extent.width, height = extent.height, depth = 1}
+    };
+
+    copy_info := VkCopyBufferToImageInfo2.{
+        srcBuffer = source.vk,
+        dstImage = destination,
+        dstImageLayout = .TRANSFER_DST_OPTIMAL,
+        regionCount = 1,
+        pRegions = *region
+    };
+
+    vkCmdCopyBufferToImage2(command, *copy_info);
+
+    barrier.oldLayout = .TRANSFER_DST_OPTIMAL;
+    barrier.newLayout = .SHADER_READ_ONLY_OPTIMAL;
+    barrier.srcAccessMask = .TRANSFER_WRITE;
+    barrier.dstAccessMask = .SHADER_READ;
+    barrier.srcStageMask = .TRANSFER;
+    barrier.dstStageMask = .FRAGMENT_SHADER;
+
+    vkCmdPipelineBarrier2(command, *dependency_info);
+}
+
+make_buffer_copying_data :: (using renderer: *Renderer, command: VkCommandBuffer, data: [] $T, buffer_usage: VkBufferUsageFlags) -> VkResult, Renderer.Buffer {
     size: VkDeviceSize = xx (data.count * size_of(T));
     result, staging_buffer := make_buffer(vma, size, .TRANSFER_SRC, .CPU_ONLY);
     if result return result, .{};
@@ -560,7 +613,7 @@ make_buffer_copying_data :: (using renderer: *Renderer, cmd: VkCommandBuffer, da
     }
 
     array_add(*buffers_queued_for_destruction[frame_index], staging_buffer);
-    copy_buffer(cmd, staging_buffer, buffer);
+    copy_buffer(command, staging_buffer, buffer);
     return result, buffer;
 }
 
@@ -686,6 +739,79 @@ destroy_system :: (using renderer: *Renderer, using system: Renderer.System) {
     if pipeline {
         vkDestroyPipeline(device, pipeline, vka);
     }
+}
+
+make_mesh :: (using renderer: *Renderer, vertices: []$T, indices: []u32) -> VkResult, Renderer.Mesh {
+    mesh: Renderer.Mesh;
+
+    result, command := begin_single_time_commands(renderer);
+    if result return result, .{};
+
+    result, mesh.vertex_buffer = make_buffer_copying_data(renderer, command, vertices, .VERTEX_BUFFER);
+    if result return result, .{};
+
+    result, mesh.index_buffer = make_buffer_copying_data(renderer, command, indices, .INDEX_BUFFER);
+    if result return result, .{};
+
+    result = end_single_time_commands(renderer, command);
+    if result return result, .{};
+
+    return .SUCCESS, mesh;
+}
+
+destroy_mesh :: (using renderer: *Renderer, mesh: Renderer.Mesh) {
+    destroy_buffer(vma, mesh.vertex_buffer);
+    destroy_buffer(vma, mesh.index_buffer);
+}
+
+draw_mesh :: (command: VkCommandBuffer, mesh: Renderer.Mesh) {
+    offsets: VkDeviceSize;
+    vkCmdBindVertexBuffers(command, 0, 1, *mesh.vertex_buffer.vk, *offsets);
+    vkCmdBindIndexBuffer(command, mesh.index_buffer.vk, 0, .UINT32);
+    index_count: u32 = xx (mesh.index_buffer.size / size_of(u32));
+    vkCmdDrawIndexed(command, index_count, 1, 0, 0, 0);
+}
+
+make_texture :: (using renderer: *Renderer, data: *void, extent: VkExtent2D) -> VkResult, Renderer.Texture {
+    texture: Renderer.Texture;
+    texture.format = .R8G8B8A8_SRGB;
+    result: VkResult;
+    result, texture.image = make_image(vma, extent, texture.format, .SAMPLED | .TRANSFER_DST);
+    if result return result, .{};
+
+    result, texture.image_view = make_image_view(renderer, texture.image.vk, texture.format, .COLOR);
+    if result {
+        vmaDestroyImage(vma, texture.image.vk, texture.image.allocation);
+        return result, .{};
+    }
+
+    staging_buffer: Renderer.Buffer;
+    result, staging_buffer = make_buffer(vma, extent.width * extent.height * 4, .TRANSFER_SRC, .CPU_ONLY);
+    if result {
+        destroy_texture(renderer, texture);
+        return result, .{};
+    }
+    array_add(*buffers_queued_for_destruction[frame_index], staging_buffer);
+
+    mapped_ptr: *void;
+    vmaMapMemory(vma, staging_buffer.allocation, *mapped_ptr);
+
+    memcpy(mapped_ptr, data, extent.width * extent.height * 4);
+    vmaUnmapMemory(vma, staging_buffer.allocation);
+
+    result=, command := begin_single_time_commands(renderer);
+    if result {
+        destroy_texture(renderer, texture);
+        return result, .{};
+    }
+    copy_buffer_to_image(command, staging_buffer, texture.image.vk, extent);
+    result = end_single_time_commands(renderer, command);
+    if result {
+        destroy_texture(renderer, texture);
+        return result, .{};
+    }
+
+    return .SUCCESS, texture;
 }
 
 #scope_file
@@ -865,17 +991,12 @@ make_device :: (renderer: *Renderer, device_extensions: [] *u8) -> VkResult, VkD
         };
     }
 
-    feature_unified_image_layouts := VkPhysicalDeviceUnifiedImageLayoutsFeaturesKHR.{
-        unifiedImageLayouts = VK_TRUE
-    };
-
     features14 := VkPhysicalDeviceVulkan14Features.{
-        pNext = *feature_unified_image_layouts,
-        hostImageCopy = VK_TRUE
+        // hostImageCopy = VK_TRUE
     };
 
     features13 := VkPhysicalDeviceVulkan13Features.{
-        pNext = *feature_unified_image_layouts,
+        pNext = *features14,
         dynamicRendering = VK_TRUE,
         synchronization2 = VK_TRUE
     };

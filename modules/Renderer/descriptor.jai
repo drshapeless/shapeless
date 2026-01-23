@@ -66,7 +66,7 @@ write_image :: (using writer: *Descriptor_Writer, binding: u32, image_view: VkIm
         dstBinding = binding,
         descriptorCount = 1,
         descriptorType = type,
-        pImageInfo = info
+        pImageInfo = image_info
     };
 
     array_add(*writes, write);
@@ -84,7 +84,7 @@ write_buffer :: (using writer: *Descriptor_Writer, binding: u32, buffer: VkBuffe
         dstBinding      = binding,
         descriptorCount = 1,
         descriptorType  = type,
-        pBufferInfo     = info
+        pBufferInfo     = buffer_info
     };
 
     array_add(*writes, write);
@@ -95,7 +95,7 @@ update_set :: (using writer: *Descriptor_Writer, device: VkDevice, set: VkDescri
         write.dstSet = set;
     }
 
-    vkUpdateDescriptorSets(device, writes.count, writes.data, 0, null);
+    vkUpdateDescriptorSets(device, xx writes.count, writes.data, 0, null);
 }
 
 reset :: (using writer: *Descriptor_Writer) {

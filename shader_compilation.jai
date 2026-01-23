@@ -15,6 +15,10 @@ compile_shaders :: () -> bool {
             if !compile_shader(shader_compiler, it, "shaders") {
                 return false;
             }
+        } else if ends_with(it, ".slang") {
+            if !compile_slang(it, "shaders") {
+                return false;
+            }
         }
     }
 
@@ -29,6 +33,28 @@ compile_shader :: (shader_compiler: string, shader_path: string, output_director
 
     output_path := tprint("%/%.spv", output_directory, filename);
     compiler_command := string.[shader_compiler, shader_path, "-o", output_path];
+    log("Compiling % to % (%)", filename, output_path, get_quoted_command_string(compiler_command));
+    result := run_command(..compiler_command);
+    if result.exit_code != 0 {
+        return false;
+    }
+
+    return true;
+}
+
+compile_slang :: (shader_path: string, output_directory: string) -> bool {
+    filename := path_filename(shader_path);
+
+    output_path := tprint("%/%.spv", output_directory, filename);
+    compiler_command := string.[
+"slangc",
+shader_path,
+"-target", "spirv",
+"-profile", "spirv_1_6",
+"-emit-spirv-directly",
+"-fvk-use-entrypoint-name",
+"-std", "2026",
+"-o", output_path];
     log("Compiling % to % (%)", filename, output_path, get_quoted_command_string(compiler_command));
     result := run_command(..compiler_command);
     if result.exit_code != 0 {

@@ -20,8 +20,8 @@ App :: struct {
 }
 
 Dumb :: struct {
-    buffer: Renderer.Buffer;
-    vertices: [] Simple_Vertex;
+    mesh: Renderer.Mesh;
+    texture: Renderer.Texture;
 }
 
 appinit :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
@@ -51,10 +51,22 @@ appinit :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
 
     // dumb.vertices = build_text_vertices("bello", 1, 0.5, 0.5, *font_atlas);
 
-    dumb.vertices = .[.{pos = .{0.5, 0.5}}, .{pos = .{0.0, -0.5}}, .{pos = .{-0.5, 0.5}}];
-
-    result:, dumb.buffer = make_buffer_copying_data(*renderer, dumb.vertices, .VERTEX_BUFFER);
+    result: VkResult;
+    result, dumb.mesh = make_mesh(*renderer, SQUARE_VERTICES, SQUARE_INDICES);
     if result return .FAILURE;
+
+    monkey_surface := IMG_Load("assets/monkey.jpg");
+    assert(monkey_surface != null);
+    converted_surface := SDL_ConvertSurface(monkey_surface, .RGBA8888);
+    assert(converted_surface != null);
+
+    result, dumb.texture = make_texture(*renderer, converted_surface.pixels, .{xx converted_surface.w, xx converted_surface.h});
+    assert(result == .SUCCESS);
+
+    writer: Descriptor_Writer;
+    init(*writer);
+    write_image(*writer, 0, dumb.texture.image_view, simple_system.sampler, .SHADER_READ_ONLY_OPTIMAL, .COMBINED_IMAGE_SAMPLER);
+    update_set(*writer, renderer.device, simple_system.descriptor_set);
 
     return .CONTINUE;
 }
@@ -81,6 +93,7 @@ appiter :: (appstate: *void) -> SDL_AppResult {
 
     if begin_draw(*renderer) {
         vkCmdBindPipeline(renderer.cmd, .GRAPHICS, simple_system.pipeline);
+        vkCmdBindDescriptorSets(renderer.cmd, .GRAPHICS, simple_system.pipeline_layout, 0, 1, *simple_system.descriptor_set, 0, null);
         // vkCmdBindDescriptorSets(renderer.cmd, .GRAPHICS, render_resources.pipeline_layout, 0, 1, *render_resources.descriptor_set, 0, null);
 
         // push_constant: Push_Constant;
@@ -89,10 +102,7 @@ appiter :: (appstate: *void) -> SDL_AppResult {
         // push_constant.px_range = font_atlas.distance_range;
         // vkCmdPushConstants(renderer.cmd, render_resources.pipeline_layout, .VERTEX | .FRAGMENT, 0, size_of(Push_Constant), *push_constant);
 
-        offsets :VkDeviceSize = 0;
-        vkCmdBindVertexBuffers(renderer.cmd, 0, 1, *dumb.buffer.vk, *offsets);
-
-        vkCmdDraw(renderer.cmd, xx dumb.vertices.count, 1, 0, 0);
+        draw_mesh(renderer.cmd, dumb.mesh);
 
         end_draw(*renderer);
     }
@@ -104,8 +114,7 @@ appquit :: (appstate: *void, result: SDL_AppResult) {
 
     vkDeviceWaitIdle(app.renderer.device);
     destroy_system(*app.renderer, app.simple_system);
-    destroy_buffer(app.renderer.vma, app.dumb.buffer);
-    // destroy_resources(app.render_resources, *app.renderer);
+    destroy_mesh(*app.renderer, app.dumb.mesh);
     deinit(*app.renderer);
     SDL_Quit();
 }
