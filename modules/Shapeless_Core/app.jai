@@ -55,9 +55,9 @@ appinit :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
     result, dumb.mesh = make_mesh(*renderer, SQUARE_VERTICES, SQUARE_INDICES);
     if result return .FAILURE;
 
-    monkey_surface := IMG_Load("assets/monkey.jpg");
+    monkey_surface := IMG_Load("assets/longhairmonkey.jpg");
     assert(monkey_surface != null);
-    converted_surface := SDL_ConvertSurface(monkey_surface, .RGBA8888);
+    converted_surface := SDL_ConvertSurface(monkey_surface, .RGBA32);
     assert(converted_surface != null);
 
     result, dumb.texture = make_texture(*renderer, converted_surface.pixels, .{xx converted_surface.w, xx converted_surface.h});
@@ -72,6 +72,7 @@ appinit :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
 }
 
 appevent :: (appstate: *void, event: *SDL_Event) -> SDL_AppResult {
+    app := cast(*App)appstate;
     if event.type == {
     case .QUIT;
         #through;
@@ -82,6 +83,8 @@ appevent :: (appstate: *void, event: *SDL_Event) -> SDL_AppResult {
         case SDLK_ESCAPE;
             return .SUCCESS;
         }
+    case .WINDOW_RESIZED;
+        app.renderer.resize_requested = true;
     }
 
     return .CONTINUE;
@@ -90,6 +93,13 @@ appevent :: (appstate: *void, event: *SDL_Event) -> SDL_AppResult {
 appiter :: (appstate: *void) -> SDL_AppResult {
     app := cast(*App)appstate;
     using app;
+
+    if renderer.resize_requested {
+        width: s32;
+        height: s32;
+        SDL_GetWindowSize(app.win, *width , *height);
+        resize_callback(*renderer, .{xx width ,xx height});
+    }
 
     if begin_draw(*renderer) {
         vkCmdBindPipeline(renderer.cmd, .GRAPHICS, simple_system.pipeline);
@@ -115,6 +125,7 @@ appquit :: (appstate: *void, result: SDL_AppResult) {
     vkDeviceWaitIdle(app.renderer.device);
     destroy_system(*app.renderer, app.simple_system);
     destroy_mesh(*app.renderer, app.dumb.mesh);
+    destroy_texture(*app.renderer, app.dumb.texture);
     deinit(*app.renderer);
     SDL_Quit();
 }

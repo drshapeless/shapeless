@@ -18,7 +18,7 @@ SQUARE_VERTICES :: Simple_Vertex.[
 }
 ];
 
-SQUARE_INDICES :: u32.[0, 1, 2, 3, 2, 0];
+SQUARE_INDICES :: u32.[0, 1, 2, 0, 2, 3];
 
 make_simple_system :: (using renderer: *Renderer) -> Renderer.System {
     system: Renderer.System;
@@ -96,7 +96,7 @@ make_simple_system :: (using renderer: *Renderer) -> Renderer.System {
 
     set_color_attachment_format(*pb, draw_texture.format);
     set_depth_format(*pb, depth_texture.format);
-    set_input_topology(*pb, .TRIANGLE_STRIP);
+    set_input_topology(*pb, .TRIANGLE_LIST);
     set_polygon_mode(*pb, .FILL);
     set_cull_mode(*pb, .BACK, .COUNTER_CLOCKWISE);
     set_multisampling_none(*pb);

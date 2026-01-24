@@ -53,6 +53,7 @@ shader_path,
 "-profile", "spirv_1_6",
 "-emit-spirv-directly",
 "-fvk-use-entrypoint-name",
+"-fvk-use-scalar-layout",
 "-std", "2026",
 "-o", output_path];
     log("Compiling % to % (%)", filename, output_path, get_quoted_command_string(compiler_command));

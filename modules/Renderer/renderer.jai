@@ -47,6 +47,8 @@ Renderer :: struct {
     cmd: VkCommandBuffer;
     clear_color: [4]float;
 
+    resize_requested := false;
+
     Queue_Family_Indices :: struct {
         graphics: u32;
         present:  u32;
@@ -120,6 +122,14 @@ init :: (using renderer: *Renderer, window: *SDL_Window) -> ok:bool {
         return false;
     }
 
+    window_width: s32;
+    window_height: s32;
+    ok = SDL_GetWindowSize(window, *window_width, *window_height);
+    if !ok {
+        log_error("Cannot get window size");
+        return false;
+    }
+
     all_device_extensions: [..] *u8;
     all_device_extensions.allocator = temp;
     array_add(*all_device_extensions, ..ENABLED_DEVICE_EXTENSION_NAMES);
@@ -165,7 +175,7 @@ init :: (using renderer: *Renderer, window: *SDL_Window) -> ok:bool {
     result, frames = make_frames(renderer);
     if result return false;
 
-    result = make_draw_images(renderer);
+    result = make_draw_images(renderer, .{xx window_width, xx window_height});
     if result return false;
 
     buffers_queued_for_destruction = NewArray(swapchain.images.count, [..] Buffer);
@@ -814,6 +824,14 @@ make_texture :: (using renderer: *Renderer, data: *void, extent: VkExtent2D) -> 
     return .SUCCESS, texture;
 }
 
+resize_callback :: (using renderer: *Renderer, extent: VkExtent2D) {
+    vkDeviceWaitIdle(device);
+    destroy_draw_images(renderer);
+    make_draw_images(renderer, extent);
+    remake_swapchain(renderer);
+    resize_requested = false;
+}
+
 #scope_file
 // Initialization helpers
 application_info :: VkApplicationInfo.{
@@ -1251,8 +1269,8 @@ find_depth_format :: (using renderer: *Renderer) -> VkFormat {
 
 // The word image here is not the same as Renderer.Image, it also
 // includes an image view.
-make_draw_images :: (using renderer: *Renderer) -> VkResult {
-    result, draw_image := make_image(vma, swapchain.extent, swapchain.format, .TRANSFER_SRC | .COLOR_ATTACHMENT);
+make_draw_images :: (using renderer: *Renderer, extent: VkExtent2D) -> VkResult {
+    result, draw_image := make_image(vma, extent, swapchain.format, .TRANSFER_SRC | .COLOR_ATTACHMENT);
     if result return result;
 
     result=, draw_image_view := make_image_view(renderer, draw_image.vk, swapchain.format, .COLOR);
@@ -1265,7 +1283,7 @@ make_draw_images :: (using renderer: *Renderer) -> VkResult {
     };
 
     depth_format := find_depth_format(renderer);
-    result=, depth_image := make_image(vma, swapchain.extent, depth_format, .DEPTH_STENCIL_ATTACHMENT);
+    result=, depth_image := make_image(vma, extent, depth_format, .DEPTH_STENCIL_ATTACHMENT);
     if result return result;
 
     result=, depth_image_view := make_image_view(renderer, depth_image.vk, depth_format, .DEPTH);
@@ -1311,16 +1329,12 @@ acquire_next_image_index :: (using renderer: *Renderer) -> bool {
 
     result: VkResult;
 
-    result = check_vk(vkAcquireNextImage2KHR(device, *info, *image_index));
+    result = vkAcquireNextImage2KHR(device, *info, *image_index);
 
     if result == {
     case .ERROR_OUT_OF_DATE_KHR;
-        result = remake_swapchain(renderer);
-        if result return false;
-
-        result = check_vk(vkAcquireNextImage2KHR(device, *info, *image_index));
-        if result return false;
-
+        resize_requested = true;
+        return false;
     case .SUBOPTIMAL_KHR;
         ;
     case .SUCCESS;
