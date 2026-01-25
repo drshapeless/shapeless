@@ -22,6 +22,7 @@ Renderer :: struct {
 
     draw_texture:      Texture;
     depth_texture:     Texture;
+    draw_extent:       VkExtent2D;
 
     // There are two bindless approach in descriptor set, Descriptor
     // indexing and descriptor buffer.
@@ -169,7 +170,7 @@ init :: (using renderer: *Renderer, window: *SDL_Window) -> ok:bool {
     result, command_pool = make_command_pools(renderer);
     if result return false;
 
-    result, swapchain = make_swapchain(renderer);
+    result, swapchain = make_swapchain(renderer, .{xx window_width, xx window_height});
     if result return false;
 
     result, frames = make_frames(renderer);
@@ -413,8 +414,8 @@ end_draw :: (using renderer: *Renderer) {
         },
     };
     blit_region.srcOffsets[1] = .{
-        x = xx swapchain.extent.width,
-        y = xx swapchain.extent.height,
+        x = xx draw_extent.width,
+        y = xx draw_extent.height,
         z = 1
     };
     blit_region.dstOffsets[1] = .{
@@ -828,7 +829,7 @@ resize_callback :: (using renderer: *Renderer, extent: VkExtent2D) {
     vkDeviceWaitIdle(device);
     destroy_draw_images(renderer);
     make_draw_images(renderer, extent);
-    remake_swapchain(renderer);
+    remake_swapchain(renderer, extent);
     resize_requested = false;
 }
 
@@ -1073,7 +1074,7 @@ make_vma :: (instance: VkInstance, physical_device: VkPhysicalDevice, device: Vk
     return result, allocator;
 }
 
-make_swapchain :: (renderer: *Renderer, old_swapchain: VkSwapchainKHR = null) -> VkResult, Renderer.Swapchain {
+make_swapchain :: (renderer: *Renderer, extent: VkExtent2D, old_swapchain: VkSwapchainKHR = null) -> VkResult, Renderer.Swapchain {
     support := get_swapchain_support(renderer.physical_device, renderer.surface);
 
     format := support.formats[0];
@@ -1097,9 +1098,10 @@ make_swapchain :: (renderer: *Renderer, old_swapchain: VkSwapchainKHR = null) ->
         image_count = support.capabilities.maxImageCount;
     }
 
-    extent := support.capabilities.currentExtent;
-    if extent.width == U32_MAX {
-        extent = support.capabilities.maxImageExtent;
+    swapchain_extent := support.capabilities.currentExtent;
+    if swapchain_extent.width == U32_MAX {
+        swapchain_extent.width = clamp(extent.width, support.capabilities.minImageExtent.width, support.capabilities.maxImageExtent.width);
+        swapchain_extent.height = clamp(extent.height, support.capabilities.minImageExtent.height, support.capabilities.maxImageExtent.height);
     }
 
     exclusive_queue := renderer.queue_indices.graphics == renderer.queue_indices.present;
@@ -1110,7 +1112,7 @@ make_swapchain :: (renderer: *Renderer, old_swapchain: VkSwapchainKHR = null) ->
         minImageCount = image_count,
         imageFormat = format.format,
         imageColorSpace = format.colorSpace,
-        imageExtent = extent,
+        imageExtent = swapchain_extent,
         imageArrayLayers = 1,
         imageUsage = .TRANSFER_DST | .COLOR_ATTACHMENT,
         imageSharingMode = ifx exclusive_queue then .EXCLUSIVE else .CONCURRENT,
@@ -1197,9 +1199,9 @@ destroy_frames :: (using renderer: *Renderer) {
     array_free(frames);
 }
 
-remake_swapchain :: (renderer: *Renderer) -> VkResult {
+remake_swapchain :: (renderer: *Renderer, extent: VkExtent2D) -> VkResult {
     vkDeviceWaitIdle(renderer.device);
-    result, new_swapchain := make_swapchain(renderer, renderer.swapchain.vk);
+    result, new_swapchain := make_swapchain(renderer, extent, renderer.swapchain.vk);
     if result return result;
 
     destroy_swapchain(renderer, *renderer.swapchain);
@@ -1270,6 +1272,7 @@ find_depth_format :: (using renderer: *Renderer) -> VkFormat {
 // The word image here is not the same as Renderer.Image, it also
 // includes an image view.
 make_draw_images :: (using renderer: *Renderer, extent: VkExtent2D) -> VkResult {
+    draw_extent = extent;
     result, draw_image := make_image(vma, extent, swapchain.format, .TRANSFER_SRC | .COLOR_ATTACHMENT);
     if result return result;
 
