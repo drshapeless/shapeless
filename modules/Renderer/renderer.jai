@@ -512,7 +512,7 @@ set_clear_color :: (using renderer: *Renderer, color: [4]float) {
     clear_color = color;
 }
 
-make_buffer :: (vma: VmaAllocator, size: VkDeviceSize, buffer_usage: VkBufferUsageFlags, memory_usage: VmaMemoryUsage = .AUTO, flags: VmaAllocationCreateFlags = xx VmaAllocationCreateFlagBits.MAPPED_BIT) -> VkResult, Renderer.Buffer {
+make_buffer :: (vma: VmaAllocator, size: VkDeviceSize, buffer_usage: VkBufferUsageFlags, memory_usage: VmaMemoryUsage = .AUTO, flags: VmaAllocationCreateFlags = .MAPPED_BIT) -> VkResult, Renderer.Buffer {
     buffer_info := VkBufferCreateInfo.{
         size = size,
         usage = buffer_usage,
@@ -521,7 +521,7 @@ make_buffer :: (vma: VmaAllocator, size: VkDeviceSize, buffer_usage: VkBufferUsa
 
     alloc_create_info := VmaAllocationCreateInfo.{
         usage = memory_usage,
-        flags = xx VmaAllocationCreateFlagBits.MAPPED_BIT
+        flags = .MAPPED_BIT
     };
 
     buffer: Renderer.Buffer;
@@ -1064,7 +1064,7 @@ make_vma :: (instance: VkInstance, physical_device: VkPhysicalDevice, device: Vk
         physicalDevice = physical_device,
         device = device,
         instance = instance,
-        flags = xx VmaAllocatorCreateFlagBits.BUFFER_DEVICE_ADDRESS_BIT,
+        flags = .BUFFER_DEVICE_ADDRESS_BIT,
         pVulkanFunctions = *vma_vulkan_functions,
     };
 
@@ -1240,7 +1240,7 @@ make_image :: (
     };
 
     alloc_info := VmaAllocationCreateInfo.{
-        flags = xx VmaAllocationCreateFlagBits.DEDICATED_MEMORY_BIT,
+        flags = .DEDICATED_MEMORY_BIT,
         usage = memory_usage,
         // requiredFlags = .DEVICE_LOCAL
     };

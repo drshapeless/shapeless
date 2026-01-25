@@ -71,6 +71,7 @@ generate :: (target_os: Operating_System_Tag) -> bool {
         array_add(*system_include_paths, ..get_default_system_include_paths());
         array_add(*system_include_paths, "/opt/homebrew/include");
 
+        visitor = vma_visitor;
         alias_original_enum_names = false;
         log_stripped_declarations = false;
         generate_compile_time_struct_checks = false;
@@ -86,6 +87,33 @@ generate :: (target_os: Operating_System_Tag) -> bool {
     }
 
     return generate_bindings(options, output_filename);
+}
+
+available_flag_bits: Table(string, *Enum);
+
+vma_visitor :: (decl: *Declaration, parent_decl: *Declaration) -> Declaration_Visit_Result {
+    if decl.kind == .ENUM {
+        en := cast(*Enum)decl;
+        if contains(decl.name, "FlagBits") {
+            en.flags |= .IS_ENUM_FLAGS;
+            en.flags |= .VALUES_IN_HEX;
+
+            table_add(*available_flag_bits, decl.name, en);
+        }
+    }
+
+    if decl.kind == .TYPEDEF && decl.type.type_of_typedef && decl.type.type_of_typedef.name == "VkFlags" {
+        flags_name := replace(decl.name, "Flags", "FlagBits");
+        found, enum_decl := table_find(*available_flag_bits, flags_name);
+        if found {
+            type := New(CType);
+            type.type_of_enum = enum_decl;
+            type.size = enum_decl.type.size;
+            decl.type = type;
+        }
+    }
+
+    return .RECURSE;
 }
 
 VMA_FOOTER :: #string END
@@ -108,3 +136,5 @@ END
 #import "BuildCpp";
 #import "File";
 #import "Process";
+#import "Hash_Table";
+#import "String";
