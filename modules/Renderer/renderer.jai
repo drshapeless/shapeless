@@ -50,6 +50,8 @@ Renderer :: struct {
 
     resize_requested := false;
 
+    staging_pool: Staging_Pool;
+
     Queue_Family_Indices :: struct {
         graphics: u32;
         present:  u32;
@@ -91,6 +93,7 @@ Renderer :: struct {
     Buffer :: struct {
         vk:         VkBuffer;
         allocation: VmaAllocation;
+        offset:     u64;
         size:       u64;
     }
 
@@ -106,6 +109,21 @@ Renderer :: struct {
         sampler:               VkSampler;
         pipeline_layout:       VkPipelineLayout;
         pipeline:              VkPipeline;
+    }
+
+    Staging_Pool :: struct {
+        // I come up with this number for no reason, just think that
+        // it may be a good idea to use the page size in linux. Can
+        // change it to anything.
+        BLOCK_SIZE :u64 : 4096;
+
+        buffers: [..] Buffer;
+
+        current_pos: u64;
+        bytes_left:  u64;
+
+        // -1 means there is no buffer
+        buffer_index: s64 = -1;
     }
 }
 
@@ -167,6 +185,9 @@ init :: (using renderer: *Renderer, window: *SDL_Window) -> ok:bool {
     result, vma = make_vma(instance, physical_device, device);
     if result return false;
 
+    result, staging_pool = make_staging_pool(vma);
+    if result return false;
+
     result, command_pool = make_command_pools(renderer);
     if result return false;
 
@@ -206,6 +227,7 @@ deinit :: (using renderer: *Renderer) {
     destroy_frames(renderer);
     destroy_swapchain(renderer, *swapchain);
     vkDestroySurfaceKHR(instance, surface, vka);
+    destroy_staging_pool(renderer);
     vmaDestroyAllocator(vma);
     vkDestroyDevice(device, vka);
     vkDestroyInstance(instance, vka);
@@ -256,6 +278,7 @@ begin_draw :: (using renderer: *Renderer) -> bool {
 
     if check_vk(vkBeginCommandBuffer(cmd, *cmd_begin_info)) return false;
 
+    reset_staging_pool(*staging_pool);
     for buffers_queued_for_destruction[frame_index] {
         destroy_buffer(vma, it);
     }
@@ -536,20 +559,24 @@ destroy_buffer :: (vma: VmaAllocator, buffer: Renderer.Buffer) {
     vmaDestroyBuffer(vma, buffer.vk, buffer.allocation);
 }
 
-copy_to_device_memory :: (vma: VmaAllocator, allocation: VmaAllocation, source: *void, size: VkDeviceSize) -> VkResult {
+copy_to_device_memory :: (vma: VmaAllocator, buffer: Renderer.Buffer, source: *void, size: VkDeviceSize) -> VkResult {
+    assert(buffer.size == size);
     data: *void;
-    result := check_vk(vmaMapMemory(vma, allocation, *data));
+    result := check_vk(vmaMapMemory(vma, buffer.allocation, *data));
     if result return result;
 
-    memcpy(data, source, xx size);
-    vmaUnmapMemory(vma, allocation);
+    memcpy(data + buffer.offset, source, xx size);
+    vmaUnmapMemory(vma, buffer.allocation);
 
     return .SUCCESS;
 }
 
 copy_buffer :: (cmd: VkCommandBuffer, source: Renderer.Buffer, destination: Renderer.Buffer) {
     assert(source.size == destination.size);
-    region := VkBufferCopy.{size = xx source.size};
+    region := VkBufferCopy.{
+        srcOffset = source.offset,
+        size = xx source.size
+    };
     vkCmdCopyBuffer(cmd, source.vk, destination.vk, 1, *region);
 }
 
@@ -578,7 +605,7 @@ copy_buffer_to_image :: (command: VkCommandBuffer, source: Renderer.Buffer, dest
     vkCmdPipelineBarrier2(command, *dependency_info);
 
     region := VkBufferImageCopy2.{
-        bufferOffset = 0,
+        bufferOffset = source.offset,
         bufferRowLength = 0,
         bufferImageHeight = 0,
         imageSubresource = .{.COLOR, 0, 0, 1},
@@ -608,62 +635,17 @@ copy_buffer_to_image :: (command: VkCommandBuffer, source: Renderer.Buffer, dest
 
 make_buffer_copying_data :: (using renderer: *Renderer, command: VkCommandBuffer, data: [] $T, buffer_usage: VkBufferUsageFlags) -> VkResult, Renderer.Buffer {
     size: VkDeviceSize = xx (data.count * size_of(T));
-    result, staging_buffer := make_buffer(vma, size, .TRANSFER_SRC, .CPU_ONLY);
+    result, staging_buffer := make_staging_buffer(renderer, size);
     if result return result, .{};
 
-    result = copy_to_device_memory(vma, staging_buffer.allocation, data.data, size);
-    if result {
-        destroy_buffer(vma, staging_buffer);
-        return result, .{};
-    }
+    result = copy_to_device_memory(vma, staging_buffer, data.data, size);
+    if result return result, .{};
 
     result=, buffer := make_buffer(vma, size, .TRANSFER_DST | buffer_usage, .GPU_ONLY);
-    if result {
-        destroy_buffer(vma, staging_buffer);
-        return result, .{};
-    }
+    if result return result, .{};
 
-    array_add(*buffers_queued_for_destruction[frame_index], staging_buffer);
     copy_buffer(command, staging_buffer, buffer);
     return result, buffer;
-}
-
-// This is the variation that uses single time command, which is the
-// default in all tutorials.
-make_buffer_copying_data :: (using renderer: *Renderer, data: [] $T, buffer_usage: VkBufferUsageFlags) -> VkResult, Renderer.Buffer {
-    size: VkDeviceSize = xx (data.count * size_of(T));
-    result, staging_buffer := make_buffer(vma, size, .TRANSFER_SRC, .CPU_ONLY);
-    if result return result, .{};
-
-    result = copy_to_device_memory(vma, staging_buffer.allocation, data.data, size);
-    if result {
-        destroy_buffer(vma, staging_buffer);
-        return result, .{};
-    }
-
-    result=, buffer := make_buffer(vma, size, .TRANSFER_DST | buffer_usage, .GPU_ONLY);
-    if result {
-        destroy_buffer(vma, staging_buffer);
-        return result, .{};
-    }
-
-    result=, command := begin_single_time_commands(renderer);
-    if result {
-        destroy_buffer(vma, staging_buffer);
-        destroy_buffer(vma, buffer);
-        return result, .{};
-    }
-
-    copy_buffer(command, staging_buffer, buffer);
-    result = end_single_time_commands(renderer, command);
-    if result {
-        destroy_buffer(vma, staging_buffer);
-        destroy_buffer(vma, buffer);
-        return result, .{};
-    }
-
-    destroy_buffer(vma, staging_buffer);
-    return .SUCCESS, buffer;
 }
 
 begin_single_time_commands :: (using renderer: *Renderer) -> VkResult, VkCommandBuffer {
@@ -796,19 +778,20 @@ make_texture :: (using renderer: *Renderer, data: *void, extent: VkExtent2D) -> 
         return result, .{};
     }
 
+    data_size := extent.width * extent.height * 4;
     staging_buffer: Renderer.Buffer;
-    result, staging_buffer = make_buffer(vma, extent.width * extent.height * 4, .TRANSFER_SRC, .CPU_ONLY);
+    result, staging_buffer = make_staging_buffer(renderer, data_size);
+
     if result {
         destroy_texture(renderer, texture);
         return result, .{};
     }
-    array_add(*buffers_queued_for_destruction[frame_index], staging_buffer);
 
-    mapped_ptr: *void;
-    vmaMapMemory(vma, staging_buffer.allocation, *mapped_ptr);
-
-    memcpy(mapped_ptr, data, extent.width * extent.height * 4);
-    vmaUnmapMemory(vma, staging_buffer.allocation);
+    result = copy_to_device_memory(vma, staging_buffer, data, data_size);
+    if result {
+        destroy_texture(renderer, texture);
+        return result, .{};
+    }
 
     result=, command := begin_single_time_commands(renderer);
     if result {
@@ -831,6 +814,21 @@ resize_callback :: (using renderer: *Renderer, extent: VkExtent2D) {
     make_draw_images(renderer, extent);
     remake_swapchain(renderer, extent);
     resize_requested = false;
+}
+
+make_staging_buffer :: (using renderer: *Renderer, size: u64) -> VkResult, Renderer.Buffer {
+    if staging_pool.bytes_left < size {
+        result := expand_staging_pool(*staging_pool, vma, size);
+        if result return result, .{};
+    }
+
+    staging_buffer := staging_pool.buffers[staging_pool.buffer_index];
+    staging_buffer.offset = staging_pool.current_pos;
+    staging_buffer.size = size;
+
+    staging_pool.current_pos += size;
+    staging_pool.bytes_left -= size;
+    return .SUCCESS, staging_buffer;
 }
 
 #scope_file
@@ -1347,4 +1345,52 @@ acquire_next_image_index :: (using renderer: *Renderer) -> bool {
     }
 
     return true;
+}
+
+expand_staging_pool :: (pool: *Renderer.Staging_Pool, vma: VmaAllocator, size: u64) -> VkResult {
+    real_size := pool.BLOCK_SIZE;
+    while size > real_size {
+        real_size *= 2;
+    }
+
+    result, buffer := make_buffer(vma, real_size, .TRANSFER_SRC, .CPU_ONLY);
+    if result return result;
+
+    array_add(*pool.buffers, buffer);
+    pool.buffer_index = pool.buffers.count - 1;
+    pool.current_pos  = 0;
+    pool.bytes_left   = real_size;
+
+    return .SUCCESS;
+}
+
+make_staging_pool :: (vma: VmaAllocator) -> VkResult, Renderer.Staging_Pool {
+    staging_pool: Renderer.Staging_Pool;
+
+    result := expand_staging_pool(*staging_pool, vma, staging_pool.BLOCK_SIZE);
+    if result return result, .{};
+
+    return .SUCCESS, staging_pool;
+}
+
+reset_staging_pool :: (pool: *Renderer.Staging_Pool) {
+    if pool.buffer_index < 0 {
+        return;
+    }
+
+    pool.current_pos = 0;
+    pool.buffer_index = 0;
+    pool.bytes_left  = pool.buffers[pool.buffer_index].size;
+}
+
+destroy_staging_pool :: (using renderer: *Renderer) {
+    max_buffer_size :u64 = 0;
+    for staging_pool.buffers {
+        if it.size > max_buffer_size max_buffer_size = it.size;
+        destroy_buffer(vma, it);
+    }
+
+    log("Buffer count: %, Max buffer size in staging pool: %, bytes left: %", staging_pool.buffers.count, max_buffer_size, staging_pool.bytes_left);
+
+    array_free(staging_pool.buffers);
 }
