@@ -817,9 +817,16 @@ resize_callback :: (using renderer: *Renderer, extent: VkExtent2D) {
 }
 
 make_staging_buffer :: (using renderer: *Renderer, size: u64) -> VkResult, Renderer.Buffer {
-    if staging_pool.bytes_left < size {
-        result := expand_staging_pool(*staging_pool, vma, size);
-        if result return result, .{};
+    while staging_pool.bytes_left < size {
+        // First check if the current buffer is the last buffer
+        if staging_pool.buffer_index == staging_pool.buffers.count - 1 {
+            result := expand_staging_pool(*staging_pool, vma, size);
+            if result return result, .{};
+        } else {
+            staging_pool.buffer_index += 1;
+            staging_pool.current_pos = 0;
+            staging_pool.bytes_left = staging_pool.buffers[staging_pool.buffer_index].size;
+        }
     }
 
     staging_buffer := staging_pool.buffers[staging_pool.buffer_index];
@@ -1390,7 +1397,7 @@ destroy_staging_pool :: (using renderer: *Renderer) {
         destroy_buffer(vma, it);
     }
 
-    log("Buffer count: %, Max buffer size in staging pool: %, bytes left: %", staging_pool.buffers.count, max_buffer_size, staging_pool.bytes_left);
+    log("Staging pool info:\nBuffer count: %, Max buffer size in staging pool: %, bytes left: %", staging_pool.buffers.count, max_buffer_size, staging_pool.bytes_left);
 
     array_free(staging_pool.buffers);
 }
