@@ -34,7 +34,7 @@ make_simple_system :: (using renderer: *Renderer) -> Renderer.System.ID {
 
     pipeline_layout_create_info := VkPipelineLayoutCreateInfo.{
         setLayoutCount = 1,
-        pSetLayouts = *system.descriptor_set_layout
+        pSetLayouts = *texture_descriptor_set_layout
     };
     result = check_vk(vkCreatePipelineLayout(device, *pipeline_layout_create_info, vka, *system.pipeline_layout));
     assert(result == .SUCCESS);

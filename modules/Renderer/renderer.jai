@@ -107,7 +107,6 @@ Renderer :: struct {
 
     System :: struct {
         ID :: #type,distinct u64;
-        descriptor_set_layout: VkDescriptorSetLayout;
         descriptor_set:        VkDescriptorSet;
         pipeline_layout:       VkPipelineLayout;
         pipeline:              VkPipeline;
@@ -204,7 +203,7 @@ init :: (using renderer: *Renderer, window: *SDL_Window) -> ok:bool {
     // But it needs constant fine tune, so be it.
     persistent_pool_sizes := VkDescriptorPoolSize.[
     .{
-        type = .UNIFORM_BUFFER,
+        type = .COMBINED_IMAGE_SAMPLER,
         descriptorCount = 1
     }
     ];
@@ -751,10 +750,6 @@ destroy_texture :: (using renderer: *Renderer, texture: Renderer.Texture) {
 }
 
 destroy_system :: (using renderer: *Renderer, using system: Renderer.System) {
-    if descriptor_set_layout {
-        vkDestroyDescriptorSetLayout(device, descriptor_set_layout, vka);
-    }
-
     if pipeline_layout {
         vkDestroyPipelineLayout(device, pipeline_layout, vka);
     }
