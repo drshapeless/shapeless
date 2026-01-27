@@ -13,14 +13,10 @@ App :: struct {
     frames: [..] Frame;
 
     font_atlas: Font_Atlas;
-    simple_system: Renderer.System.ID;
+    simple_system: Simple_System;
 
-    dumb: Dumb;
-}
-
-Dumb :: struct {
-    mesh: Renderer.Mesh;
-    texture: Renderer.Texture;
+    monkey_texture: Renderer.Texture;
+    square_mesh: Renderer.Mesh;
 }
 
 appinit :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
@@ -46,26 +42,24 @@ appinit :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
 
     simple_system = make_simple_system(*renderer);
 
-    // render_resources = make_msdf_resources(*renderer);
-
-    // dumb.vertices = build_text_vertices("bello", 1, 0.5, 0.5, *font_atlas);
-
     result: VkResult;
-    result, dumb.mesh = make_mesh(*renderer, SQUARE_VERTICES, SQUARE_INDICES);
+    result, square_mesh = make_mesh(*renderer, Simple_System.SQUARE_VERTICES, Simple_System.SQUARE_INDICES);
     if result return .FAILURE;
 
     monkey_surface := IMG_Load("assets/longhairmonkey.jpg");
     assert(monkey_surface != null);
+    defer SDL_DestroySurface(monkey_surface);
     converted_surface := SDL_ConvertSurface(monkey_surface, .RGBA32);
     assert(converted_surface != null);
+    defer SDL_DestroySurface(converted_surface);
 
-    result, dumb.texture = make_texture(*renderer, converted_surface.pixels, .{xx converted_surface.w, xx converted_surface.h});
+    result, monkey_texture = make_texture(*renderer, converted_surface.pixels, .{xx converted_surface.w, xx converted_surface.h});
     assert(result == .SUCCESS);
 
     writer: Descriptor_Writer;
     init(*writer);
-    write_image(*writer, 0, dumb.texture.image_view, renderer.texture_sampler, .SHADER_READ_ONLY_OPTIMAL, .COMBINED_IMAGE_SAMPLER);
-    update_set(*writer, renderer.device, get_system(*renderer, simple_system).descriptor_set);
+    write_image(*writer, 0, monkey_texture.image_view, renderer.texture_sampler, .SHADER_READ_ONLY_OPTIMAL, .COMBINED_IMAGE_SAMPLER);
+    update_set(*writer, renderer.device, simple_system.descriptor_set);
 
     return .CONTINUE;
 }
@@ -101,18 +95,11 @@ appiter :: (appstate: *void) -> SDL_AppResult {
     }
 
     if begin_draw(*renderer) {
-        system := get_system(*renderer, simple_system);
-        vkCmdBindPipeline(renderer.cmd, .GRAPHICS, system.pipeline);
-        vkCmdBindDescriptorSets(renderer.cmd, .GRAPHICS, system.pipeline_layout, 0, 1, *system.descriptor_set, 0, null);
-        // vkCmdBindDescriptorSets(renderer.cmd, .GRAPHICS, render_resources.pipeline_layout, 0, 1, *render_resources.descriptor_set, 0, null);
-
-        // push_constant: Push_Constant;
-        // push_constant.mvp = Matrix4_Identity;
-        // push_constant.color = .{0, 0, 0, 1};
-        // push_constant.px_range = font_atlas.distance_range;
-        // vkCmdPushConstants(renderer.cmd, render_resources.pipeline_layout, .VERTEX | .FRAGMENT, 0, size_of(Push_Constant), *push_constant);
-
-        draw_mesh(renderer.cmd, dumb.mesh);
+        ok, pipeline := table_find(*renderer.pipelines, simple_system.pipeline_id);
+        assert(ok);
+        vkCmdBindPipeline(renderer.cmd, .GRAPHICS, pipeline.vk);
+        vkCmdBindDescriptorSets(renderer.cmd, .GRAPHICS, pipeline.layout, 0, 1, *simple_system.descriptor_set, 0, null);
+        draw_mesh(renderer.cmd, square_mesh);
 
         end_draw(*renderer);
     }
@@ -123,8 +110,8 @@ appquit :: (appstate: *void, result: SDL_AppResult) {
     app := cast(*App)appstate;
 
     vkDeviceWaitIdle(app.renderer.device);
-    destroy_mesh(*app.renderer, app.dumb.mesh);
-    destroy_texture(*app.renderer, app.dumb.texture);
+    destroy_mesh(*app.renderer, app.square_mesh);
+    destroy_texture(*app.renderer, app.monkey_texture);
     deinit(*app.renderer);
     SDL_Quit();
 }

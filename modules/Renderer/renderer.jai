@@ -59,8 +59,8 @@ Renderer :: struct {
 
     staging_pool: Staging_Pool;
 
-    next_system_id: System.ID = 1;
-    systems: Table(System.ID, System);
+    next_pipeline_id: Pipeline.ID = 1;
+    pipelines: Table(Pipeline.ID, Pipeline);
 
     Queue_Family_Indices :: struct {
         graphics: u32;
@@ -105,11 +105,10 @@ Renderer :: struct {
         index_buffer:  Buffer;
     }
 
-    System :: struct {
+    Pipeline :: struct {
         ID :: #type,distinct u64;
-        descriptor_set:        VkDescriptorSet;
-        pipeline_layout:       VkPipelineLayout;
-        pipeline:              VkPipeline;
+        vk:     VkPipeline;
+        layout: VkPipelineLayout;
     }
 
     Staging_Pool :: struct {
@@ -249,10 +248,10 @@ deinit :: (using renderer: *Renderer) {
     }
     array_free(buffers_queued_for_destruction);
 
-    for systems {
-        destroy_system(renderer, it);
+    for pipelines {
+        destroy_pipeline(renderer, it);
     }
-    table_reset(*systems);
+    table_reset(*pipelines);
 
     vkDestroyDescriptorSetLayout(device, texture_descriptor_set_layout, vka);
     vkDestroySampler(device, texture_sampler, vka);
@@ -749,13 +748,13 @@ destroy_texture :: (using renderer: *Renderer, texture: Renderer.Texture) {
     vmaDestroyImage(vma, texture.image.vk, texture.image.allocation);
 }
 
-destroy_system :: (using renderer: *Renderer, using system: Renderer.System) {
-    if pipeline_layout {
-        vkDestroyPipelineLayout(device, pipeline_layout, vka);
+destroy_pipeline :: (using renderer: *Renderer, pipeline: Renderer.Pipeline) {
+    if pipeline.layout {
+        vkDestroyPipelineLayout(device, pipeline.layout, vka);
     }
 
-    if pipeline {
-        vkDestroyPipeline(device, pipeline, vka);
+    if pipeline.vk {
+        vkDestroyPipeline(device, pipeline.vk, vka);
     }
 }
 
@@ -863,20 +862,19 @@ make_staging_buffer :: (using renderer: *Renderer, size: u64) -> VkResult, Rende
     return .SUCCESS, staging_buffer;
 }
 
-// This is such a stupid way, WTF!
-make_system :: (renderer: *Renderer, system: Renderer.System) -> Renderer.System.ID {
-    table_add(*renderer.systems, renderer.next_system_id, system);
+make_pipeline :: (renderer: *Renderer, builder: *Pipeline_Builder, pipeline_layout: VkPipelineLayout) -> VkResult, Renderer.Pipeline.ID {
+    pipeline: Renderer.Pipeline;
+    pipeline.layout = pipeline_layout;
+    set_layout(builder, pipeline_layout);
+    result: VkResult;
+    result, pipeline.vk = builder_to_pipeline(builder, renderer);
+    if result return result, 0;
 
-    defer renderer.next_system_id += 1;
+    table_add(*renderer.pipelines, renderer.next_pipeline_id, pipeline);
 
-    return renderer.next_system_id;
-}
+    defer renderer.next_pipeline_id += 1;
 
-get_system :: (renderer: *Renderer, id: Renderer.System.ID) -> Renderer.System {
-    ok, system := table_find(*renderer.systems, id);
-    assert(ok, "Invalid system ID");
-
-    return system;
+    return .SUCCESS, renderer.next_pipeline_id;
 }
 
 #scope_file
