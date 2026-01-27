@@ -20,53 +20,14 @@ SQUARE_VERTICES :: Simple_Vertex.[
 
 SQUARE_INDICES :: u32.[0, 1, 2, 0, 2, 3];
 
-make_simple_system :: (using renderer: *Renderer) -> Renderer.System {
+make_simple_system :: (using renderer: *Renderer) -> Renderer.System.ID {
     system: Renderer.System;
     result: VkResult;
 
-    sampler_create_info := VkSamplerCreateInfo.{
-        magFilter = .LINEAR,
-        minFilter = .LINEAR,
-        mipmapMode = .LINEAR,
-        anisotropyEnable = VK_TRUE,
-        maxAnisotropy  = 8
-    };
-
-    result = check_vk(vkCreateSampler(device, *sampler_create_info, vka, *system.sampler));
-    assert(result == .SUCCESS);
-
-    binding := VkDescriptorSetLayoutBinding.{
-        descriptorType = .COMBINED_IMAGE_SAMPLER,
-        descriptorCount = 1,
-        stageFlags = .FRAGMENT,
-        pImmutableSamplers = null
-    };
-
-    layout_create_info := VkDescriptorSetLayoutCreateInfo.{
-        bindingCount = 1,
-        pBindings = *binding
-    };
-
-    result = check_vk(vkCreateDescriptorSetLayout(device, *layout_create_info, vka, *system.descriptor_set_layout));
-    assert(result == .SUCCESS);
-
-    pool_size := VkDescriptorPoolSize.{
-        type = .COMBINED_IMAGE_SAMPLER,
-        descriptorCount = 1
-    };
-
-    pool_create_info := VkDescriptorPoolCreateInfo.{
-        poolSizeCount = 1,
-        pPoolSizes = *pool_size,
-        maxSets = 1
-    };
-    result = check_vk(vkCreateDescriptorPool(device, *pool_create_info, vka, *system.descriptor_pool));
-    assert(result == .SUCCESS);
-
     allocate_info := VkDescriptorSetAllocateInfo.{
-        descriptorPool = system.descriptor_pool,
+        descriptorPool = persistent_descriptor_pool,
         descriptorSetCount = 1,
-        pSetLayouts = *system.descriptor_set_layout
+        pSetLayouts = *texture_descriptor_set_layout
     };
     result = check_vk(vkAllocateDescriptorSets(device, *allocate_info, *system.descriptor_set));
     assert(result == .SUCCESS);
@@ -83,7 +44,7 @@ make_simple_system :: (using renderer: *Renderer) -> Renderer.System {
     defer deinit(*pb);
 
     ok, shader_module := make_shader_module(renderer, "shaders/texture.slang.spv");
-    if !ok return .{};
+    if !ok return 0;
     defer destroy_shader_module(renderer, shader_module);
 
     add_shader(*pb, shader_module, .VERTEX, "vertex_main");
@@ -108,5 +69,6 @@ make_simple_system :: (using renderer: *Renderer) -> Renderer.System {
     result, system.pipeline = builder_to_pipeline(*pb, renderer);
     assert(result == .SUCCESS);
 
-    return system;
+    id := make_system(renderer, system);
+    return id;
 }

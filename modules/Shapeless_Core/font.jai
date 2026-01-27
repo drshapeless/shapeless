@@ -103,7 +103,7 @@ Font_Vertex :: struct {
     uv: Vector2;
 }
 
-make_font_system :: (renderer: *Renderer) -> Renderer.System {
+make_font_system :: (renderer: *Renderer) -> Renderer.System.ID {
     system: Renderer.System;
     result: VkResult;
 
@@ -191,5 +191,5 @@ make_font_system :: (renderer: *Renderer) -> Renderer.System {
     result, system.pipeline = builder_to_pipeline(*pb, renderer);
     assert(result == .SUCCESS);
 
-    return system;
+    return make_system(renderer, system);
 }

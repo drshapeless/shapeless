@@ -37,12 +37,19 @@ Renderer :: struct {
     // linux, we use descriptor indexing, it still need a descriptor
     // pool, but the same descriptor set can be reuse over and over
     // again. Complicated logic is no longer needed.
-    //
-    // Descriptor Pool should live outside the renderer for this
-    // reason.
 
-    next_pipeline_id: Pipeline.ID = 1;
-    pipelines: Table(Pipeline.ID, Pipeline);
+    // Persistent means the set in this pool is usually not changed
+    // throughout the whole life of the app, like the font atlas
+    // texture
+    persistent_descriptor_pool: VkDescriptorPool;
+
+    // Dynamic means the sets in this pool changes every frames, like
+    // the storage buffer uploaded to GPU to represent the current
+    // array of font characters
+    dynamic_descriptor_pool: VkDescriptorPool;
+
+    texture_sampler: VkSampler;
+    texture_descriptor_set_layout: VkDescriptorSetLayout;
 
     // This is for dynamic rendering
     cmd: VkCommandBuffer;
@@ -51,6 +58,9 @@ Renderer :: struct {
     resize_requested := false;
 
     staging_pool: Staging_Pool;
+
+    next_system_id: System.ID = 1;
+    systems: Table(System.ID, System);
 
     Queue_Family_Indices :: struct {
         graphics: u32;
@@ -83,13 +93,6 @@ Renderer :: struct {
         format: VkFormat;
     }
 
-    Pipeline :: struct {
-        ID :: #type,distinct u64;
-        id:     ID;
-        vk:     VkPipeline;
-        layout: VkPipelineLayout;
-    }
-
     Buffer :: struct {
         vk:         VkBuffer;
         allocation: VmaAllocation;
@@ -103,19 +106,16 @@ Renderer :: struct {
     }
 
     System :: struct {
+        ID :: #type,distinct u64;
         descriptor_set_layout: VkDescriptorSetLayout;
-        descriptor_pool:       VkDescriptorPool;
         descriptor_set:        VkDescriptorSet;
-        sampler:               VkSampler;
         pipeline_layout:       VkPipelineLayout;
         pipeline:              VkPipeline;
     }
 
     Staging_Pool :: struct {
-        // I come up with this number for no reason, just think that
-        // it may be a good idea to use the page size in linux. Can
-        // change it to anything.
-        BLOCK_SIZE :u64 : 4096;
+        // The block size should be adjust by staging pool info reported by the renderer
+        BLOCK_SIZE :u64 : 4 * 1024 * 1024;
 
         buffers: [..] Buffer;
 
@@ -200,6 +200,34 @@ init :: (using renderer: *Renderer, window: *SDL_Window) -> ok:bool {
     result = make_draw_images(renderer, .{xx window_width, xx window_height});
     if result return false;
 
+    // It may not be a good idea to write the pool size here.
+    // But it needs constant fine tune, so be it.
+    persistent_pool_sizes := VkDescriptorPoolSize.[
+    .{
+        type = .UNIFORM_BUFFER,
+        descriptorCount = 1
+    }
+    ];
+
+    result, persistent_descriptor_pool = make_descriptor_pool(renderer, persistent_pool_sizes, 1);
+    if result return false;
+
+    dynamic_pool_sizes := VkDescriptorPoolSize.[
+    .{
+        type = .STORAGE_BUFFER,
+        descriptorCount = xx swapchain.images.count
+    }
+    ];
+
+    result, dynamic_descriptor_pool = make_descriptor_pool(renderer, dynamic_pool_sizes, xx swapchain.images.count);
+    if result return false;
+
+    result, texture_sampler = make_sampler(renderer);
+    if result return false;
+
+    result, texture_descriptor_set_layout = make_descriptor_set_layout(renderer);
+    if result return false;
+
     buffers_queued_for_destruction = NewArray(swapchain.images.count, [..] Buffer);
 
     return true;
@@ -221,6 +249,16 @@ deinit :: (using renderer: *Renderer) {
         array_reset(buffers);
     }
     array_free(buffers_queued_for_destruction);
+
+    for systems {
+        destroy_system(renderer, it);
+    }
+    table_reset(*systems);
+
+    vkDestroyDescriptorSetLayout(device, texture_descriptor_set_layout, vka);
+    vkDestroySampler(device, texture_sampler, vka);
+    vkDestroyDescriptorPool(device, persistent_descriptor_pool, vka);
+    vkDestroyDescriptorPool(device, dynamic_descriptor_pool, vka);
 
     destroy_command_pools(renderer);
     destroy_draw_images(renderer);
@@ -717,14 +755,6 @@ destroy_system :: (using renderer: *Renderer, using system: Renderer.System) {
         vkDestroyDescriptorSetLayout(device, descriptor_set_layout, vka);
     }
 
-    if descriptor_pool {
-        vkDestroyDescriptorPool(device, descriptor_pool, vka);
-    }
-
-    if sampler {
-        vkDestroySampler(device, sampler, vka);
-    }
-
     if pipeline_layout {
         vkDestroyPipelineLayout(device, pipeline_layout, vka);
     }
@@ -836,6 +866,22 @@ make_staging_buffer :: (using renderer: *Renderer, size: u64) -> VkResult, Rende
     staging_pool.current_pos += size;
     staging_pool.bytes_left -= size;
     return .SUCCESS, staging_buffer;
+}
+
+// This is such a stupid way, WTF!
+make_system :: (renderer: *Renderer, system: Renderer.System) -> Renderer.System.ID {
+    table_add(*renderer.systems, renderer.next_system_id, system);
+
+    defer renderer.next_system_id += 1;
+
+    return renderer.next_system_id;
+}
+
+get_system :: (renderer: *Renderer, id: Renderer.System.ID) -> Renderer.System {
+    ok, system := table_find(*renderer.systems, id);
+    assert(ok, "Invalid system ID");
+
+    return system;
 }
 
 #scope_file
@@ -1027,9 +1073,12 @@ make_device :: (renderer: *Renderer, device_extensions: [] *u8) -> VkResult, VkD
 
     features12 := VkPhysicalDeviceVulkan12Features.{
         pNext = *features13,
-        bufferDeviceAddress = VK_TRUE,
-        descriptorIndexing = VK_TRUE,
-        scalarBlockLayout = VK_TRUE
+        bufferDeviceAddress                           = VK_TRUE,
+        descriptorIndexing                            = VK_TRUE,
+        scalarBlockLayout                             = VK_TRUE,
+        runtimeDescriptorArray                        = VK_TRUE,
+        descriptorBindingVariableDescriptorCount      = VK_TRUE,
+        descriptorBindingStorageBufferUpdateAfterBind = VK_TRUE
     };
 
     device_features := VkPhysicalDeviceFeatures2.{
@@ -1397,7 +1446,51 @@ destroy_staging_pool :: (using renderer: *Renderer) {
         destroy_buffer(vma, it);
     }
 
-    log("Staging pool info:\nBuffer count: %, Max buffer size in staging pool: %, bytes left: %", staging_pool.buffers.count, max_buffer_size, staging_pool.bytes_left);
+    log("Staging pool info:\nBuffer count: %, Max buffer size in staging pool: %", staging_pool.buffers.count, max_buffer_size);
 
     array_free(staging_pool.buffers);
+}
+
+make_descriptor_pool :: (renderer: *Renderer, pool_sizes: [] VkDescriptorPoolSize, max_sets: u32) -> VkResult, VkDescriptorPool {
+    pool_create_info := VkDescriptorPoolCreateInfo.{
+        maxSets = max_sets,
+        poolSizeCount = xx pool_sizes.count,
+        pPoolSizes = pool_sizes.data
+    };
+
+    pool: VkDescriptorPool;
+    result := check_vk(vkCreateDescriptorPool(renderer.device, *pool_create_info, renderer.vka, *pool));
+    return result, pool;
+}
+
+make_sampler :: (renderer: *Renderer) -> VkResult, VkSampler {
+    sampler_create_info := VkSamplerCreateInfo.{
+        magFilter = .LINEAR,
+        minFilter = .LINEAR,
+        mipmapMode = .LINEAR,
+        anisotropyEnable = VK_TRUE,
+        maxAnisotropy  = 8
+    };
+
+    sampler: VkSampler;
+    result := check_vk(vkCreateSampler(renderer.device, *sampler_create_info, renderer.vka, *sampler));
+    return result, sampler;
+}
+
+make_descriptor_set_layout :: (renderer: *Renderer) -> VkResult, VkDescriptorSetLayout {
+    binding := VkDescriptorSetLayoutBinding.{
+        descriptorType = .COMBINED_IMAGE_SAMPLER,
+        descriptorCount = 1,
+        stageFlags = .FRAGMENT,
+        pImmutableSamplers = null
+    };
+
+    layout_create_info := VkDescriptorSetLayoutCreateInfo.{
+        bindingCount = 1,
+        pBindings = *binding
+    };
+
+    layout: VkDescriptorSetLayout;
+    result := check_vk(vkCreateDescriptorSetLayout(renderer.device, *layout_create_info, renderer.vka, *layout));
+    return result, layout;
 }
