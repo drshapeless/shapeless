@@ -13,7 +13,6 @@ Renderer :: struct {
     command_pool:    VkCommandPool;
 
     buffers_queued_for_destruction: [] [..] Buffer;
-    textures_for_destruction: [..] Texture;
 
     swapchain:       Swapchain;
     frames:          [] Frame_Data;
@@ -42,11 +41,6 @@ Renderer :: struct {
     // throughout the whole life of the app, like the font atlas
     // texture
     persistent_descriptor_pool: VkDescriptorPool;
-
-    // Dynamic means the sets in this pool changes every frames, like
-    // the storage buffer uploaded to GPU to represent the current
-    // array of font characters
-    dynamic_descriptor_pool: VkDescriptorPool;
 
     texture_sampler: VkSampler;
     texture_descriptor_set_layout: VkDescriptorSetLayout;
@@ -96,8 +90,9 @@ Renderer :: struct {
     Buffer :: struct {
         vk:         VkBuffer;
         allocation: VmaAllocation;
-        offset:     u64;
         size:       u64;
+        mapped_ptr: *void;
+        address:    VkDeviceAddress;
     }
 
     Mesh :: struct {
@@ -122,13 +117,6 @@ Renderer :: struct {
 
         // -1 means there is no buffer
         buffer_index: s64 = -1;
-    }
-
-    Mapped_Buffer :: struct {
-        vk: VkBuffer;
-        allocation: VmaAllocation;
-        info: VmaAllocationInfo;
-        device_address: VkDeviceAddress;
     }
 }
 
@@ -190,7 +178,7 @@ init :: (using renderer: *Renderer, window: *SDL_Window) -> ok:bool {
     result, vma = make_vma(instance, physical_device, device);
     if result return false;
 
-    result, staging_pool = make_staging_pool(vma);
+    result, staging_pool = make_staging_pool(renderer);
     if result return false;
 
     result, command_pool = make_command_pools(renderer);
@@ -217,16 +205,6 @@ init :: (using renderer: *Renderer, window: *SDL_Window) -> ok:bool {
     result, persistent_descriptor_pool = make_descriptor_pool(renderer, persistent_pool_sizes, 10);
     if result return false;
 
-    dynamic_pool_sizes := VkDescriptorPoolSize.[
-    .{
-        type = .STORAGE_BUFFER,
-        descriptorCount = xx swapchain.images.count
-    }
-    ];
-
-    result, dynamic_descriptor_pool = make_descriptor_pool(renderer, dynamic_pool_sizes, xx swapchain.images.count);
-    if result return false;
-
     result, texture_sampler = make_sampler(renderer);
     if result return false;
 
@@ -240,11 +218,6 @@ init :: (using renderer: *Renderer, window: *SDL_Window) -> ok:bool {
 
 deinit :: (using renderer: *Renderer) {
     if device vkDeviceWaitIdle(device);
-
-    for texture : textures_for_destruction {
-        destroy_texture(renderer, texture);
-    }
-    array_reset(*textures_for_destruction);
 
     for * buffers: buffers_queued_for_destruction {
         for buffers.* {
@@ -263,7 +236,6 @@ deinit :: (using renderer: *Renderer) {
     vkDestroyDescriptorSetLayout(device, texture_descriptor_set_layout, vka);
     vkDestroySampler(device, texture_sampler, vka);
     vkDestroyDescriptorPool(device, persistent_descriptor_pool, vka);
-    vkDestroyDescriptorPool(device, dynamic_descriptor_pool, vka);
 
     destroy_command_pools(renderer);
     destroy_draw_images(renderer);
@@ -579,22 +551,33 @@ set_clear_color :: (using renderer: *Renderer, color: [4]float) {
     clear_color = color;
 }
 
-make_buffer :: (vma: VmaAllocator, size: VkDeviceSize, buffer_usage: VkBufferUsageFlags, memory_usage: VmaMemoryUsage = .AUTO, flags: VmaAllocationCreateFlags = .MAPPED_BIT) -> VkResult, Renderer.Buffer {
+// All buffer are mapped and randomly accessed by default.
+// In modern GPU, most of the GPU memory are accessible by the CPU.
+// In M-series macOS, all of the memory are accessible by CPU.
+make_buffer :: (using renderer: *Renderer, size: VkDeviceSize, buffer_usage: VkBufferUsageFlags, memory_usage: VmaMemoryUsage = .AUTO, flags: VmaAllocationCreateFlags = 0) -> VkResult, Renderer.Buffer {
     buffer_info := VkBufferCreateInfo.{
-        size = size,
-        usage = buffer_usage,
+        size        = size,
+        usage       = buffer_usage | .SHADER_DEVICE_ADDRESS,
         sharingMode = .EXCLUSIVE
     };
 
     alloc_create_info := VmaAllocationCreateInfo.{
         usage = memory_usage,
-        flags = flags
+        flags = flags | .MAPPED_BIT | .HOST_ACCESS_RANDOM_BIT
     };
 
-    buffer: Renderer.Buffer;
-    buffer.size = size;
-    alloc_info: VmaAllocationInfo; // TODO: Why are you here?
-    result := check_vk(vmaCreateBuffer(vma, *buffer_info, *alloc_create_info, *buffer.vk, *buffer.allocation, *alloc_info));
+    buffer := Renderer.Buffer.{
+        size = size
+    };
+    allocation_info: VmaAllocationInfo;
+    result := check_vk(vmaCreateBuffer(vma, *buffer_info, *alloc_create_info, *buffer.vk, *buffer.allocation, *allocation_info));
+    buffer.mapped_ptr = allocation_info.pMappedData;
+
+    address_info := VkBufferDeviceAddressInfo.{
+        buffer = buffer.vk
+    };
+    buffer.address = vkGetBufferDeviceAddress(device, *address_info);
+
     return result, buffer;
 }
 
@@ -602,28 +585,7 @@ destroy_buffer :: (vma: VmaAllocator, buffer: Renderer.Buffer) {
     vmaDestroyBuffer(vma, buffer.vk, buffer.allocation);
 }
 
-copy_to_device_memory :: (vma: VmaAllocator, buffer: Renderer.Buffer, source: *void, size: VkDeviceSize) -> VkResult {
-    assert(buffer.size == size);
-    data: *void;
-    result := check_vk(vmaMapMemory(vma, buffer.allocation, *data));
-    if result return result;
-
-    memcpy(data + buffer.offset, source, xx size);
-    vmaUnmapMemory(vma, buffer.allocation);
-
-    return .SUCCESS;
-}
-
-copy_buffer :: (cmd: VkCommandBuffer, source: Renderer.Buffer, destination: Renderer.Buffer) {
-    assert(source.size == destination.size);
-    region := VkBufferCopy.{
-        srcOffset = source.offset,
-        size = xx source.size
-    };
-    vkCmdCopyBuffer(cmd, source.vk, destination.vk, 1, *region);
-}
-
-copy_buffer_to_image :: (command: VkCommandBuffer, source: Renderer.Buffer, destination: VkImage, extent: VkExtent2D) {
+copy_buffer_to_image :: (command: VkCommandBuffer, source: Renderer.Buffer, offset: u64, destination: VkImage, extent: VkExtent2D) {
     barrier := VkImageMemoryBarrier2.{
         srcStageMask     = .TOP_OF_PIPE,
         srcAccessMask    = 0,
@@ -648,7 +610,7 @@ copy_buffer_to_image :: (command: VkCommandBuffer, source: Renderer.Buffer, dest
     vkCmdPipelineBarrier2(command, *dependency_info);
 
     region := VkBufferImageCopy2.{
-        bufferOffset = source.offset,
+        bufferOffset = offset,
         bufferRowLength = 0,
         bufferImageHeight = 0,
         imageSubresource = .{.COLOR, 0, 0, 1},
@@ -676,18 +638,13 @@ copy_buffer_to_image :: (command: VkCommandBuffer, source: Renderer.Buffer, dest
     vkCmdPipelineBarrier2(command, *dependency_info);
 }
 
-make_buffer_copying_data :: (using renderer: *Renderer, command: VkCommandBuffer, data: [] $T, buffer_usage: VkBufferUsageFlags) -> VkResult, Renderer.Buffer {
-    size: VkDeviceSize = xx (data.count * size_of(T));
-    result, staging_buffer := make_staging_buffer(renderer, size);
+// Is this function necessary?
+make_buffer_copying_data :: (using renderer: *Renderer, data: [] $T, buffer_usage: VkBufferUsageFlags) -> VkResult, Renderer.Buffer {
+    size := data.count * size_of(T);
+    result, buffer := make_buffer(renderer, xx size, buffer_usage);
     if result return result, .{};
 
-    result = copy_to_device_memory(vma, staging_buffer, data.data, size);
-    if result return result, .{};
-
-    result=, buffer := make_buffer(vma, size, .TRANSFER_DST | buffer_usage, .GPU_ONLY);
-    if result return result, .{};
-
-    copy_buffer(command, staging_buffer, buffer);
+    memcpy(buffer.mapped_ptr, data.data, size);
     return result, buffer;
 }
 
@@ -731,25 +688,6 @@ end_single_time_commands :: (using renderer: *Renderer, command: VkCommandBuffer
     return .SUCCESS;
 }
 
-make_image_view :: (using renderer: *Renderer, image: VkImage, format: VkFormat, aspect_flag: VkImageAspectFlags, layer_count: u32 = 1, mip_levels: u32 = 1) -> VkResult, VkImageView {
-    view_info := VkImageViewCreateInfo.{
-        image = image,
-        viewType = ifx layer_count > 1 then .e2D_ARRAY else .e2D,
-        format = format,
-        subresourceRange = .{
-            aspectMask = aspect_flag,
-            baseMipLevel = 0,
-            levelCount = mip_levels,
-            baseArrayLayer = 0,
-            layerCount = layer_count,
-        },
-    };
-
-    view: VkImageView;
-    result := check_vk(vkCreateImageView(device, *view_info, vka, *view));
-    return result, view;
-}
-
 destroy_texture :: (using renderer: *Renderer, texture: Renderer.Texture) {
     vkDestroyImageView(device, texture.image_view, vka);
     vmaDestroyImage(vma, texture.image.vk, texture.image.allocation);
@@ -767,17 +705,11 @@ destroy_pipeline :: (using renderer: *Renderer, pipeline: Renderer.Pipeline) {
 
 make_mesh :: (using renderer: *Renderer, vertices: []$T, indices: []u32) -> VkResult, Renderer.Mesh {
     mesh: Renderer.Mesh;
-
-    result, command := begin_single_time_commands(renderer);
+    result: VkResult;
+    result, mesh.vertex_buffer = make_buffer_copying_data(renderer, vertices, .VERTEX_BUFFER);
     if result return result, .{};
 
-    result, mesh.vertex_buffer = make_buffer_copying_data(renderer, command, vertices, .VERTEX_BUFFER);
-    if result return result, .{};
-
-    result, mesh.index_buffer = make_buffer_copying_data(renderer, command, indices, .INDEX_BUFFER);
-    if result return result, .{};
-
-    result = end_single_time_commands(renderer, command);
+    result, mesh.index_buffer = make_buffer_copying_data(renderer, indices, .INDEX_BUFFER);
     if result return result, .{};
 
     return .SUCCESS, mesh;
@@ -811,25 +743,21 @@ make_texture :: (using renderer: *Renderer, data: *void, extent: VkExtent2D) -> 
 
     data_size := extent.width * extent.height * 4;
     staging_buffer: Renderer.Buffer;
-    result, staging_buffer = make_staging_buffer(renderer, data_size);
-
+    offset: u64;
+    result, staging_buffer, offset = allocate_staging_buffer(renderer, data_size);
     if result {
         destroy_texture(renderer, texture);
         return result, .{};
     }
 
-    result = copy_to_device_memory(vma, staging_buffer, data, data_size);
-    if result {
-        destroy_texture(renderer, texture);
-        return result, .{};
-    }
+    memcpy(staging_buffer.mapped_ptr + offset, data, data_size);
 
     result=, command := begin_single_time_commands(renderer);
     if result {
         destroy_texture(renderer, texture);
         return result, .{};
     }
-    copy_buffer_to_image(command, staging_buffer, texture.image.vk, extent);
+    copy_buffer_to_image(command, staging_buffer, offset, texture.image.vk, extent);
     result = end_single_time_commands(renderer, command);
     if result {
         destroy_texture(renderer, texture);
@@ -861,12 +789,12 @@ resize_callback :: (using renderer: *Renderer, extent: VkExtent2D) {
     resize_requested = false;
 }
 
-make_staging_buffer :: (using renderer: *Renderer, size: u64) -> VkResult, Renderer.Buffer {
+allocate_staging_buffer :: (using renderer: *Renderer, size: u64) -> VkResult, Renderer.Buffer, u64 {
     while staging_pool.bytes_left < size {
         // First check if the current buffer is the last buffer
         if staging_pool.buffer_index == staging_pool.buffers.count - 1 {
-            result := expand_staging_pool(*staging_pool, vma, size);
-            if result return result, .{};
+            result := expand_staging_pool(renderer, *staging_pool, size);
+            if result return result, .{}, 0;
         } else {
             staging_pool.buffer_index += 1;
             staging_pool.current_pos = 0;
@@ -875,12 +803,12 @@ make_staging_buffer :: (using renderer: *Renderer, size: u64) -> VkResult, Rende
     }
 
     staging_buffer := staging_pool.buffers[staging_pool.buffer_index];
-    staging_buffer.offset = staging_pool.current_pos;
     staging_buffer.size = size;
 
+    offset := staging_pool.current_pos;
     staging_pool.current_pos += size;
     staging_pool.bytes_left -= size;
-    return .SUCCESS, staging_buffer;
+    return .SUCCESS, staging_buffer, offset;
 }
 
 make_pipeline :: (renderer: *Renderer, builder: *Pipeline_Builder, pipeline_layout: VkPipelineLayout) -> VkResult, Renderer.Pipeline.ID {
@@ -896,30 +824,6 @@ make_pipeline :: (renderer: *Renderer, builder: *Pipeline_Builder, pipeline_layo
     defer renderer.next_pipeline_id += 1;
 
     return .SUCCESS, renderer.next_pipeline_id;
-}
-
-make_mapped_buffer :: (using renderer: *Renderer, size: u64) -> VkResult, Renderer.Mapped_Buffer {
-    buffer_create_info := VkBufferCreateInfo.{
-        size = size,
-        usage = .SHADER_DEVICE_ADDRESS | .STORAGE_BUFFER | .VERTEX_BUFFER
-    };
-
-    allocation_create_info := VmaAllocationCreateInfo.{
-        usage = .AUTO,
-        flags = .HOST_ACCESS_SEQUENTIAL_WRITE_BIT | .MAPPED_BIT
-    };
-
-    mapped_buffer: Renderer.Mapped_Buffer;
-    result := check_vk(vmaCreateBuffer(vma, *buffer_create_info, *allocation_create_info, *mapped_buffer.vk, *mapped_buffer.allocation, *mapped_buffer.info));
-    if result return result, .{};
-
-    address_info := VkBufferDeviceAddressInfo.{
-        buffer = mapped_buffer.vk
-    };
-
-    mapped_buffer.device_address = vkGetBufferDeviceAddress(device, *address_info);
-
-    return .SUCCESS, mapped_buffer;
 }
 
 #scope_file
@@ -1345,6 +1249,25 @@ make_image :: (
     return result, .{vk = image, allocation = allocation};
 }
 
+make_image_view :: (using renderer: *Renderer, image: VkImage, format: VkFormat, aspect_flag: VkImageAspectFlags, layer_count: u32 = 1, mip_levels: u32 = 1) -> VkResult, VkImageView {
+    view_info := VkImageViewCreateInfo.{
+        image = image,
+        viewType = ifx layer_count > 1 then .e2D_ARRAY else .e2D,
+        format = format,
+        subresourceRange = .{
+            aspectMask = aspect_flag,
+            baseMipLevel = 0,
+            levelCount = mip_levels,
+            baseArrayLayer = 0,
+            layerCount = layer_count,
+        },
+    };
+
+    view: VkImageView;
+    result := check_vk(vkCreateImageView(device, *view_info, vka, *view));
+    return result, view;
+}
+
 find_depth_format :: (using renderer: *Renderer) -> VkFormat {
     depth_formats :: VkFormat.[.D32_SFLOAT_S8_UINT, .D24_UNORM_S8_UINT];
 
@@ -1441,13 +1364,13 @@ acquire_next_image_index :: (using renderer: *Renderer) -> bool {
     return true;
 }
 
-expand_staging_pool :: (pool: *Renderer.Staging_Pool, vma: VmaAllocator, size: u64) -> VkResult {
+expand_staging_pool :: (renderer: *Renderer, pool: *Renderer.Staging_Pool, size: u64) -> VkResult {
     real_size := pool.BLOCK_SIZE;
     while size > real_size {
         real_size *= 2;
     }
 
-    result, buffer := make_buffer(vma, real_size, .TRANSFER_SRC, .CPU_ONLY);
+    result, buffer := make_buffer(renderer, real_size, .TRANSFER_SRC);
     if result return result;
 
     array_add(*pool.buffers, buffer);
@@ -1458,10 +1381,10 @@ expand_staging_pool :: (pool: *Renderer.Staging_Pool, vma: VmaAllocator, size: u
     return .SUCCESS;
 }
 
-make_staging_pool :: (vma: VmaAllocator) -> VkResult, Renderer.Staging_Pool {
+make_staging_pool :: (renderer: *Renderer) -> VkResult, Renderer.Staging_Pool {
     staging_pool: Renderer.Staging_Pool;
 
-    result := expand_staging_pool(*staging_pool, vma, staging_pool.BLOCK_SIZE);
+    result := expand_staging_pool(renderer, *staging_pool, staging_pool.BLOCK_SIZE);
     if result return result, .{};
 
     return .SUCCESS, staging_pool;
