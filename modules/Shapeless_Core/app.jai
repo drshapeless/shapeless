@@ -14,9 +14,11 @@ App :: struct {
 
     font_atlas: Font_Atlas;
     simple_system: Simple_System;
+    font_system: Font_System;
 
     monkey_texture: Renderer.Texture;
     square_mesh: Renderer.Mesh;
+
 }
 
 appinit :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
@@ -41,6 +43,7 @@ appinit :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
     set_clear_color(*renderer, .[0.1, 0.2, 0.3, 1.0]);
 
     simple_system = make_simple_system(*renderer);
+    font_system = make_font_system(*renderer);
 
     result: VkResult;
     result, square_mesh = make_mesh(*renderer, Simple_System.SQUARE_VERTICES, Simple_System.SQUARE_INDICES);

@@ -123,6 +123,13 @@ Renderer :: struct {
         // -1 means there is no buffer
         buffer_index: s64 = -1;
     }
+
+    Mapped_Buffer :: struct {
+        vk: VkBuffer;
+        allocation: VmaAllocation;
+        info: VmaAllocationInfo;
+        device_address: VkDeviceAddress;
+    }
 }
 
 init :: (using renderer: *Renderer, window: *SDL_Window) -> ok:bool {
@@ -203,11 +210,11 @@ init :: (using renderer: *Renderer, window: *SDL_Window) -> ok:bool {
     persistent_pool_sizes := VkDescriptorPoolSize.[
     .{
         type = .COMBINED_IMAGE_SAMPLER,
-        descriptorCount = 1
+        descriptorCount = 10
     }
     ];
 
-    result, persistent_descriptor_pool = make_descriptor_pool(renderer, persistent_pool_sizes, 1);
+    result, persistent_descriptor_pool = make_descriptor_pool(renderer, persistent_pool_sizes, 10);
     if result return false;
 
     dynamic_pool_sizes := VkDescriptorPoolSize.[
@@ -581,7 +588,7 @@ make_buffer :: (vma: VmaAllocator, size: VkDeviceSize, buffer_usage: VkBufferUsa
 
     alloc_create_info := VmaAllocationCreateInfo.{
         usage = memory_usage,
-        flags = .MAPPED_BIT
+        flags = flags
     };
 
     buffer: Renderer.Buffer;
@@ -832,6 +839,20 @@ make_texture :: (using renderer: *Renderer, data: *void, extent: VkExtent2D) -> 
     return .SUCCESS, texture;
 }
 
+// This function relies on SDL_image
+make_texture_from_file :: (using renderer: *Renderer, file_path: string) -> VkResult, Renderer.Texture {
+    original_surface := IMG_Load(to_c_string(file_path));
+    assert(original_surface != null);
+    defer SDL_DestroySurface(original_surface);
+
+    converted_surface := SDL_ConvertSurface(original_surface, .RGBA32);
+    assert(converted_surface != null);
+    defer SDL_DestroySurface(converted_surface);
+
+    result, texture := make_texture(renderer, converted_surface.pixels, .{xx converted_surface.w, xx converted_surface.h});
+    return result, texture;
+}
+
 resize_callback :: (using renderer: *Renderer, extent: VkExtent2D) {
     vkDeviceWaitIdle(device);
     destroy_draw_images(renderer);
@@ -875,6 +896,30 @@ make_pipeline :: (renderer: *Renderer, builder: *Pipeline_Builder, pipeline_layo
     defer renderer.next_pipeline_id += 1;
 
     return .SUCCESS, renderer.next_pipeline_id;
+}
+
+make_mapped_buffer :: (using renderer: *Renderer, size: u64) -> VkResult, Renderer.Mapped_Buffer {
+    buffer_create_info := VkBufferCreateInfo.{
+        size = size,
+        usage = .SHADER_DEVICE_ADDRESS | .STORAGE_BUFFER | .VERTEX_BUFFER
+    };
+
+    allocation_create_info := VmaAllocationCreateInfo.{
+        usage = .AUTO,
+        flags = .HOST_ACCESS_SEQUENTIAL_WRITE_BIT | .MAPPED_BIT
+    };
+
+    mapped_buffer: Renderer.Mapped_Buffer;
+    result := check_vk(vmaCreateBuffer(vma, *buffer_create_info, *allocation_create_info, *mapped_buffer.vk, *mapped_buffer.allocation, *mapped_buffer.info));
+    if result return result, .{};
+
+    address_info := VkBufferDeviceAddressInfo.{
+        buffer = mapped_buffer.vk
+    };
+
+    mapped_buffer.device_address = vkGetBufferDeviceAddress(device, *address_info);
+
+    return .SUCCESS, mapped_buffer;
 }
 
 #scope_file
