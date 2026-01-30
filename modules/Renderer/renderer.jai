@@ -1261,7 +1261,7 @@ make_image :: (
     };
 
     alloc_info := VmaAllocationCreateInfo.{
-        flags = .DEDICATED_MEMORY_BIT,
+        // flags = .DEDICATED_MEMORY_BIT,
         usage = memory_usage,
         // requiredFlags = .DEVICE_LOCAL
     };
