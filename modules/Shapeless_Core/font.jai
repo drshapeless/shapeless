@@ -1,18 +1,3 @@
-Font_Atlas :: struct {
-    distance_range: float32;
-    em_size:        float32;
-    line_height:    float32;
-    width:          s32;
-    height:         s32;
-    glyphs:         Table(u32, Glyph); // key is unicode in u64
-
-    Glyph :: struct {
-        advance:      float32;
-        plane_bounds: Vector4;
-        atlas_bounds: Vector4;
-    }
-}
-
 MSDF :: struct {
     atlas:   Atlas;
     metrics: Metrics;
@@ -75,43 +60,32 @@ load_msdf :: (file_path: string) -> MSDF {
     return msdf;
 }
 
-msdf_to_font_atlas :: (msdf: MSDF) -> Font_Atlas {
-    fa: Font_Atlas;
-
-    fa.distance_range = msdf.atlas.distanceRange;
-    fa.em_size = msdf.metrics.emSize;
-    fa.line_height = msdf.metrics.lineHeight;
-    fa.width = msdf.atlas.width;
-    fa.height = msdf.atlas.height;
-
-    for msdf.glyphs {
-        glyph: Font_Atlas.Glyph;
-        glyph.advance = it.advance;
-        glyph.plane_bounds = bound_to_vector4(it.planeBounds);
-        glyph.atlas_bounds = bound_to_vector4(it.atlasBounds);
-
-        // I am not usin table_add because it would add multiple value
-        // of the same key into the table
-        table_set(*fa.glyphs, it.unicode, glyph);
-    }
-
-    return fa;
-}
-
 Font_System :: struct {
-    pipeline_id: Renderer.Pipeline.ID;
+    pipeline_id:    Renderer.Pipeline.ID;
+    pipeline:       Renderer.Pipeline;
     descriptor_set: VkDescriptorSet;
-    msdf_texture: Renderer.Texture;
-    msdf_atlas:   Font_Atlas;
+    msdf_texture:   Renderer.Texture;
+    msdf:           MSDF;
+    msdf_texture_width: float32;
+    msdf_texture_height: float32;
+    glyphs:         Table(u32, Glyph);
 
     block_buffer: Renderer.Buffer;
 
+    Glyph :: struct {
+        advance:      float32;
+        plane_bounds: Vector4;
+        atlas_bounds: Vector4;
+    }
+
     Vertex_Instance :: struct {
-        offset:   Vector2;
-        color:    Vector3;
+        atlas_bounds: Vector4;
     }
 
     Push_Constant :: struct {
+        px_range:     float32;
+        bg_color:     Vector4;
+        fg_color:     Vector4;
         ptr0: VkDeviceAddress; // I currently don't have a better name
     }
 }
@@ -122,7 +96,15 @@ make_font_system :: (using renderer: *Renderer) -> Font_System {
 
     msdf := load_msdf("assets/font/hack/hack.json");
     log("loaded % glyphs", msdf.glyphs.count);
-    system.msdf_atlas = msdf_to_font_atlas(msdf);
+
+    for msdf.glyphs {
+        glyph: Font_System.Glyph;
+        glyph.advance = it.advance;
+        glyph.plane_bounds = bound_to_vector4(it.planeBounds);
+        glyph.atlas_bounds = bound_to_vector4(it.atlasBounds);
+
+        table_set(*system.glyphs, it.unicode, glyph);
+    }
 
     result, system.msdf_texture = make_texture_from_file(renderer, "assets/font/hack/hack.png");
     assert(result == .SUCCESS);
@@ -185,8 +167,8 @@ make_font_system :: (using renderer: *Renderer) -> Font_System {
     result, system.block_buffer = make_buffer(renderer, 1024, .STORAGE_BUFFER);
     assert(result == .SUCCESS);
 
-    yellow := Vector4.{0, 1, 1, 1};
-    memcpy(system.block_buffer.mapped_ptr, *yellow, size_of(Vector4));
+    ok, system.pipeline = table_find(*pipelines, system.pipeline_id);
+    assert(ok);
 
     return system;
 }
@@ -194,4 +176,26 @@ make_font_system :: (using renderer: *Renderer) -> Font_System {
 destroy_font_system :: (renderer: *Renderer, system: *Font_System) {
     destroy_buffer(renderer.vma, system.block_buffer);
     destroy_texture(renderer, system.msdf_texture);
+}
+
+draw_text :: (command: VkCommandBuffer, system: *Font_System, text: string) {
+    len := text.count;
+
+    for c: text {
+        ok, glyph := table_find(*system.glyphs, xx c);
+        assert(ok);
+        memcpy(system.block_buffer.mapped_ptr + it_index * size_of(Font_System.Vertex_Instance), *glyph.atlas_bounds, size_of(Vector4));
+    }
+
+    ps := Font_System.Push_Constant.{
+        px_range = 2,
+        bg_color = .{0, 0, 0, 1},
+        fg_color = .{1, 0, 0, 1}, // RED
+        ptr0     = system.block_buffer.address
+    };
+
+    vkCmdBindPipeline(command, .GRAPHICS, system.pipeline);
+    vkCmdBindDescriptorSets(command, .GRAPHICS, system.pipeline.layout, 0, 1, *system.descriptor_set, 0, null);
+    vkCmdPushConstants(command, system.pipeline.layout, .ALL_GRAPHICS, 0, size_of(Font_System.Push_Constant), *ps);
+    vkCmdDraw(command, 6, xx text.count, 0, 0);
 }

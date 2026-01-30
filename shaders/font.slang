@@ -1,4 +1,7 @@
 struct Push_Constant {
+    float    px_range;
+    float4   bg_color;
+    float4   fg_color;
     uint64_t ptr0;
 };
 
@@ -31,7 +34,7 @@ Vertex_Output vertex_main(uint vertex_id : SV_VertexID, uint instance_id : SV_In
 
     Vertex v = SQUARE_VERTICES[SQUARE_INDICES[vertex_id]];
     output.pos = float4(v.pos, 0, 1);
-    output.uv = v.uv;
+
     return output;
 }
 
