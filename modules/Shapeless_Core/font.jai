@@ -102,6 +102,7 @@ Font_System :: struct {
     pipeline_id: Renderer.Pipeline.ID;
     descriptor_set: VkDescriptorSet;
     msdf_texture: Renderer.Texture;
+    msdf_atlas:   Font_Atlas;
 
     Vertex_Instance :: struct {
         offset:   Vector2;
@@ -116,6 +117,13 @@ Font_System :: struct {
 make_font_system :: (using renderer: *Renderer) -> Font_System {
     system: Font_System;
     result: VkResult;
+
+    msdf := load_msdf("assets/font/hack/hack.json");
+    log("loaded % glyphs", msdf.glyphs.count);
+    system.msdf_atlas = msdf_to_font_atlas(msdf);
+
+    result, system.msdf_texture = make_texture_from_file(renderer, "assets/font/hack/hack.png");
+    assert(result == .SUCCESS);
 
     descriptor_set_allocate_info := VkDescriptorSetAllocateInfo.{
         descriptorPool = persistent_descriptor_pool,
@@ -167,4 +175,8 @@ make_font_system :: (using renderer: *Renderer) -> Font_System {
     result, system.pipeline_id = make_pipeline(renderer, *pb, pipeline_layout);
     assert(result == .SUCCESS);
     return system;
+}
+
+destroy_font_system :: (renderer: *Renderer, system: *Font_System) {
+    destroy_texture(renderer, system.msdf_texture);
 }

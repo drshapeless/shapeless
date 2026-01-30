@@ -1023,8 +1023,15 @@ make_device :: (renderer: *Renderer, device_extensions: [] *u8) -> VkResult, VkD
         descriptorBindingStorageBufferUpdateAfterBind = VK_TRUE
     };
 
-    device_features := VkPhysicalDeviceFeatures2.{
+    features11 := VkPhysicalDeviceVulkan11Features.{
         pNext = *features12,
+        // This extension is necessary because how slang shader
+        // compute SV_VertexID and SV_InstanceID
+        shaderDrawParameters = VK_TRUE
+    };
+
+    device_features := VkPhysicalDeviceFeatures2.{
+        pNext = *features11,
         features = .{
             samplerAnisotropy = VK_TRUE,
             fillModeNonSolid = VK_TRUE

@@ -12,13 +12,11 @@ App :: struct {
     current_buffer_index: s64;
     frames: [..] Frame;
 
-    font_atlas: Font_Atlas;
     simple_system: Simple_System;
     font_system: Font_System;
 
     monkey_texture: Renderer.Texture;
     square_mesh: Renderer.Mesh;
-
 }
 
 appinit :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
@@ -27,13 +25,7 @@ appinit :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
     ok := SDL_Init(.VIDEO);
     assert(ok, "Cannot init SDL %", to_string(SDL_GetError()));
 
-    msdf := load_msdf("assets/font/hack/hack.json");
-
-    log("loaded % glyphs", msdf.glyphs.count);
-
     using app;
-    font_atlas = msdf_to_font_atlas(msdf);
-
     win = SDL_CreateWindow("Shapeless", 800, 600, .RESIZABLE | .VULKAN);
     assert(win != null, "Cannot create window %", to_string(SDL_GetError()));
 
@@ -49,14 +41,7 @@ appinit :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
     result, square_mesh = make_mesh(*renderer, Simple_System.SQUARE_VERTICES, Simple_System.SQUARE_INDICES);
     if result return .FAILURE;
 
-    monkey_surface := IMG_Load("assets/longhairmonkey.jpg");
-    assert(monkey_surface != null);
-    defer SDL_DestroySurface(monkey_surface);
-    converted_surface := SDL_ConvertSurface(monkey_surface, .RGBA32);
-    assert(converted_surface != null);
-    defer SDL_DestroySurface(converted_surface);
-
-    result, monkey_texture = make_texture(*renderer, converted_surface.pixels, .{xx converted_surface.w, xx converted_surface.h});
+    result, monkey_texture = make_texture_from_file(*renderer, "assets/longhairmonkey.jpg");
     assert(result == .SUCCESS);
 
     writer: Descriptor_Writer;
@@ -98,11 +83,12 @@ appiter :: (appstate: *void) -> SDL_AppResult {
     }
 
     if begin_draw(*renderer) {
-        ok, pipeline := table_find(*renderer.pipelines, simple_system.pipeline_id);
+        ok, pipeline := table_find(*renderer.pipelines, font_system.pipeline_id);
         assert(ok);
         vkCmdBindPipeline(renderer.cmd, .GRAPHICS, pipeline.vk);
-        vkCmdBindDescriptorSets(renderer.cmd, .GRAPHICS, pipeline.layout, 0, 1, *simple_system.descriptor_set, 0, null);
-        draw_mesh(renderer.cmd, square_mesh);
+        vkCmdBindDescriptorSets(renderer.cmd, .GRAPHICS, pipeline.layout, 0, 1, *font_system.descriptor_set, 0, null);
+        // draw_mesh(renderer.cmd, square_mesh);
+        vkCmdDraw(renderer.cmd, 6, 1, 0, 0);
 
         end_draw(*renderer);
     }
@@ -114,6 +100,7 @@ appquit :: (appstate: *void, result: SDL_AppResult) {
 
     vkDeviceWaitIdle(app.renderer.device);
     destroy_mesh(*app.renderer, app.square_mesh);
+    destroy_font_system(*app.renderer, *app.font_system);
     destroy_texture(*app.renderer, app.monkey_texture);
     deinit(*app.renderer);
     SDL_Quit();
