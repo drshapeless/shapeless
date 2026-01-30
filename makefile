@@ -1,2 +1,3 @@
 run:
-	jai build.jai && ./shapeless
+	jai build.jai
+	RADV_PERFTEST=hic ./shapeless

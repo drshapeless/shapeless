@@ -37,5 +37,6 @@ Vertex_Output vertex_main(uint vertex_id : SV_VertexID, uint instance_id : SV_In
 
 [shader("fragment")]
 float4 fragment_main(Vertex_Output input, uniform Push_Constant pc) {
-    return float4(1, 0, 0, 1);
+    float4 color = *(float4*)pc.ptr0;
+    return color;
 }

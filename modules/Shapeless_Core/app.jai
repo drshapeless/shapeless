@@ -87,7 +87,7 @@ appiter :: (appstate: *void) -> SDL_AppResult {
         assert(ok);
         vkCmdBindPipeline(renderer.cmd, .GRAPHICS, pipeline.vk);
         vkCmdBindDescriptorSets(renderer.cmd, .GRAPHICS, pipeline.layout, 0, 1, *font_system.descriptor_set, 0, null);
-        // draw_mesh(renderer.cmd, square_mesh);
+        vkCmdPushConstants(renderer.cmd, pipeline.layout, .ALL_GRAPHICS, 0, size_of(Font_System.Push_Constant), *font_system.block_buffer.address);
         vkCmdDraw(renderer.cmd, 6, 1, 0, 0);
 
         end_draw(*renderer);

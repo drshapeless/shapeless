@@ -12,8 +12,6 @@ Renderer :: struct {
 
     command_pool:    VkCommandPool;
 
-    buffers_queued_for_destruction: [] [..] Buffer;
-
     swapchain:       Swapchain;
     frames:          [] Frame_Data;
     frame_index:     u32;
@@ -211,22 +209,11 @@ init :: (using renderer: *Renderer, window: *SDL_Window) -> ok:bool {
     result, texture_descriptor_set_layout = make_descriptor_set_layout(renderer);
     if result return false;
 
-    buffers_queued_for_destruction = NewArray(swapchain.images.count, [..] Buffer);
-
     return true;
 }
 
 deinit :: (using renderer: *Renderer) {
     if device vkDeviceWaitIdle(device);
-
-    for * buffers: buffers_queued_for_destruction {
-        for buffers.* {
-            destroy_buffer(vma, it);
-        }
-
-        array_reset(buffers);
-    }
-    array_free(buffers_queued_for_destruction);
 
     for pipelines {
         destroy_pipeline(renderer, it);
@@ -294,10 +281,6 @@ begin_draw :: (using renderer: *Renderer) -> bool {
     if check_vk(vkBeginCommandBuffer(cmd, *cmd_begin_info)) return false;
 
     reset_staging_pool(*staging_pool);
-    for buffers_queued_for_destruction[frame_index] {
-        destroy_buffer(vma, it);
-    }
-    array_reset(*buffers_queued_for_destruction[frame_index]);
 
     image_memory_barriers : [2]VkImageMemoryBarrier2;
     image_memory_barriers[0] = .{
@@ -585,6 +568,9 @@ destroy_buffer :: (vma: VmaAllocator, buffer: Renderer.Buffer) {
     vmaDestroyBuffer(vma, buffer.vk, buffer.allocation);
 }
 
+// This function is obsolete when using host image copy, but it is
+// currently kept because AMD driver does not support it well at the
+// moment.
 copy_buffer_to_image :: (command: VkCommandBuffer, source: Renderer.Buffer, offset: u64, destination: VkImage, extent: VkExtent2D) {
     barrier := VkImageMemoryBarrier2.{
         srcStageMask     = .TOP_OF_PIPE,
@@ -728,11 +714,12 @@ draw_mesh :: (command: VkCommandBuffer, mesh: Renderer.Mesh) {
     vkCmdDrawIndexed(command, index_count, 1, 0, 0, 0);
 }
 
+// This version of make texture uses host image copy
 make_texture :: (using renderer: *Renderer, data: *void, extent: VkExtent2D) -> VkResult, Renderer.Texture {
     texture: Renderer.Texture;
     texture.format = .R8G8B8A8_SRGB;
     result: VkResult;
-    result, texture.image = make_image(vma, extent, texture.format, .SAMPLED | .TRANSFER_DST);
+    result, texture.image = make_image(vma, extent, texture.format, .SAMPLED | .HOST_TRANSFER);
     if result return result, .{};
 
     result, texture.image_view = make_image_view(renderer, texture.image.vk, texture.format, .COLOR);
@@ -741,24 +728,48 @@ make_texture :: (using renderer: *Renderer, data: *void, extent: VkExtent2D) -> 
         return result, .{};
     }
 
-    data_size := extent.width * extent.height * 4;
-    staging_buffer: Renderer.Buffer;
-    offset: u64;
-    result, staging_buffer, offset = allocate_staging_buffer(renderer, data_size);
+    host_image_layout_transition_info := VkHostImageLayoutTransitionInfo.{
+        image = texture.image.vk,
+        oldLayout = .UNDEFINED,
+        newLayout = .SHADER_READ_ONLY_OPTIMAL,
+        subresourceRange = .{
+            aspectMask     = .COLOR,
+            baseMipLevel   = 0,
+            levelCount     = 1,
+            baseArrayLayer = 0,
+            layerCount     = 1
+        }
+    };
+
+    result = check_vk(vkTransitionImageLayout(device, 1, *host_image_layout_transition_info));
     if result {
         destroy_texture(renderer, texture);
         return result, .{};
     }
 
-    memcpy(staging_buffer.mapped_ptr + offset, data, data_size);
+    memory_to_image_copy := VkMemoryToImageCopy.{
+        imageSubresource = .{
+            aspectMask     = .COLOR,
+            mipLevel       = 0,
+            baseArrayLayer = 0,
+            layerCount     = 1
+        },
+        imageExtent = .{
+            width  = extent.width,
+            height = extent.height,
+            depth  = 1
+        },
+        pHostPointer = data
+    };
 
-    result=, command := begin_single_time_commands(renderer);
-    if result {
-        destroy_texture(renderer, texture);
-        return result, .{};
-    }
-    copy_buffer_to_image(command, staging_buffer, offset, texture.image.vk, extent);
-    result = end_single_time_commands(renderer, command);
+    copy_memory_to_image_info := VkCopyMemoryToImageInfo.{
+        dstImage       = texture.image.vk,
+        dstImageLayout = .SHADER_READ_ONLY_OPTIMAL,
+        regionCount    = 1,
+        pRegions       = *memory_to_image_copy
+    };
+
+    result = check_vk(vkCopyMemoryToImage(device, *copy_memory_to_image_info));
     if result {
         destroy_texture(renderer, texture);
         return result, .{};
@@ -1004,7 +1015,11 @@ make_device :: (renderer: *Renderer, device_extensions: [] *u8) -> VkResult, VkD
     }
 
     features14 := VkPhysicalDeviceVulkan14Features.{
-        // hostImageCopy = VK_TRUE
+        // I want to use this extension, but seems like it is not
+        // supported in AMD GPU, but in mesa, we can enable this
+        // experiment feature by RADV_PERFTEST=hic
+        //
+        hostImageCopy = VK_TRUE
     };
 
     features13 := VkPhysicalDeviceVulkan13Features.{
@@ -1034,7 +1049,8 @@ make_device :: (renderer: *Renderer, device_extensions: [] *u8) -> VkResult, VkD
         pNext = *features11,
         features = .{
             samplerAnisotropy = VK_TRUE,
-            fillModeNonSolid = VK_TRUE
+            fillModeNonSolid = VK_TRUE,
+            shaderInt64      = VK_TRUE // For pointer math inside shader
         }
     };
 

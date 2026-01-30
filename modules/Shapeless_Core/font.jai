@@ -104,6 +104,8 @@ Font_System :: struct {
     msdf_texture: Renderer.Texture;
     msdf_atlas:   Font_Atlas;
 
+    block_buffer: Renderer.Buffer;
+
     Vertex_Instance :: struct {
         offset:   Vector2;
         color:    Vector3;
@@ -140,6 +142,11 @@ make_font_system :: (using renderer: *Renderer) -> Font_System {
         size = size_of(Font_System.Push_Constant)
     };
 
+    writer: Descriptor_Writer;
+    init(*writer);
+    write_image(*writer, 0, system.msdf_texture.image_view, texture_sampler, .SHADER_READ_ONLY_OPTIMAL, .COMBINED_IMAGE_SAMPLER);
+    update_set(*writer, device, system.descriptor_set);
+
     pipeline_layout_create_info := VkPipelineLayoutCreateInfo.{
         setLayoutCount = 1,
         pSetLayouts = *texture_descriptor_set_layout,
@@ -174,9 +181,17 @@ make_font_system :: (using renderer: *Renderer) -> Font_System {
 
     result, system.pipeline_id = make_pipeline(renderer, *pb, pipeline_layout);
     assert(result == .SUCCESS);
+
+    result, system.block_buffer = make_buffer(renderer, 1024, .STORAGE_BUFFER);
+    assert(result == .SUCCESS);
+
+    yellow := Vector4.{0, 1, 1, 1};
+    memcpy(system.block_buffer.mapped_ptr, *yellow, size_of(Vector4));
+
     return system;
 }
 
 destroy_font_system :: (renderer: *Renderer, system: *Font_System) {
+    destroy_buffer(renderer.vma, system.block_buffer);
     destroy_texture(renderer, system.msdf_texture);
 }
