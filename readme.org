@@ -12,5 +12,5 @@ so.
 
 * msdf script
 #+begin_src shell
-  msdf-atlas-gen -font ./Hack-Regular.ttf -allglyphs -format png -size 32 -imageout hack.png -json hack.json
+  msdf-atlas-gen -yorigin top -font ./Hack-Regular.ttf -allglyphs -format png -size 32 -imageout hack.png -json hack.json
 #+end_src

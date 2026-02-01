@@ -23,7 +23,7 @@ MSDF :: struct {
     }
 
     Glyph :: struct {
-        unicode:     u32;
+        index:       u32;
         advance:     float32;
         planeBounds: Bound;
         atlasBounds: Bound;
@@ -66,11 +66,11 @@ Font_System :: struct {
     descriptor_set: VkDescriptorSet;
     msdf_texture:   Renderer.Texture;
     msdf:           MSDF;
-    msdf_texture_width: float32;
-    msdf_texture_height: float32;
     glyphs:         Table(u32, Glyph);
 
     block_buffer: Renderer.Buffer;
+
+    screen_size:  VkExtent2D;
 
     Glyph :: struct {
         advance:      float32;
@@ -79,14 +79,30 @@ Font_System :: struct {
     }
 
     Vertex_Instance :: struct {
+        bg_color:     Vector4;
+        fg_color:     Vector4;
+        plane_bounds: Vector4;
         atlas_bounds: Vector4;
+        x_offset:     float32;
+        y_offset:     float32;
+    }
+
+    Header :: struct {
+        screen_extent: VkExtent2D;
+        texture_extent: VkExtent2D;
+        // screen_px_range is calculated by the desired pixel /
+        // generated pixel * pixel range
+        //
+        // For example a 32x32 atlas is generated, and a 72 pixel
+        // character is displayed on screen, and the distance range is
+        // 2, the screen_px_range is 72/32 * 2 = 4.5
+        screen_px_range: float32;
+        ndc_constant:    float32; // TODO: Bad name change later
     }
 
     Push_Constant :: struct {
-        px_range:     float32;
-        bg_color:     Vector4;
-        fg_color:     Vector4;
-        ptr0: VkDeviceAddress; // I currently don't have a better name
+        header: VkDeviceAddress;
+        vertex_data: VkDeviceAddress;
     }
 }
 
@@ -94,16 +110,16 @@ make_font_system :: (using renderer: *Renderer) -> Font_System {
     system: Font_System;
     result: VkResult;
 
-    msdf := load_msdf("assets/font/hack/hack.json");
-    log("loaded % glyphs", msdf.glyphs.count);
+    system.msdf = load_msdf("assets/font/hack/hack.json");
+    log("loaded % glyphs", system.msdf.glyphs.count);
 
-    for msdf.glyphs {
+    for system.msdf.glyphs {
         glyph: Font_System.Glyph;
         glyph.advance = it.advance;
         glyph.plane_bounds = bound_to_vector4(it.planeBounds);
         glyph.atlas_bounds = bound_to_vector4(it.atlasBounds);
 
-        table_set(*system.glyphs, it.unicode, glyph);
+        table_set(*system.glyphs, it.index, glyph);
     }
 
     result, system.msdf_texture = make_texture_from_file(renderer, "assets/font/hack/hack.png");
@@ -152,9 +168,9 @@ make_font_system :: (using renderer: *Renderer) -> Font_System {
 
     set_color_attachment_format(*pb, draw_texture.format);
     set_depth_format(*pb, depth_texture.format);
-    set_input_topology(*pb, .TRIANGLE_LIST);
+    set_input_topology(*pb, .TRIANGLE_STRIP);
     set_polygon_mode(*pb, .FILL);
-    set_cull_mode(*pb, .BACK, .COUNTER_CLOCKWISE);
+    set_cull_mode(*pb, .NONE, .COUNTER_CLOCKWISE);
     set_multisampling_none(*pb);
     disable_depthtest(*pb);
     enable_blending_alphablend(*pb);
@@ -170,6 +186,13 @@ make_font_system :: (using renderer: *Renderer) -> Font_System {
     ok, system.pipeline = table_find(*pipelines, system.pipeline_id);
     assert(ok);
 
+    header := Font_System.Header.{
+        screen_extent = renderer.draw_extent,
+        texture_extent = .{xx system.msdf.atlas.width, xx system.msdf.atlas.height}
+    };
+
+    memcpy(system.block_buffer.mapped_ptr, *header, size_of(*Font_System.Header));
+
     return system;
 }
 
@@ -178,24 +201,51 @@ destroy_font_system :: (renderer: *Renderer, system: *Font_System) {
     destroy_texture(renderer, system.msdf_texture);
 }
 
-draw_text :: (command: VkCommandBuffer, system: *Font_System, text: string) {
-    len := text.count;
+update_font_system_screen_size :: (system: *Font_System, extent: VkExtent2D) {
+    system.screen_size = extent;
+}
 
+pixel_to_ndc :: (pixel: s32, screen: u32) -> float32 {
+    return cast(float32) pixel / cast(float32) screen * 2.0 - 1.0;
+}
+
+// draw_text
+// The size parameter means the height in pixels of a character
+draw_text :: (command: VkCommandBuffer, system: *Font_System, text: string, size: u32, offset: VkOffset2D) {
+    // This is a bad name
+    ndc_constant := cast(float32) size / cast(float32) system.screen_size.height * 2.0;
+
+    header_ptr := cast(*Font_System.Header) system.block_buffer.mapped_ptr;
+    header_ptr.screen_px_range = cast(float32)size / cast(float32)system.msdf.atlas.size * cast(float32)system.msdf.atlas.distanceRange;
+    header_ptr.ndc_constant = ndc_constant;
+    header_ptr.screen_extent = system.screen_size;
+
+    instance := Font_System.Vertex_Instance.{
+        bg_color = .{1, 0, 0, 1}, // Black
+        fg_color = .{1, 1, 1, 1}, // White
+        x_offset = pixel_to_ndc(offset.x, system.screen_size.width),
+        y_offset = pixel_to_ndc(offset.y, system.screen_size.height)
+    };
+
+    vertex_data_ptr := system.block_buffer.mapped_ptr + size_of(Font_System.Header);
     for c: text {
-        ok, glyph := table_find(*system.glyphs, xx c);
-        assert(ok);
-        memcpy(system.block_buffer.mapped_ptr + it_index * size_of(Font_System.Vertex_Instance), *glyph.atlas_bounds, size_of(Vector4));
+        ok, glyph := table_find(*system.glyphs, cast(u32) c);
+        assert(ok, "character % not found", c);
+
+        instance.plane_bounds = glyph.plane_bounds;
+        instance.atlas_bounds = glyph.atlas_bounds;
+        memcpy(vertex_data_ptr + it_index * size_of(Font_System.Vertex_Instance), *instance, size_of(Font_System.Vertex_Instance));
+
+        instance.x_offset += ndc_constant * glyph.advance;
     }
 
     ps := Font_System.Push_Constant.{
-        px_range = 2,
-        bg_color = .{0, 0, 0, 1},
-        fg_color = .{1, 0, 0, 1}, // RED
-        ptr0     = system.block_buffer.address
+        header     = system.block_buffer.address,
+        vertex_data = system.block_buffer.address + size_of(Font_System.Header)
     };
 
-    vkCmdBindPipeline(command, .GRAPHICS, system.pipeline);
+    vkCmdBindPipeline(command, .GRAPHICS, system.pipeline.vk);
     vkCmdBindDescriptorSets(command, .GRAPHICS, system.pipeline.layout, 0, 1, *system.descriptor_set, 0, null);
     vkCmdPushConstants(command, system.pipeline.layout, .ALL_GRAPHICS, 0, size_of(Font_System.Push_Constant), *ps);
-    vkCmdDraw(command, 6, xx text.count, 0, 0);
+    vkCmdDraw(command, 4, xx text.count, 0, 0);
 }

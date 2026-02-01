@@ -80,16 +80,12 @@ appiter :: (appstate: *void) -> SDL_AppResult {
         height: s32;
         SDL_GetWindowSize(app.win, *width , *height);
         resize_callback(*renderer, .{xx width ,xx height});
+        update_font_system_screen_size(*font_system, renderer.draw_extent);
     }
 
     if begin_draw(*renderer) {
-        ok, pipeline := table_find(*renderer.pipelines, font_system.pipeline_id);
-        assert(ok);
-        vkCmdBindPipeline(renderer.cmd, .GRAPHICS, pipeline.vk);
-        vkCmdBindDescriptorSets(renderer.cmd, .GRAPHICS, pipeline.layout, 0, 1, *font_system.descriptor_set, 0, null);
-        vkCmdPushConstants(renderer.cmd, pipeline.layout, .ALL_GRAPHICS, 0, size_of(Font_System.Push_Constant), *font_system.block_buffer.address);
-        vkCmdDraw(renderer.cmd, 6, 1, 0, 0);
-
+        cmd := renderer.cmd;
+        draw_text(cmd, *font_system, "h", 102, .{10, 150});
         end_draw(*renderer);
     }
     return .CONTINUE;
