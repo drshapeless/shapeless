@@ -23,7 +23,7 @@ MSDF :: struct {
     }
 
     Glyph :: struct {
-        index:       u32;
+        unicode:     u32;
         advance:     float32;
         planeBounds: Bound;
         atlasBounds: Bound;
@@ -43,9 +43,17 @@ MSDF :: struct {
     }
 }
 
-bound_to_vector4 :: (using bound: MSDF.Bound) -> Vector4 {
-    // In theory, a memcpy is enough.
-    return .{left, bottom, right, top};
+bound_to_vector4 :: (bound: MSDF.Bound) -> Vector4 {
+    // In theory, a memcpy is enough, but it creates a variable.
+    // v: Vector4;
+    // memcpy(*v, *bound, size_of(Vector4));
+    // return v;
+
+    // This is a stupid and clean way.
+    // return .{left, bottom, right, top};
+
+    // This is the evil way.
+    return cast,force(Vector4) bound;
 }
 
 load_msdf :: (file_path: string) -> MSDF {
@@ -68,6 +76,12 @@ Font_System :: struct {
     msdf:           MSDF;
     glyphs:         Table(u32, Glyph);
 
+    // Even though a single buffer will give almost the same result,
+    // it is always better to avoid race condition by making more
+    // buffers matching the in-flight frames. But we don't have to
+    // allocate multiple buffer, instead, I just create a single
+    // buffer with different region for different frames. But keeping
+    // track of them is a pain in the ass.
     block_buffer: Renderer.Buffer;
 
     screen_size:  VkExtent2D;
@@ -119,7 +133,7 @@ make_font_system :: (using renderer: *Renderer) -> Font_System {
         glyph.plane_bounds = bound_to_vector4(it.planeBounds);
         glyph.atlas_bounds = bound_to_vector4(it.atlasBounds);
 
-        table_set(*system.glyphs, it.index, glyph);
+        table_set(*system.glyphs, it.unicode, glyph);
     }
 
     result, system.msdf_texture = make_texture_from_file(renderer, "assets/font/hack/hack.png");
@@ -186,12 +200,13 @@ make_font_system :: (using renderer: *Renderer) -> Font_System {
     ok, system.pipeline = table_find(*pipelines, system.pipeline_id);
     assert(ok);
 
+    system.screen_size = renderer.draw_extent;
+
     header := Font_System.Header.{
-        screen_extent = renderer.draw_extent,
+        screen_extent = system.screen_size,
         texture_extent = .{xx system.msdf.atlas.width, xx system.msdf.atlas.height}
     };
-
-    memcpy(system.block_buffer.mapped_ptr, *header, size_of(*Font_System.Header));
+    memcpy(system.block_buffer.mapped_ptr, *header, size_of(Font_System.Header));
 
     return system;
 }
@@ -203,6 +218,8 @@ destroy_font_system :: (renderer: *Renderer, system: *Font_System) {
 
 update_font_system_screen_size :: (system: *Font_System, extent: VkExtent2D) {
     system.screen_size = extent;
+    header_ptr := cast(*Font_System.Header) system.block_buffer.mapped_ptr;
+    header_ptr.screen_extent = system.screen_size;
 }
 
 pixel_to_ndc :: (pixel: s32, screen: u32) -> float32 {
@@ -218,10 +235,9 @@ draw_text :: (command: VkCommandBuffer, system: *Font_System, text: string, size
     header_ptr := cast(*Font_System.Header) system.block_buffer.mapped_ptr;
     header_ptr.screen_px_range = cast(float32)size / cast(float32)system.msdf.atlas.size * cast(float32)system.msdf.atlas.distanceRange;
     header_ptr.ndc_constant = ndc_constant;
-    header_ptr.screen_extent = system.screen_size;
 
     instance := Font_System.Vertex_Instance.{
-        bg_color = .{1, 0, 0, 1}, // Black
+        bg_color = .{0, 0, 0, 1}, // Black
         fg_color = .{1, 1, 1, 1}, // White
         x_offset = pixel_to_ndc(offset.x, system.screen_size.width),
         y_offset = pixel_to_ndc(offset.y, system.screen_size.height)

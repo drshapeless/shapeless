@@ -11,6 +11,12 @@ that the lispy way of extending an editor is not the only way to do
 so.
 
 * msdf script
+Never use -allglyph, because you don't have a unicode to match the thing.
 #+begin_src shell
-  msdf-atlas-gen -yorigin top -font ./Hack-Regular.ttf -allglyphs -format png -size 32 -imageout hack.png -json hack.json
+  msdf-atlas-gen -charset charset.txt -yorigin top -font ./Hack-Regular.ttf -format png -size 32 -imageout hack.png -json hack.json
+#+end_src
+
+In charset.txt
+#+begin_src txt
+  [0x20, 0x7E]
 #+end_src

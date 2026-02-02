@@ -40,15 +40,6 @@ uniform Sampler2D font_texture;
 // 1(0,1)  3(1,1)
 //
 // The plane bounds generated here is in the order of left, top, right, bottom
-//
-// The so-called uv_array is like a boolean multiplier to calculate
-// the current corner without much comparison
-static const float4 uv_array[4] = {
-    {1, 1, 0, 0},
-    {1, 0, 0, 1},
-    {0, 1, 1, 0},
-    {0, 0, 1, 1}
-};
 
 [shader("vertex")]
 Vertex_Output vertex_main(uint vertex_id : SV_VertexID, uint instance_id : SV_InstanceID, uniform Push_Constant pc) {
@@ -57,14 +48,18 @@ Vertex_Output vertex_main(uint vertex_id : SV_VertexID, uint instance_id : SV_In
 
     Vertex_Instance *instance = (Vertex_Instance*)(pc.vertex_data + sizeof(Vertex_Instance) * instance_id);
 
-    float4 uv_constant = uv_array[vertex_id];
+    float left = instance.x_offset + instance.plane_bounds.x * header.ndc_constant;
+    float top  = instance.y_offset + instance.plane_bounds.y * header.ndc_constant;
+    float right = instance.x_offset + instance.plane_bounds.z * header.ndc_constant;
+    float bottom = instance.y_offset + instance.plane_bounds.w * header.ndc_constant;
 
-    float4 temp = instance.plane_bounds * uv_constant;
-
-    float2 pos = float2(temp.x + temp.z, temp.y + temp.w);
-    pos = pos * header.ndc_constant;
-
-    output.pos = float4(pos.x + instance.x_offset, pos.y + instance.y_offset, 0, 1);
+    float2 poss[4] = {
+        {left, top},
+        {left, bottom},
+        {right, top},
+        {right, bottom}
+    };
+    output.pos = float4(poss[vertex_id], 0, 1);
 
     float u_min = instance.atlas_bounds.x / (float)header.texture_extent.x;
     float u_max = instance.atlas_bounds.z / (float)header.texture_extent.x;

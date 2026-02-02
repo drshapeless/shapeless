@@ -17,6 +17,8 @@ App :: struct {
 
     monkey_texture: Renderer.Texture;
     square_mesh: Renderer.Mesh;
+
+    last_render_time: float64;
 }
 
 appinit :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
@@ -49,6 +51,8 @@ appinit :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
     write_image(*writer, 0, monkey_texture.image_view, renderer.texture_sampler, .SHADER_READ_ONLY_OPTIMAL, .COMBINED_IMAGE_SAMPLER);
     update_set(*writer, renderer.device, simple_system.descriptor_set);
 
+    last_render_time = to_float64_seconds(current_time_monotonic());
+
     return .CONTINUE;
 }
 
@@ -75,6 +79,9 @@ appiter :: (appstate: *void) -> SDL_AppResult {
     app := cast(*App)appstate;
     using app;
 
+    current_time := to_float64_seconds(current_time_monotonic());
+    delta := current_time - last_render_time;
+
     if renderer.resize_requested {
         width: s32;
         height: s32;
@@ -83,11 +90,18 @@ appiter :: (appstate: *void) -> SDL_AppResult {
         update_font_system_screen_size(*font_system, renderer.draw_extent);
     }
 
-    if begin_draw(*renderer) {
-        cmd := renderer.cmd;
-        draw_text(cmd, *font_system, "h", 102, .{10, 150});
-        end_draw(*renderer);
+    if delta > 1.0 / 60.0 {
+        last_render_time = current_time;
+        fps := 1.0 / delta;
+
+        if begin_draw(*renderer) {
+            cmd := renderer.cmd;
+            draw_text(cmd, *font_system, tprint("%", fps), 102, .{10, 150});
+            end_draw(*renderer);
+        }
     }
+
+    reset_temporary_storage();
     return .CONTINUE;
 }
 
