@@ -83,8 +83,9 @@ Font_System :: struct {
     // buffer with different region for different frames. But keeping
     // track of them is a pain in the ass.
     block_buffer: Renderer.Buffer;
+    BUFFER_SIZE :: 1024 * 1024; // 1MB per frame, should be enough
 
-    screen_size:  VkExtent2D;
+    harfbuzz_buffer: *hb_buffer_t;
 
     Glyph :: struct {
         advance:      float32;
@@ -104,8 +105,8 @@ Font_System :: struct {
     Header :: struct {
         screen_extent: VkExtent2D;
         texture_extent: VkExtent2D;
-        // screen_px_range is calculated by the desired pixel /
-        // generated pixel * pixel range
+        // screen_px_range is calculated by the
+        // desired pixel / generated pixel * pixel range
         //
         // For example a 32x32 atlas is generated, and a 72 pixel
         // character is displayed on screen, and the distance range is
@@ -117,6 +118,11 @@ Font_System :: struct {
     Push_Constant :: struct {
         header: VkDeviceAddress;
         vertex_data: VkDeviceAddress;
+    }
+
+    Offset :: struct {
+        x: float32;
+        y: float32;
     }
 }
 
@@ -194,32 +200,21 @@ make_font_system :: (using renderer: *Renderer) -> Font_System {
     result, system.pipeline_id = make_pipeline(renderer, *pb, pipeline_layout);
     assert(result == .SUCCESS);
 
-    result, system.block_buffer = make_buffer(renderer, 1024, .STORAGE_BUFFER);
+    result, system.block_buffer = make_buffer(renderer, renderer.frames.count * system.BUFFER_SIZE, .STORAGE_BUFFER);
     assert(result == .SUCCESS);
 
     ok, system.pipeline = table_find(*pipelines, system.pipeline_id);
     assert(ok);
 
-    system.screen_size = renderer.draw_extent;
-
-    header := Font_System.Header.{
-        screen_extent = system.screen_size,
-        texture_extent = .{xx system.msdf.atlas.width, xx system.msdf.atlas.height}
-    };
-    memcpy(system.block_buffer.mapped_ptr, *header, size_of(Font_System.Header));
+    system.harfbuzz_buffer = hb_buffer_create();
 
     return system;
 }
 
 destroy_font_system :: (renderer: *Renderer, system: *Font_System) {
+    hb_buffer_destroy(system.harfbuzz_buffer);
     destroy_buffer(renderer.vma, system.block_buffer);
     destroy_texture(renderer, system.msdf_texture);
-}
-
-update_font_system_screen_size :: (system: *Font_System, extent: VkExtent2D) {
-    system.screen_size = extent;
-    header_ptr := cast(*Font_System.Header) system.block_buffer.mapped_ptr;
-    header_ptr.screen_extent = system.screen_size;
 }
 
 pixel_to_ndc :: (pixel: s32, screen: u32) -> float32 {
@@ -264,4 +259,26 @@ draw_text :: (command: VkCommandBuffer, system: *Font_System, text: string, size
     vkCmdBindDescriptorSets(command, .GRAPHICS, system.pipeline.layout, 0, 1, *system.descriptor_set, 0, null);
     vkCmdPushConstants(command, system.pipeline.layout, .ALL_GRAPHICS, 0, size_of(Font_System.Push_Constant), *ps);
     vkCmdDraw(command, 4, xx text.count, 0, 0);
+}
+
+begin_text_draw :: (system: *Font_System, renderer: *Renderer) {
+    current_buffer_ptr := current_buffer_ptr(system, renderer);
+    header := Font_System.Header.{
+        screen_extent = renderer.draw_extent,
+        texture_extent = .{xx system.msdf.atlas.width, xx system.msdf.atlas.height}
+    };
+    memcpy(current_buffer_ptr, *header, size_of(Font_System.Header));
+}
+
+end_text_draw :: (system: *Font_System, command: VkCommandBuffer) {
+
+}
+
+append_text :: (system: *Font_System, text: string, font_size: u32, offset: Font_System.Offset) {
+
+}
+
+#scope_file
+current_buffer_ptr :: (system: *Font_System, renderer: *Renderer) -> *void {
+    return system.block_buffer.mapped_ptr + renderer.frame_index * system.BUFFER_SIZE;
 }

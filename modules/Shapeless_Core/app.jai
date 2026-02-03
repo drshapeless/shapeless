@@ -53,6 +53,8 @@ appinit :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
 
     last_render_time = to_float64_seconds(current_time_monotonic());
 
+    log("renderer frame count: %", renderer.frames.count);
+
     return .CONTINUE;
 }
 
@@ -87,7 +89,6 @@ appiter :: (appstate: *void) -> SDL_AppResult {
         height: s32;
         SDL_GetWindowSize(app.win, *width , *height);
         resize_callback(*renderer, .{xx width ,xx height});
-        update_font_system_screen_size(*font_system, renderer.draw_extent);
     }
 
     if delta > 1.0 / 60.0 {
@@ -96,7 +97,7 @@ appiter :: (appstate: *void) -> SDL_AppResult {
 
         if begin_draw(*renderer) {
             cmd := renderer.cmd;
-            draw_text(cmd, *font_system, tprint("%", fps), 102, .{10, 150});
+            draw_text(cmd, *font_system, tprint("%", cast(u32) fps), 102, .{10, 150});
             end_draw(*renderer);
         }
     }

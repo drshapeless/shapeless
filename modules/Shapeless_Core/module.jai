@@ -29,3 +29,6 @@ Buffer :: struct {
 #import "Vulkan_Memory_Allocator";
 #import "Json";
 #import "Math";
+#import "HarfBuzz";
+// This is the stock freetype, not the latest version, but should be ok.
+#import "freetype";
