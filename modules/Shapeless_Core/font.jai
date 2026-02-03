@@ -8,8 +8,8 @@ MSDF :: struct {
         type:          string;
         distanceRange: float;
         size:          float32;
-        width:         s32;
-        height:        s32;
+        width:         u32;
+        height:        u32;
         yOrigin:       string;
     }
 
@@ -23,7 +23,10 @@ MSDF :: struct {
     }
 
     Glyph :: struct {
+        // Either unicode or index is present, depends on how you
+        // generate the atlas, by glyphs or by charset
         unicode:     u32;
+        index:       u32;
         advance:     float32;
         planeBounds: Bound;
         atlasBounds: Bound;
@@ -85,7 +88,13 @@ Font_System :: struct {
     block_buffer: Renderer.Buffer;
     BUFFER_SIZE :: 1024 * 1024; // 1MB per frame, should be enough
 
+    vertex_instances: [..] Vertex_Instance;
+
     harfbuzz_buffer: *hb_buffer_t;
+    harfbuzz_font:   *hb_font_t;
+
+    freetype_library: FT_Library;
+    freetype_face:    FT_Face;
 
     Glyph :: struct {
         advance:      float32;
@@ -96,14 +105,13 @@ Font_System :: struct {
     Vertex_Instance :: struct {
         bg_color:     Vector4;
         fg_color:     Vector4;
-        plane_bounds: Vector4;
         atlas_bounds: Vector4;
-        x_offset:     float32;
-        y_offset:     float32;
+        extent:       Vector2;
+        origin:       Vector2;
     }
 
     Header :: struct {
-        screen_extent: VkExtent2D;
+        // screen_extent: VkExtent2D;
         texture_extent: VkExtent2D;
         // screen_px_range is calculated by the
         // desired pixel / generated pixel * pixel range
@@ -111,24 +119,32 @@ Font_System :: struct {
         // For example a 32x32 atlas is generated, and a 72 pixel
         // character is displayed on screen, and the distance range is
         // 2, the screen_px_range is 72/32 * 2 = 4.5
-        screen_px_range: float32;
-        ndc_constant:    float32; // TODO: Bad name change later
+        // screen_px_range: float32;
     }
 
     Push_Constant :: struct {
+        projection: Matrix4;
         header: VkDeviceAddress;
         vertex_data: VkDeviceAddress;
-    }
-
-    Offset :: struct {
-        x: float32;
-        y: float32;
+        screen_extent: Vector2;
     }
 }
 
 make_font_system :: (using renderer: *Renderer) -> Font_System {
     system: Font_System;
     result: VkResult;
+
+    error := FT_Init_FreeType(*system.freetype_library);
+    assert(error == 0, "Cannot init freetype, error code: %", error);
+
+    error = FT_New_Face(system.freetype_library, "assets/font/hack/Hack-Regular.ttf", 0, *system.freetype_face);
+    assert(error == 0, "Cannot read font library: %", error);
+
+    // Currently hardcoded as 32, same as msdf-atlas-gen.
+    error = FT_Set_Pixel_Sizes(system.freetype_face, 0, 64);
+    assert(error == 0, "Cannot change font size in freetype: %", error);
+
+    system.harfbuzz_font = hb_ft_font_create_referenced(system.freetype_face);
 
     system.msdf = load_msdf("assets/font/hack/hack.json");
     log("loaded % glyphs", system.msdf.glyphs.count);
@@ -139,7 +155,7 @@ make_font_system :: (using renderer: *Renderer) -> Font_System {
         glyph.plane_bounds = bound_to_vector4(it.planeBounds);
         glyph.atlas_bounds = bound_to_vector4(it.atlasBounds);
 
-        table_set(*system.glyphs, it.unicode, glyph);
+        table_set(*system.glyphs, it.index, glyph);
     }
 
     result, system.msdf_texture = make_texture_from_file(renderer, "assets/font/hack/hack.png");
@@ -200,8 +216,11 @@ make_font_system :: (using renderer: *Renderer) -> Font_System {
     result, system.pipeline_id = make_pipeline(renderer, *pb, pipeline_layout);
     assert(result == .SUCCESS);
 
-    result, system.block_buffer = make_buffer(renderer, renderer.frames.count * system.BUFFER_SIZE, .STORAGE_BUFFER);
+    result, system.block_buffer = make_buffer(renderer, xx (renderer.frames.count * system.BUFFER_SIZE + size_of(Font_System.Header)), .STORAGE_BUFFER);
     assert(result == .SUCCESS);
+
+    header_ptr := cast(*Font_System.Header) system.block_buffer.mapped_ptr;
+    header_ptr.texture_extent = .{system.msdf.atlas.width, system.msdf.atlas.height};
 
     ok, system.pipeline = table_find(*pipelines, system.pipeline_id);
     assert(ok);
@@ -212,6 +231,8 @@ make_font_system :: (using renderer: *Renderer) -> Font_System {
 }
 
 destroy_font_system :: (renderer: *Renderer, system: *Font_System) {
+    FT_Done_Face(system.freetype_face);
+    FT_Done_FreeType(system.freetype_library);
     hb_buffer_destroy(system.harfbuzz_buffer);
     destroy_buffer(renderer.vma, system.block_buffer);
     destroy_texture(renderer, system.msdf_texture);
@@ -221,64 +242,96 @@ pixel_to_ndc :: (pixel: s32, screen: u32) -> float32 {
     return cast(float32) pixel / cast(float32) screen * 2.0 - 1.0;
 }
 
-// draw_text
-// The size parameter means the height in pixels of a character
-draw_text :: (command: VkCommandBuffer, system: *Font_System, text: string, size: u32, offset: VkOffset2D) {
-    // This is a bad name
-    ndc_constant := cast(float32) size / cast(float32) system.screen_size.height * 2.0;
+begin_text_draw :: (system: *Font_System, renderer: *Renderer) {
 
-    header_ptr := cast(*Font_System.Header) system.block_buffer.mapped_ptr;
-    header_ptr.screen_px_range = cast(float32)size / cast(float32)system.msdf.atlas.size * cast(float32)system.msdf.atlas.distanceRange;
-    header_ptr.ndc_constant = ndc_constant;
+}
 
-    instance := Font_System.Vertex_Instance.{
-        bg_color = .{0, 0, 0, 1}, // Black
-        fg_color = .{1, 1, 1, 1}, // White
-        x_offset = pixel_to_ndc(offset.x, system.screen_size.width),
-        y_offset = pixel_to_ndc(offset.y, system.screen_size.height)
-    };
+end_text_draw :: (system: *Font_System, renderer: *Renderer, command: VkCommandBuffer) {
+    current_ptr := current_buffer_ptr(system, renderer);
 
-    vertex_data_ptr := system.block_buffer.mapped_ptr + size_of(Font_System.Header);
-    for c: text {
-        ok, glyph := table_find(*system.glyphs, cast(u32) c);
-        assert(ok, "character % not found", c);
+    memcpy(current_ptr, system.vertex_instances.data, size_of(Font_System.Vertex_Instance) * system.vertex_instances.count);
+    defer array_reset_keeping_memory(*system.vertex_instances);
 
-        instance.plane_bounds = glyph.plane_bounds;
-        instance.atlas_bounds = glyph.atlas_bounds;
-        memcpy(vertex_data_ptr + it_index * size_of(Font_System.Vertex_Instance), *instance, size_of(Font_System.Vertex_Instance));
-
-        instance.x_offset += ndc_constant * glyph.advance;
-    }
-
+    // I have no idea how to use projection matrix in 2D space
+    proj := orthographic_projection_matrix(0, xx renderer.draw_extent.width, xx renderer.draw_extent.height, 0, 0.0, 1, true);
     ps := Font_System.Push_Constant.{
+        projection = proj,
         header     = system.block_buffer.address,
-        vertex_data = system.block_buffer.address + size_of(Font_System.Header)
+        vertex_data = current_buffer_address(system, renderer),
+        screen_extent = .{xx renderer.draw_extent.width, xx renderer.draw_extent.height}
     };
 
     vkCmdBindPipeline(command, .GRAPHICS, system.pipeline.vk);
     vkCmdBindDescriptorSets(command, .GRAPHICS, system.pipeline.layout, 0, 1, *system.descriptor_set, 0, null);
     vkCmdPushConstants(command, system.pipeline.layout, .ALL_GRAPHICS, 0, size_of(Font_System.Push_Constant), *ps);
-    vkCmdDraw(command, 4, xx text.count, 0, 0);
+    vkCmdDraw(command, 4, xx system.vertex_instances.count, 0, 0);
 }
 
-begin_text_draw :: (system: *Font_System, renderer: *Renderer) {
-    current_buffer_ptr := current_buffer_ptr(system, renderer);
-    header := Font_System.Header.{
-        screen_extent = renderer.draw_extent,
-        texture_extent = .{xx system.msdf.atlas.width, xx system.msdf.atlas.height}
+append_text :: (system: *Font_System, text: string, font_size: u32, offset: Vector2) {
+    // Should I allow constant changing in size?
+    error := FT_Set_Pixel_Sizes(system.freetype_face, 0, font_size);
+    assert(error == 0, "Cannot change freetype size");
+    hb_ft_font_changed(system.harfbuzz_font);
+
+    assert(error == 0, "freetype cannot set size, %", error);
+    hb_buffer_clear_contents(system.harfbuzz_buffer);
+    hb_buffer_add_utf8(system.harfbuzz_buffer, text.data, xx text.count, 0, -1);
+    hb_buffer_set_direction(system.harfbuzz_buffer, .LTR);
+    // Set script?
+
+    hb_shape(system.harfbuzz_font, system.harfbuzz_buffer, null, 0);
+
+    infos := harfbuzz_get_glyph_infos(system.harfbuzz_buffer);
+    positions := harfbuzz_get_glyph_positions(system.harfbuzz_buffer);
+
+    cursor := offset;
+    instance := Font_System.Vertex_Instance.{
+        bg_color = .{0, 0, 0, 1}, // Black
+        fg_color = .{1, 1, 1, 1}, // White
     };
-    memcpy(current_buffer_ptr, *header, size_of(Font_System.Header));
-}
+    for i: 0..infos.count - 1 {
+        glyph_id := infos[i].codepoint;
+        ok, glyph := table_find(*system.glyphs, glyph_id);
+        assert(ok, "Cannot find glyph id %", glyph_id);
 
-end_text_draw :: (system: *Font_System, command: VkCommandBuffer) {
+        instance.atlas_bounds = glyph.atlas_bounds;
+        instance.extent.x = (glyph.plane_bounds.z - glyph.plane_bounds.x) * font_size;
 
-}
+        // The height is negative here, it makes the shader easier to work with.
+        instance.extent.y = (glyph.plane_bounds.w - glyph.plane_bounds.y) * font_size;
 
-append_text :: (system: *Font_System, text: string, font_size: u32, offset: Font_System.Offset) {
+        instance.origin.x = cursor.x + (positions[i].x_offset / 64.0);
+        instance.origin.y = cursor.y + (positions[i].y_offset / 64.0);
 
+        array_add(*system.vertex_instances, instance);
+
+        cursor.x += positions[i].x_advance / 64.0;
+        cursor.y += positions[i].y_advance / 64.0;
+    }
 }
 
 #scope_file
 current_buffer_ptr :: (system: *Font_System, renderer: *Renderer) -> *void {
-    return system.block_buffer.mapped_ptr + renderer.frame_index * system.BUFFER_SIZE;
+    return system.block_buffer.mapped_ptr + size_of(Font_System.Header) + renderer.frame_index * system.BUFFER_SIZE;
+}
+
+current_buffer_address :: (system: *Font_System, renderer: *Renderer) -> VkDeviceAddress {
+    return system.block_buffer.address + size_of(Font_System.Header) + renderer.frame_index * system.BUFFER_SIZE;
+}
+
+harfbuzz_get_glyph_infos :: (buffer: *hb_buffer_t) -> [] hb_glyph_info_t {
+    infos: [] hb_glyph_info_t;
+    count: u32;
+    infos.data = hb_buffer_get_glyph_infos(buffer, *count);
+    infos.count = xx count;
+
+    return infos;
+}
+
+harfbuzz_get_glyph_positions :: (buffer: *hb_buffer_t) -> [] hb_glyph_position_t {
+    positions: [] hb_glyph_position_t;
+    count: u32;
+    positions.data = hb_buffer_get_glyph_positions(buffer, *count);
+    positions.count = xx count;
+    return positions;
 }

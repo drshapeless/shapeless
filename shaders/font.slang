@@ -1,22 +1,22 @@
 struct Push_Constant {
+    float4x4 projection;
     uint64_t header;
     uint64_t vertex_data;
+    float2   screen_extent;
 };
 
 struct Vertex_Instance {
     float4 bg_color;
     float4 fg_color;
-    float4 plane_bounds;
     float4 atlas_bounds;
-    float  x_offset;
-    float  y_offset;
+    float2 extent;
+    float2 origin;
 };
 
 struct Header {
-    uint32_t2 screen_extent;
+    // uint32_t2 screen_extent;
     uint32_t2 texture_extent;
-    float screen_px_range;
-    float ndc_constant;
+    // float screen_px_range;
 };
 
 struct Vertex_Output {
@@ -48,18 +48,23 @@ Vertex_Output vertex_main(uint vertex_id : SV_VertexID, uint instance_id : SV_In
 
     Vertex_Instance *instance = (Vertex_Instance*)(pc.vertex_data + sizeof(Vertex_Instance) * instance_id);
 
-    float left = instance.x_offset + instance.plane_bounds.x * header.ndc_constant;
-    float top  = instance.y_offset + instance.plane_bounds.y * header.ndc_constant;
-    float right = instance.x_offset + instance.plane_bounds.z * header.ndc_constant;
-    float bottom = instance.y_offset + instance.plane_bounds.w * header.ndc_constant;
+    // Hardcode for now
+    float width = instance.extent.x;
+    float height = instance.extent.y;
 
     float2 poss[4] = {
-        {left, top},
-        {left, bottom},
-        {right, top},
-        {right, bottom}
+        {instance.origin.x, instance.origin.y},
+        {instance.origin.x, instance.origin.y + height},
+        {instance.origin.x + width, instance.origin.y},
+        {instance.origin.x + width, instance.origin.y + height}
     };
-    output.pos = float4(poss[vertex_id], 0, 1);
+    // I don't know how to use projection matrix.
+    // output.pos = mul(pc.projection, float4(poss[vertex_id], 0, 1));
+    float2 pos = poss[vertex_id];
+    pos.x = pos.x / pc.screen_extent.x * 2.0 - 1.0;
+    pos.y = pos.y / pc.screen_extent.y * 2.0 - 1.0;
+
+    output.pos = float4(pos, 0, 1);
 
     float u_min = instance.atlas_bounds.x / (float)header.texture_extent.x;
     float u_max = instance.atlas_bounds.z / (float)header.texture_extent.x;
@@ -90,10 +95,10 @@ float4 fragment_main(Vertex_Output input, uniform Push_Constant pc) {
 
     float4 msd = font_texture.Sample(input.uv);
     float sd   = median(msd.r, msd.g, msd.b);
-    float screen_px_distance = header.screen_px_range * (sd - 0.5);
+    float screen_px_range = 2.0; // hardcode for now, which is 32 pixel in size
+    float screen_px_distance = screen_px_range * (sd - 0.5);
     float opacity = clamp(screen_px_distance + 0.5, 0.0, 1.0);
-    // lerp is essentially mix
+    // lerp() is mix() in glsl
     float4 color = lerp(input.bg_color, input.fg_color, opacity);
-    // float4 color = msd;
     return color;
 }
