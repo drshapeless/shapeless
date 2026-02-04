@@ -26,3 +26,6 @@ of the font, you should not use -charset.
 #+begin_src shell
   msdf-atlas-gen -type mtsdf -allglyphs -yorigin top -font ./Hack-Regular.ttf -format png -size 32 -imageout hack.png -json hack.json
 #+end_src
+
+* Unicode block
+ftp://ftp.unicode.org/Public/UNIDATA/Blocks.txt
