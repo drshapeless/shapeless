@@ -58,13 +58,11 @@ Vertex_Output vertex_main(uint vertex_id : SV_VertexID, uint instance_id : SV_In
         {instance.origin.x + width, instance.origin.y},
         {instance.origin.x + width, instance.origin.y + height}
     };
-    // I don't know how to use projection matrix.
-    // output.pos = mul(pc.projection, float4(poss[vertex_id], 0, 1));
-    float2 pos = poss[vertex_id];
-    pos.x = pos.x / pc.screen_extent.x * 2.0 - 1.0;
-    pos.y = pos.y / pc.screen_extent.y * 2.0 - 1.0;
-
-    output.pos = float4(pos, 0, 1);
+    // This projection matrix needs to be transpose because of some
+    // stupid slang shader shit, I don't really understand right now.
+    //
+    // TODO: understand this shit
+    output.pos = mul(transpose(pc.projection), float4(poss[vertex_id], 0, 1));
 
     float u_min = instance.atlas_bounds.x / (float)header.texture_extent.x;
     float u_max = instance.atlas_bounds.z / (float)header.texture_extent.x;
@@ -98,7 +96,17 @@ float4 fragment_main(Vertex_Output input, uniform Push_Constant pc) {
     float screen_px_range = 2.0; // hardcode for now, which is 32 pixel in size
     float screen_px_distance = screen_px_range * (sd - 0.5);
     float opacity = clamp(screen_px_distance + 0.5, 0.0, 1.0);
+
+    float sdf = msd.a;
+    float sdf_dist = screen_px_range * (sdf - 0.5);
+
+    float outline = smoothstep(-0.8, 0.8, sdf_dist);
+    float3 outline_color = float3(1, 1, 1);
+    float3 final_color = lerp(outline_color, input.fg_color.rgb, opacity);
+    opacity = max(opacity, outline);
+
     // lerp() is mix() in glsl
-    float4 color = lerp(input.bg_color, input.fg_color, opacity);
+    // float4 color = lerp(input.bg_color, input.fg_color, opacity);
+    float4 color = float4(input.fg_color.rgb, input.fg_color.a * opacity);
     return color;
 }

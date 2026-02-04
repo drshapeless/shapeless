@@ -126,7 +126,6 @@ Font_System :: struct {
         projection: Matrix4;
         header: VkDeviceAddress;
         vertex_data: VkDeviceAddress;
-        screen_extent: Vector2;
     }
 }
 
@@ -246,19 +245,28 @@ begin_text_draw :: (system: *Font_System, renderer: *Renderer) {
 
 }
 
-end_text_draw :: (system: *Font_System, renderer: *Renderer, command: VkCommandBuffer) {
+end_text_draw :: (system: *Font_System, renderer: *Renderer) {
+    command := renderer.cmd;
     current_ptr := current_buffer_ptr(system, renderer);
 
     memcpy(current_ptr, system.vertex_instances.data, size_of(Font_System.Vertex_Instance) * system.vertex_instances.count);
     defer array_reset_keeping_memory(*system.vertex_instances);
 
-    // I have no idea how to use projection matrix in 2D space
-    proj := orthographic_projection_matrix(0, xx renderer.draw_extent.width, xx renderer.draw_extent.height, 0, 0.0, 1, true);
+    // This projection matrix is handcrafted, because the
+    // orthographic_projection_matrix() returns something suboptimal
+    // in vulkan.
+    proj: Matrix4;
+    proj._11 = 2.0 / cast(float32) renderer.draw_extent.width;
+    proj._14 = -1.0;
+    proj._22 = 2.0 / cast(float32) renderer.draw_extent.height;
+    proj._24 = -1.0;
+    proj._33 = 1; // This is redundant. Well, z value in 2D space.
+    proj._44 = 1;
+
     ps := Font_System.Push_Constant.{
         projection = proj,
         header     = system.block_buffer.address,
         vertex_data = current_buffer_address(system, renderer),
-        screen_extent = .{xx renderer.draw_extent.width, xx renderer.draw_extent.height}
     };
 
     vkCmdBindPipeline(command, .GRAPHICS, system.pipeline.vk);
@@ -277,7 +285,9 @@ append_text :: (system: *Font_System, text: string, font_size: u32, offset: Vect
     hb_buffer_clear_contents(system.harfbuzz_buffer);
     hb_buffer_add_utf8(system.harfbuzz_buffer, text.data, xx text.count, 0, -1);
     hb_buffer_set_direction(system.harfbuzz_buffer, .LTR);
-    // Set script?
+
+    // TODO: now the font system only handles latin characters
+    hb_buffer_set_script(system.harfbuzz_buffer, .HB_SCRIPT_LATIN);
 
     hb_shape(system.harfbuzz_font, system.harfbuzz_buffer, null, 0);
 
@@ -286,7 +296,7 @@ append_text :: (system: *Font_System, text: string, font_size: u32, offset: Vect
 
     cursor := offset;
     instance := Font_System.Vertex_Instance.{
-        bg_color = .{0, 0, 0, 1}, // Black
+        bg_color = .{0, 0, 0, 0}, // Black
         fg_color = .{1, 1, 1, 1}, // White
     };
     for i: 0..infos.count - 1 {

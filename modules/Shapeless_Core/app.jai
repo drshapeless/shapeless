@@ -96,11 +96,10 @@ appiter :: (appstate: *void) -> SDL_AppResult {
         fps := 1.0 / delta;
 
         if begin_draw(*renderer) {
-            cmd := renderer.cmd;
             begin_text_draw(*font_system, *renderer);
-            // append_text(*font_system, tprint("%", cast(u32) fps), 32, .{10, 150});
-            append_text(*font_system, "hello", 64, .{10, 150});
-            end_text_draw(*font_system, *renderer, cmd);
+            append_text(*font_system, tprint("%", cast(u32) fps), 16, .{10, 30});
+            append_text(*font_system, "hello, world", 32, .{10, 150});
+            end_text_draw(*font_system, *renderer);
             end_draw(*renderer);
         }
     }
