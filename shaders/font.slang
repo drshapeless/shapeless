@@ -2,7 +2,6 @@ struct Push_Constant {
     float4x4 projection;
     uint64_t header;
     uint64_t vertex_data;
-    float2   screen_extent;
 };
 
 struct Vertex_Instance {
