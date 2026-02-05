@@ -5,24 +5,23 @@ struct Push_Constant {
 };
 
 struct Vertex_Instance {
-    float4 bg_color;
     float4 fg_color;
     float4 atlas_bounds;
     float2 extent;
     float2 origin;
+    float size;
 };
 
 struct Header {
-    // uint32_t2 screen_extent;
-    uint32_t2 texture_extent;
-    // float screen_px_range;
+    float2 texture_extent;
+    float distance_range;
 };
 
 struct Vertex_Output {
-    float4 bg_color : COLOR0;
-    float4 fg_color : COLOR1;
+    float4 fg_color : COLOR0;
     float4 pos : SV_Position;
     float2 uv : UV0;
+    float size : SIZE0;
 };
 
 uniform Sampler2D font_texture;
@@ -63,10 +62,10 @@ Vertex_Output vertex_main(uint vertex_id : SV_VertexID, uint instance_id : SV_In
     // TODO: understand this shit
     output.pos = mul(transpose(pc.projection), float4(poss[vertex_id], 0, 1));
 
-    float u_min = instance.atlas_bounds.x / (float)header.texture_extent.x;
-    float u_max = instance.atlas_bounds.z / (float)header.texture_extent.x;
-    float v_min = instance.atlas_bounds.y / (float)header.texture_extent.y;
-    float v_max = instance.atlas_bounds.w / (float)header.texture_extent.y;
+    float u_min = instance.atlas_bounds.x / header.texture_extent.x;
+    float u_max = instance.atlas_bounds.z / header.texture_extent.x;
+    float v_min = instance.atlas_bounds.y / header.texture_extent.y;
+    float v_max = instance.atlas_bounds.w / header.texture_extent.y;
 
     float2 uvs[4] = {
         {u_min, v_min},
@@ -77,13 +76,19 @@ Vertex_Output vertex_main(uint vertex_id : SV_VertexID, uint instance_id : SV_In
 
     output.uv = uvs[vertex_id];
 
-    output.bg_color = instance.bg_color;
     output.fg_color = instance.fg_color;
+    output.size = instance.size;
     return output;
 }
 
 float median(float r, float g, float b) {
     return max(min(r, g), min(max(r, g), b));
+}
+
+float screen_px_range(float2 uv, float distance_range, float2 texture_extent) {
+    float2 unit_range = float2(distance_range) / texture_extent;
+    float2 screen_tex_size = float2(1.0) / fwidth(uv);
+    return max(0.5 * dot(unit_range, screen_tex_size), 1.0);
 }
 
 [shader("fragment")]
@@ -92,20 +97,10 @@ float4 fragment_main(Vertex_Output input, uniform Push_Constant pc) {
 
     float4 msd = font_texture.Sample(input.uv);
     float sd   = median(msd.r, msd.g, msd.b);
-    float screen_px_range = 2.0; // hardcode for now, which is 32 pixel in size
-    float screen_px_distance = screen_px_range * (sd - 0.5);
+    float screen_px_distance = screen_px_range(input.uv, header.distance_range, header.texture_extent) * (sd - 0.5);
     float opacity = clamp(screen_px_distance + 0.5, 0.0, 1.0);
 
-    float sdf = msd.a;
-    float sdf_dist = screen_px_range * (sdf - 0.5);
-
-    float outline = smoothstep(-0.8, 0.8, sdf_dist);
-    float3 outline_color = float3(1, 1, 1);
-    float3 final_color = lerp(outline_color, input.fg_color.rgb, opacity);
-    opacity = max(opacity, outline);
-
     // lerp() is mix() in glsl
-    // float4 color = lerp(input.bg_color, input.fg_color, opacity);
-    float4 color = float4(input.fg_color.rgb, input.fg_color.a * opacity);
+    float4 color = float4(input.fg_color.rgb, opacity);
     return color;
 }

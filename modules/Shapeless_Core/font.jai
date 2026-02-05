@@ -103,23 +103,16 @@ Font_System :: struct {
     }
 
     Vertex_Instance :: struct {
-        bg_color:     Vector4;
         fg_color:     Vector4;
         atlas_bounds: Vector4;
         extent:       Vector2;
         origin:       Vector2;
+        size:         float32;
     }
 
     Header :: struct {
-        // screen_extent: VkExtent2D;
-        texture_extent: VkExtent2D;
-        // screen_px_range is calculated by the
-        // desired pixel / generated pixel * pixel range
-        //
-        // For example a 32x32 atlas is generated, and a 72 pixel
-        // character is displayed on screen, and the distance range is
-        // 2, the screen_px_range is 72/32 * 2 = 4.5
-        // screen_px_range: float32;
+        texture_extent: Vector2;
+        distance_range: float32;
     }
 
     Push_Constant :: struct {
@@ -136,16 +129,13 @@ make_font_system :: (using renderer: *Renderer) -> Font_System {
     error := FT_Init_FreeType(*system.freetype_library);
     assert(error == 0, "Cannot init freetype, error code: %", error);
 
-    error = FT_New_Face(system.freetype_library, "assets/font/hack/Hack-Regular.ttf", 0, *system.freetype_face);
-    assert(error == 0, "Cannot read font library: %", error);
+    error = FT_New_Face(system.freetype_library, "assets/font/hack/Hack-Bold.ttf", 0, *system.freetype_face);
 
-    // Currently hardcoded as 32, same as msdf-atlas-gen.
-    error = FT_Set_Pixel_Sizes(system.freetype_face, 0, 64);
-    assert(error == 0, "Cannot change font size in freetype: %", error);
+    assert(error == 0, "Cannot read font library: %", error);
 
     system.harfbuzz_font = hb_ft_font_create_referenced(system.freetype_face);
 
-    system.msdf = load_msdf("assets/font/hack/hack.json");
+    system.msdf = load_msdf("assets/font/Hack-Bold.json");
     log("loaded % glyphs", system.msdf.glyphs.count);
 
     for system.msdf.glyphs {
@@ -157,7 +147,7 @@ make_font_system :: (using renderer: *Renderer) -> Font_System {
         table_set(*system.glyphs, it.index, glyph);
     }
 
-    result, system.msdf_texture = make_texture_from_file(renderer, "assets/font/hack/hack.png");
+    result, system.msdf_texture = make_texture_from_file(renderer, "assets/font/Hack-Bold.png");
     assert(result == .SUCCESS);
 
     descriptor_set_allocate_info := VkDescriptorSetAllocateInfo.{
@@ -219,7 +209,8 @@ make_font_system :: (using renderer: *Renderer) -> Font_System {
     assert(result == .SUCCESS);
 
     header_ptr := cast(*Font_System.Header) system.block_buffer.mapped_ptr;
-    header_ptr.texture_extent = .{system.msdf.atlas.width, system.msdf.atlas.height};
+    header_ptr.texture_extent = .{cast(float32) system.msdf.atlas.width, cast(float32) system.msdf.atlas.height};
+    header_ptr.distance_range = system.msdf.atlas.distanceRange;
 
     ok, system.pipeline = table_find(*pipelines, system.pipeline_id);
     assert(ok);
@@ -235,10 +226,6 @@ destroy_font_system :: (renderer: *Renderer, system: *Font_System) {
     hb_buffer_destroy(system.harfbuzz_buffer);
     destroy_buffer(renderer.vma, system.block_buffer);
     destroy_texture(renderer, system.msdf_texture);
-}
-
-pixel_to_ndc :: (pixel: s32, screen: u32) -> float32 {
-    return cast(float32) pixel / cast(float32) screen * 2.0 - 1.0;
 }
 
 begin_text_draw :: (system: *Font_System, renderer: *Renderer) {
@@ -296,8 +283,8 @@ append_text :: (system: *Font_System, text: string, font_size: u32, offset: Vect
 
     cursor := offset;
     instance := Font_System.Vertex_Instance.{
-        bg_color = .{0, 0, 0, 0}, // Black
         fg_color = .{1, 1, 1, 1}, // White
+        size = xx font_size
     };
     for i: 0..infos.count - 1 {
         glyph_id := infos[i].codepoint;

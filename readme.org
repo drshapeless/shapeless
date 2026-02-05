@@ -24,7 +24,7 @@ In charset.txt
 If you are using harfbuzz, because it gives a codepoint to the index
 of the font, you should not use -charset.
 #+begin_src shell
-  msdf-atlas-gen -type mtsdf -allglyphs -yorigin top -font ./Hack-Regular.ttf -format png -size 32 -imageout hack.png -json hack.json
+  msdf-atlas-gen -type mtsdf -allglyphs -yorigin top -font ./Hack-Regular.ttf -format png -emrange 0.5 -size 64 -imageout hack.png -json hack.json
 #+end_src
 
 * Unicode block
