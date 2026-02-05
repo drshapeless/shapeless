@@ -715,9 +715,9 @@ draw_mesh :: (command: VkCommandBuffer, mesh: Renderer.Mesh) {
 }
 
 // This version of make texture uses host image copy
-make_texture :: (using renderer: *Renderer, data: *void, extent: VkExtent2D) -> VkResult, Renderer.Texture {
+make_texture :: (using renderer: *Renderer, data: *void, extent: VkExtent2D, format: VkFormat = .R8G8B8A8_UNORM) -> VkResult, Renderer.Texture {
     texture: Renderer.Texture;
-    texture.format = .R8G8B8A8_SRGB;
+    texture.format = format;
     result: VkResult;
     result, texture.image = make_image(vma, extent, texture.format, .SAMPLED | .HOST_TRANSFER);
     if result return result, .{};
@@ -779,7 +779,7 @@ make_texture :: (using renderer: *Renderer, data: *void, extent: VkExtent2D) -> 
 }
 
 // This function relies on SDL_image
-make_texture_from_file :: (using renderer: *Renderer, file_path: string) -> VkResult, Renderer.Texture {
+make_texture_from_file :: (using renderer: *Renderer, file_path: string, format: VkFormat = .R8G8B8A8_UNORM) -> VkResult, Renderer.Texture {
     original_surface := IMG_Load(to_c_string(file_path));
     assert(original_surface != null);
     defer SDL_DestroySurface(original_surface);
@@ -788,7 +788,7 @@ make_texture_from_file :: (using renderer: *Renderer, file_path: string) -> VkRe
     assert(converted_surface != null);
     defer SDL_DestroySurface(converted_surface);
 
-    result, texture := make_texture(renderer, converted_surface.pixels, .{xx converted_surface.w, xx converted_surface.h});
+    result, texture := make_texture(renderer, converted_surface.pixels, .{xx converted_surface.w, xx converted_surface.h}, format);
     return result, texture;
 }
 
