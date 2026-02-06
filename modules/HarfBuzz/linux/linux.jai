@@ -4141,4 +4141,4 @@ hb_version_atleast :: (major: u32, minor: u32, micro: u32) -> hb_bool_t #foreign
 
 #scope_file
 
-libharfbuzz :: #library,system "libharfbuzz.so.0";
+libharfbuzz :: #library,system "libharfbuzz";

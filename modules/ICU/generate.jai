@@ -16,13 +16,19 @@ generate_bindings :: () -> bool {
     opts.strip_flags = .FUNCTIONS_WITH_VALIST;
 
     FOOTER :: #string EOF
-libharfbuzz :: #library,system "libharfbuzz";
+libicuuc :: #library,system "libicuuc";
+libicui18n :: #library,system "libicui18n";
 EOF;
 
     opts.footer = FOOTER;
     opts.generate_library_declarations = false;
 
-    array_add(*opts.libraries, .{filename = "libharfbuzz"});
+    array_add(*opts.libraries, .{filename = "libicuuc"});
+    array_add(*opts.libraries, .{filename = "libicui18n"});
+
+    // For whatever reason, char16_t is not automatically unwrap in
+    // the generator.
+    array_add(*opts.typedef_prefixes_to_unwrap, "char16_t");
 
     #if OS == .LINUX {
         output_filename = "linux/linux.jai";
@@ -35,7 +41,12 @@ EOF;
     }
 
     array_add(*opts.include_paths, "include");
-    array_add(*opts.source_files, "include/harfbuzz/hb.h");
+    array_add(*opts.source_files, "include/unicode/ubidi.h");
+    array_add(*opts.source_files, "include/unicode/uscript.h");
+    array_add(*opts.source_files, "include/unicode/utypes.h");
+    array_add(*opts.source_files, "include/unicode/utf8.h");
+    array_add(*opts.source_files, "include/unicode/ustring.h");
+    array_add(*opts.source_files, "include/unicode/ubrk.h");
     opts.visitor = visitor;
     opts.generate_compile_time_struct_checks = false;
 

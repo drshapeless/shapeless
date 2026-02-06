@@ -3,6 +3,3 @@
 } else #if OS == .MACOS {
     #load "macos/macos.jai";
 }
-
-#load "hb-ft.jai";
-#load "hb-icu.jai";
