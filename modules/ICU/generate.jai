@@ -35,6 +35,8 @@ EOF;
 
     } else #if OS == .MACOS {
         output_filename = "macos/macos.jai";
+
+        // brew link icu4c --force
         array_add(*opts.library_search_paths, "/opt/homebrew/lib");
     } else {
         assert(false, "the OS % is currently unsupported. You might be able to add support for it though!", OS);
