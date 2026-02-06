@@ -10,6 +10,11 @@ Jai and Jai only. With how powerful the Jai language is. I feel like
 that the lispy way of extending an editor is not the only way to do
 so.
 
+* Dependencies
+- harfbuzz
+- icu
+- freetype
+
 * msdf script
 If you use -allglyphs, you won't have a unicode to match the thing.
 #+begin_src shell
@@ -29,3 +34,10 @@ of the font, you should not use -charset.
 
 * Unicode block
 ftp://ftp.unicode.org/Public/UNIDATA/Blocks.txt
+
+* Image format for msdf atlas image
+Must not use R8G8B8A8_SRGB, it results in very blurry and thin font.
+
+Use R8G8B8A8_UNORM.
+
+I tracked down this bug for two days.

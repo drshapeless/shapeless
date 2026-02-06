@@ -1,6 +1,7 @@
 #run {
+    set_build_options_dc(.{do_output = false});
     // generate_msdf("/System/Library/Fonts/Menlo.ttc", 0.1, 64, "./assets/font");
-    generate_msdf("./assets/font/hack/Hack-Bold.ttf", 0.2, 64, "./assets/font");
+    generate_msdf("/usr/share/fonts/hack/Hack-Bold.ttf", 0.25, 64, "./assets/font");
 }
 
 generate_msdf :: (file_path: string, em_range: float, size: int, output_directory: string) -> bool {
@@ -22,7 +23,7 @@ generate_msdf :: (file_path: string, em_range: float, size: int, output_director
     "-json", output_json
     ];
 
-    log("Generating % msdf", filename);
+    log("Generating % msdf (%)", filename, msdf_command);
 
     result := run_command(..msdf_command);
     if result.exit_code != 0 {
@@ -38,3 +39,4 @@ generate_msdf :: (file_path: string, em_range: float, size: int, output_director
 #import "File";
 #import "Basic";
 #import "String";
+#import "Compiler";
