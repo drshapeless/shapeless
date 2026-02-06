@@ -85,9 +85,15 @@ float median(float r, float g, float b) {
     return max(min(r, g), min(max(r, g), b));
 }
 
+float2 sqr(float2 x) {
+    return x * x;
+}
+
 float screen_px_range(float2 uv, float distance_range, float2 texture_extent) {
     float2 unit_range = float2(distance_range) / texture_extent;
-    float2 screen_tex_size = float2(1.0) / fwidth(uv);
+    // This is approximation.
+    // float2 screen_tex_size = float2(1.0) / fwidth(uv);
+    float2 screen_tex_size = rsqrt(sqr(ddx(uv)) + sqr(ddy(uv)));
     return max(0.5 * dot(unit_range, screen_tex_size), 1.0);
 }
 
