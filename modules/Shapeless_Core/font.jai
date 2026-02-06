@@ -129,14 +129,13 @@ make_font_system :: (using renderer: *Renderer) -> Font_System {
     error := FT_Init_FreeType(*system.freetype_library);
     assert(error == 0, "Cannot init freetype, error code: %", error);
 
-    error = FT_New_Face(system.freetype_library, "assets/font/hack/Hack-Bold.ttf", 0, *system.freetype_face);
+    error = FT_New_Face(system.freetype_library, "/usr/share/fonts/hack/Hack-Bold.ttf", 0, *system.freetype_face);
 
     assert(error == 0, "Cannot read font library: %", error);
 
     system.harfbuzz_font = hb_ft_font_create_referenced(system.freetype_face);
 
     system.msdf = load_msdf("assets/font/Hack-Bold.json");
-    log("loaded % glyphs", system.msdf.glyphs.count);
 
     for system.msdf.glyphs {
         glyph: Font_System.Glyph;
@@ -274,7 +273,7 @@ append_text :: (system: *Font_System, text: string, font_size: u32, offset: Vect
     hb_buffer_set_direction(system.harfbuzz_buffer, .LTR);
 
     // TODO: now the font system only handles latin characters
-    hb_buffer_set_script(system.harfbuzz_buffer, .HB_SCRIPT_LATIN);
+    // hb_buffer_set_script(system.harfbuzz_buffer, .HB_SCRIPT_LATIN);
 
     hb_shape(system.harfbuzz_font, system.harfbuzz_buffer, null, 0);
 
@@ -331,4 +330,12 @@ harfbuzz_get_glyph_positions :: (buffer: *hb_buffer_t) -> [] hb_glyph_position_t
     positions.data = hb_buffer_get_glyph_positions(buffer, *count);
     positions.count = xx count;
     return positions;
+}
+
+#if OS == .LINUX {
+    SYSTEM_FONT_DIRECTORY :: "/usr/share/fonts/";
+} else #if OS == .MACOS {
+    SYSTEM_FONT_DIRECTORY :: "/System/Library/Fonts/";
+} else {
+    SYSTEM_FONT_DIRECTORY :: "";
 }

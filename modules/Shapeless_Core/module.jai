@@ -32,3 +32,4 @@ Buffer :: struct {
 #import "HarfBuzz";
 // This is the stock freetype, not the latest version, but should be ok.
 #import "freetype";
+#import "ICU";
