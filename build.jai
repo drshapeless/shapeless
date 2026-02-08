@@ -11,6 +11,11 @@ OUTPUT_EXECUTABLE_NAME := "shapeless";
     root_options := get_build_options();
     w := compiler_create_workspace("Target workspace");
     options := get_build_options(w);
+
+    additional_linker_arguments: [..] string;
+    array_add(*additional_linker_arguments, "-lm");
+    options.additional_linker_arguments = additional_linker_arguments;
+
     copy_commonly_propagated_fields(root_options, *options);
     options.output_executable_name = OUTPUT_EXECUTABLE_NAME;
 
