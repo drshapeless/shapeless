@@ -5,6 +5,6 @@ run_after_load :: (app: *App) #c_call {
     }
 }
 
-#import "Shapeless_Core";
+#import "Core";
 
 #import "Basic";
