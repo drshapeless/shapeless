@@ -11,7 +11,7 @@
 }
 
 generate_bindings :: () -> bool {
-    output_filename: string;
+    output_filename: string = "bindings.jai";
     opts: Generate_Bindings_Options;
     opts.strip_flags = .FUNCTIONS_WITH_VALIST;
 
@@ -25,10 +25,7 @@ EOF;
     array_add(*opts.libraries, .{filename = "libharfbuzz"});
 
     #if OS == .LINUX {
-        output_filename = "linux/linux.jai";
-
     } else #if OS == .MACOS {
-        output_filename = "macos/macos.jai";
         array_add(*opts.library_search_paths, "/opt/homebrew/lib");
     } else {
         assert(false, "the OS % is currently unsupported. You might be able to add support for it though!", OS);

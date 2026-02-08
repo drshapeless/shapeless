@@ -1,8 +1,3 @@
- #if OS == .LINUX {
-    #load "linux/linux.jai";
-} else #if OS == .MACOS {
-    #load "macos/macos.jai";
-}
-
+#load "bindings.jai";
 #load "hb-ft.jai";
 #load "hb-icu.jai";
