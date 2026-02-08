@@ -96,6 +96,8 @@ Font_System :: struct {
     freetype_library: FT_Library;
     freetype_face:    FT_Face;
 
+    available_font_families: Table(string, [..] Variation);
+
     Glyph :: struct {
         advance:      float32;
         plane_bounds: Vector4;
@@ -116,15 +118,113 @@ Font_System :: struct {
     }
 
     Push_Constant :: struct {
-        projection: Matrix4;
-        header: VkDeviceAddress;
+        projection:  Matrix4;
+        header:      VkDeviceAddress;
         vertex_data: VkDeviceAddress;
     }
+
+    Font :: struct {
+        info: stbtt_fontinfo;
+    }
+
+    Font_Family :: struct {
+        name:    string;
+        members: [..] Member;
+
+        Member :: struct {
+            file_path: string;
+            style:     string;
+        }
+    }
+
+    Variation :: struct {
+        file_path: string;
+        style:     string;
+    }
+}
+
+load_system_fonts :: (system: *Font_System) {
+    ok := FcInit();
+    assert(ok != 0, "cannot init fontconfig");
+
+    pattern := FcPatternCreate();
+    object_set := FcObjectSetCreate();
+    defer {
+        FcObjectSetDestroy(object_set);
+        FcPatternDestroy(pattern);
+    }
+
+    FcObjectSetAdd(object_set, FC_FILE);
+    FcObjectSetAdd(object_set, FC_FAMILY);
+    FcObjectSetAdd(object_set, FC_STYLE);
+    font_set := FcFontList(null, pattern, object_set);
+
+    if font_set {
+        log("Found % fonts", font_set.nfont);
+        for 0..font_set.nfont - 1 {
+            family:    *FcChar8;
+            style:     *FcChar8;
+            file_path: *FcChar8;
+
+            result: FcResult;
+            result = FcPatternGetString(font_set.fonts[it], FC_FILE, 0, *file_path);
+            assert(result == .Match);
+
+            result = FcPatternGetString(font_set.fonts[it], FC_FAMILY, 0, *family);
+            assert(result == .Match);
+
+            result = FcPatternGetString(font_set.fonts[it], FC_STYLE, 0, *style);
+
+            family_name := to_string(family);
+
+            variation := Font_System.Variation.{
+                file_path = copy_string(to_string(file_path))
+            };
+
+            if result == .Match {
+                variation.style = copy_string(to_string(style));
+            }
+
+            variations := table_find_pointer(*system.available_font_families, family_name);
+            if variations != null {
+                array_add(variations, variation);
+            } else {
+                new_variations: [..] Font_System.Variation;
+                array_add(*new_variations, variation);
+                table_add(*system.available_font_families, copy_string(family_name), new_variations);
+            }
+        }
+
+        log("The are % distinct font families", system.available_font_families.count);
+
+        FcFontSetDestroy(font_set);
+    }
+
+    FcFini();
 }
 
 make_font_system :: (using renderer: *Renderer) -> Font_System {
     system: Font_System;
     result: VkResult;
+    ok:     bool;
+
+    load_system_fonts(*system);
+
+    for system.available_font_families {
+        log("%", it_index);
+    }
+
+    ok=, variations := table_find(*system.available_font_families, "Hack");
+    assert(ok, "Cannot find hack");
+
+    // filedata, ok := read_entire_file("/usr/share/fonts/hack/Hack-Bold.ttf");
+    // assert(ok, "Cannot read font");
+
+    // font: stbtt_fontinfo;
+    // stbtt_ret_code := stbtt_InitFont(*font, filedata.data, stbtt_GetFontOffsetForIndex(filedata.data, 0));
+    // assert(stbtt_ret_code == 0, "Cannot init font");
+
+    // font_scale := stbtt_ScaleForPixelHeight(*font, 32);
 
     error := FT_Init_FreeType(*system.freetype_library);
     assert(error == 0, "Cannot init freetype, error code: %", error);
@@ -183,7 +283,7 @@ make_font_system :: (using renderer: *Renderer) -> Font_System {
     init(*pb);
     defer deinit(*pb);
 
-    ok, shader_module := make_shader_module(renderer, "shaders/font.slang.spv");
+    ok=, shader_module := make_shader_module(renderer, "shaders/font.slang.spv");
     assert(ok);
     defer vkDestroyShaderModule(device, shader_module, vka);
 
