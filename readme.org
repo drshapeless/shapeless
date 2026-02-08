@@ -13,7 +13,10 @@ so.
 * Dependencies
 - harfbuzz
 - icu
-- freetype
+- freetype (If color emoji is not needed, this can be ditched.)
+- stb_truetype
+- fontconfig (For finding system fonts)
+- libgrepheme (A suckless alternative)
 
 * msdf script
 If you use -allglyphs, you won't have a unicode to match the thing.
