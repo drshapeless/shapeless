@@ -96,6 +96,11 @@ Font_System :: struct {
     available_font_families: Table(string, [..] Variation);
 
     DEFAULT_FONT :: "Hack"; // This is my personal choice.
+    DEFAULT_EM_RANGE :: 0.3;
+    DEFAULT_FONT_SIZE :: 64;
+
+    next_font_family_id: Font_Family.ID = 1;
+    font_families :: Table(ID, Font_Family);
 
     Glyph :: struct {
         advance:      float32;
@@ -123,8 +128,15 @@ Font_System :: struct {
     }
 
     Font_Family :: struct {
-        name: string;
-        members: Table(string, harfbuzz_font); // The key is style name
+        ID :: #type,distinct u64;
+        name:    string;
+        members: Table(string, Member); // The key is style name
+        Member :: struct {
+            hb:      *hb_font_t;
+            msdf:    MSDF;
+            glyphs:  Table(u32, Glyph);
+            texture: Renderer.Texture;
+        }
     }
 
     Variation :: struct {
@@ -193,7 +205,8 @@ load_system_fonts :: (system: *Font_System) {
     FcFini();
 }
 
-load_font_family :: (system: *Font_System, name: string) -> bool, Font_System.Font_Family {
+// When this function failed, it does not free the memory.
+make_font_family :: (system: *Font_System, renderer: *Renderer, name: string) -> bool, Font_System.Font_Family.ID {
     ok, variations := table_find(*system.available_font_families, name);
     if !ok return false;
 
@@ -201,6 +214,7 @@ load_font_family :: (system: *Font_System, name: string) -> bool, Font_System.Fo
     family.name = name;
 
     for variations {
+        member: Font_System.Font_Family.Member;
         filedata, ok := read_entire_file(it.file_path);
         if !ok return false;
 
@@ -216,10 +230,26 @@ load_font_family :: (system: *Font_System, name: string) -> bool, Font_System.Fo
             style = sprint("unknown%", it_index);
         }
 
-        table_add(*family.members, style, font);
+        member.hb = font;
+
+        ok=, output_image, output_json := generate_msdf_atlas(it.file_path, system.DEFAULT_EM_RANGE, system.DEFAULT_FONT_SIZE, "assets/font");
+        if !ok return false;
+
+        member.msdf = load_msdf(output_json);
+        generate_glyphs(*member);
+
+        result:, member.texture = make_texture_from_file(renderer, output_image);
+        if result != .SUCCESS return false;
+
+        table_add(*family.members, style, member);
     }
 
-    return true, family;
+    id := system.next_font_family_id;
+    table_add(*system.font_families, id, family);
+
+    system.next_font_family_id += 1;
+
+    return true, id;
 }
 
 make_font_system :: (using renderer: *Renderer) -> Font_System {
@@ -229,32 +259,8 @@ make_font_system :: (using renderer: *Renderer) -> Font_System {
 
     load_system_fonts(*system);
 
-    ok=, default_variations := table_find(*system.available_font_families, Font_System.DEFAULT_FONT);
-    assert(ok, "Cannot find default font");
-
-    filedata:, ok = read_entire_file("/usr/share/fonts/hack/Hack-Bold.ttf");
-    assert(ok, "Cannot read font");
-
-    blob := hb_blob_create(filedata.data, xx filedata.count, .READONLY, null, null);
-    defer hb_blob_destroy(blob);
-
-    face := hb_face_create(blob, 0);
-    defer hb_face_destroy(face);
-    system.harfbuzz_font = hb_font_create(face);
-
-    system.msdf = load_msdf("assets/font/Hack-Bold.json");
-
-    for system.msdf.glyphs {
-        glyph: Font_System.Glyph;
-        glyph.advance = it.advance;
-        glyph.plane_bounds = bound_to_vector4(it.planeBounds);
-        glyph.atlas_bounds = bound_to_vector4(it.atlasBounds);
-
-        table_set(*system.glyphs, it.index, glyph);
-    }
-
-    result, system.msdf_texture = make_texture_from_file(renderer, "assets/font/Hack-Bold.png");
-    assert(result == .SUCCESS);
+    ok, default_font_id = make_font_family(*system, renderer, system.DEFAULT_FONT);
+    assert(ok, "cannot load default font family");
 
     descriptor_set_allocate_info := VkDescriptorSetAllocateInfo.{
         descriptorPool = persistent_descriptor_pool,
@@ -407,6 +413,47 @@ append_text :: (system: *Font_System, text: string, font_size: u32, offset: Vect
     }
 }
 
+// This is not an ideal way to generate atlas, but the most clean way to do so.
+// This function requires your path to have msdf-atlas-gen command
+generate_msdf_atlas :: (file_path: string, em_range: float, size: int, output_directory: string, replace_if_exists := false) -> bool, output_image_path:string, output_json_path:string {
+    filename := path_filename(file_path);
+
+    output_image := sprint("%/%.png", output_directory, path_strip_extension(filename));
+    output_json  := sprint("%/%.json", output_directory, path_strip_extension(filename));
+
+    if !replace_if_exists {
+        ok: bool;
+        _, ok = file_open(output_image);
+        if ok return true, output_image, output_json;
+
+        _, ok = file_open(output_json);
+        if ok return true, output_image, output_json;
+    }
+
+    msdf_command := string.[
+    "msdf-atlas-gen",
+    "-type", "mtsdf",  // Actually, msdf is enough
+    "-allglyphs",      // Because I am using harfbuzz
+    "-yorigin", "top", // Vulkan NDC, origin in top left corner
+    "-font", file_path,
+    "-format", "png",
+    "-emrange", tprint("%", em_range),
+    "-size", tprint("%", size),
+    "-imageout", output_image,
+    "-json", output_json
+    ];
+
+    log("Generating % msdf (%)", filename, msdf_command);
+
+    result := run_command(..msdf_command);
+    if result.exit_code != 0 {
+        return false, "", "";
+    }
+
+    return true, output_image, output_json;
+}
+
+
 #scope_file
 current_buffer_ptr :: (system: *Font_System, renderer: *Renderer) -> *void {
     return system.block_buffer.mapped_ptr + size_of(Font_System.Header) + renderer.frame_index * system.BUFFER_SIZE;
@@ -431,6 +478,17 @@ harfbuzz_get_glyph_positions :: (buffer: *hb_buffer_t) -> [] hb_glyph_position_t
     positions.data = hb_buffer_get_glyph_positions(buffer, *count);
     positions.count = xx count;
     return positions;
+}
+
+// This is just for aesthetic.
+generate_glyphs :: inline (font_family_member: *Font_System.Font_Family.Member) {
+    for g: font_family_member.msdf.glyphs {
+        glyph: Font_System.Glyph;
+        glyph.advance = it.advance;
+        glyph.plane_bounds = bound_to_vector4(g.planeBounds);
+        glyph.atlas_bounds = bound_to_vector4(g.atlasBounds);
+        table_set(*font_family_member.glyphs, g.index, glyph);
+    }
 }
 
 #if OS == .LINUX {
