@@ -122,17 +122,9 @@ Font_System :: struct {
         vertex_data: VkDeviceAddress;
     }
 
-    Font :: struct {
-    }
-
     Font_Family :: struct {
-        name:    string;
-        members: [..] Member;
-
-        Member :: struct {
-            file_path: string;
-            style:     string;
-        }
+        name: string;
+        members: Table(string, harfbuzz_font); // The key is style name
     }
 
     Variation :: struct {
@@ -199,6 +191,35 @@ load_system_fonts :: (system: *Font_System) {
     }
 
     FcFini();
+}
+
+load_font_family :: (system: *Font_System, name: string) -> bool, Font_System.Font_Family {
+    ok, variations := table_find(*system.available_font_families, name);
+    if !ok return false;
+
+    family: Font_System.Font_Family;
+    family.name = name;
+
+    for variations {
+        filedata, ok := read_entire_file(it.file_path);
+        if !ok return false;
+
+        blob := hb_blob_create(filedata.data, xx filedata.count, .READONLY, null, null);
+        defer hb_blob_destroy(blob);
+
+        face := hb_face_create(blob, 0);
+        defer hb_face_destroy(face);
+        font = hb_font_create(face);
+
+        style := it.style;
+        if style == "" {
+            style = sprint("unknown%", it_index);
+        }
+
+        table_add(*family.members, style, font);
+    }
+
+    return true, family;
 }
 
 make_font_system :: (using renderer: *Renderer) -> Font_System {
