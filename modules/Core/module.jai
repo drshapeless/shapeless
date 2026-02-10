@@ -30,9 +30,6 @@ Buffer :: struct {
 #import "Json";
 #import "Math";
 #import "HarfBuzz";
-// This is the stock freetype, not the latest version, but should be ok.
-#import "freetype";
-#import "stb_truetype";
 #import "ICU";
 #import "File";
 #import "fontconfig";

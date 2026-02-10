@@ -93,10 +93,9 @@ Font_System :: struct {
     harfbuzz_buffer: *hb_buffer_t;
     harfbuzz_font:   *hb_font_t;
 
-    freetype_library: FT_Library;
-    freetype_face:    FT_Face;
-
     available_font_families: Table(string, [..] Variation);
+
+    DEFAULT_FONT :: "Hack"; // This is my personal choice.
 
     Glyph :: struct {
         advance:      float32;
@@ -124,7 +123,6 @@ Font_System :: struct {
     }
 
     Font :: struct {
-        info: stbtt_fontinfo;
     }
 
     Font_Family :: struct {
@@ -210,30 +208,18 @@ make_font_system :: (using renderer: *Renderer) -> Font_System {
 
     load_system_fonts(*system);
 
-    for system.available_font_families {
-        log("%", it_index);
-    }
+    ok=, default_variations := table_find(*system.available_font_families, Font_System.DEFAULT_FONT);
+    assert(ok, "Cannot find default font");
 
-    ok=, variations := table_find(*system.available_font_families, "Hack");
-    assert(ok, "Cannot find hack");
+    filedata:, ok = read_entire_file("/usr/share/fonts/hack/Hack-Bold.ttf");
+    assert(ok, "Cannot read font");
 
-    // filedata, ok := read_entire_file("/usr/share/fonts/hack/Hack-Bold.ttf");
-    // assert(ok, "Cannot read font");
+    blob := hb_blob_create(filedata.data, xx filedata.count, .READONLY, null, null);
+    defer hb_blob_destroy(blob);
 
-    // font: stbtt_fontinfo;
-    // stbtt_ret_code := stbtt_InitFont(*font, filedata.data, stbtt_GetFontOffsetForIndex(filedata.data, 0));
-    // assert(stbtt_ret_code == 0, "Cannot init font");
-
-    // font_scale := stbtt_ScaleForPixelHeight(*font, 32);
-
-    error := FT_Init_FreeType(*system.freetype_library);
-    assert(error == 0, "Cannot init freetype, error code: %", error);
-
-    error = FT_New_Face(system.freetype_library, "/usr/share/fonts/hack/Hack-Bold.ttf", 0, *system.freetype_face);
-
-    assert(error == 0, "Cannot read font library: %", error);
-
-    system.harfbuzz_font = hb_ft_font_create_referenced(system.freetype_face);
+    face := hb_face_create(blob, 0);
+    defer hb_face_destroy(face);
+    system.harfbuzz_font = hb_font_create(face);
 
     system.msdf = load_msdf("assets/font/Hack-Bold.json");
 
@@ -320,8 +306,6 @@ make_font_system :: (using renderer: *Renderer) -> Font_System {
 }
 
 destroy_font_system :: (renderer: *Renderer, system: *Font_System) {
-    FT_Done_Face(system.freetype_face);
-    FT_Done_FreeType(system.freetype_library);
     hb_buffer_destroy(system.harfbuzz_buffer);
     destroy_buffer(renderer.vma, system.block_buffer);
     destroy_texture(renderer, system.msdf_texture);
@@ -363,11 +347,7 @@ end_text_draw :: (system: *Font_System, renderer: *Renderer) {
 
 append_text :: (system: *Font_System, text: string, font_size: u32, offset: Vector2) {
     // Should I allow constant changing in size?
-    error := FT_Set_Pixel_Sizes(system.freetype_face, 0, font_size);
-    assert(error == 0, "Cannot change freetype size");
-    hb_ft_font_changed(system.harfbuzz_font);
-
-    assert(error == 0, "freetype cannot set size, %", error);
+    hb_font_set_scale(system.harfbuzz_font, xx (font_size * 64), xx (font_size * 64));
     hb_buffer_clear_contents(system.harfbuzz_buffer);
     hb_buffer_add_utf8(system.harfbuzz_buffer, text.data, xx text.count, 0, -1);
     hb_buffer_set_direction(system.harfbuzz_buffer, .LTR);
