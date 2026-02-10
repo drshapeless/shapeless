@@ -1,6 +1,5 @@
 struct Push_Constant {
     float4x4 projection;
-    uint64_t header;
     uint64_t vertex_data;
 };
 
@@ -10,11 +9,8 @@ struct Vertex_Instance {
     float2 extent;
     float2 origin;
     float size;
-};
-
-struct Header {
-    float2 texture_extent;
     float distance_range;
+    uint32_t texture_index;
 };
 
 struct Vertex_Output {
@@ -22,9 +18,14 @@ struct Vertex_Output {
     float4 pos : SV_Position;
     float2 uv : UV0;
     float size : SIZE0;
+    uint32_t texture_index : INDEX0;
+    float distance_range : RANGE0;
+    float2 texture_extent : EXTENT0;
 };
 
-uniform Sampler2D font_texture;
+uniform SamplerState sampler;
+uniform Texture2D textures[];
+// uniform Sampler2D font_texture;
 
 // This is a N shape like quad for triangle strip
 // index(uv)
@@ -41,7 +42,6 @@ uniform Sampler2D font_texture;
 
 [shader("vertex")]
 Vertex_Output vertex_main(uint vertex_id : SV_VertexID, uint instance_id : SV_InstanceID, uniform Push_Constant pc) {
-    Header header = *(Header*)pc.header;
     Vertex_Output output = {};
 
     Vertex_Instance *instance = (Vertex_Instance*)(pc.vertex_data + sizeof(Vertex_Instance) * instance_id);
@@ -62,10 +62,13 @@ Vertex_Output vertex_main(uint vertex_id : SV_VertexID, uint instance_id : SV_In
     // TODO: understand this shit
     output.pos = mul(transpose(pc.projection), float4(poss[vertex_id], 0, 1));
 
-    float u_min = instance.atlas_bounds.x / header.texture_extent.x;
-    float u_max = instance.atlas_bounds.z / header.texture_extent.x;
-    float v_min = instance.atlas_bounds.y / header.texture_extent.y;
-    float v_max = instance.atlas_bounds.w / header.texture_extent.y;
+    uint texture_width, texture_height;
+    textures[NonUniformResourceIndex(instance.texture_index)].GetDimensions(texture_width, texture_height);
+
+    float u_min = instance.atlas_bounds.x / texture_width;
+    float u_max = instance.atlas_bounds.z / texture_width;
+    float v_min = instance.atlas_bounds.y / texture_height;
+    float v_max = instance.atlas_bounds.w / texture_height;
 
     float2 uvs[4] = {
         {u_min, v_min},
@@ -78,6 +81,9 @@ Vertex_Output vertex_main(uint vertex_id : SV_VertexID, uint instance_id : SV_In
 
     output.fg_color = instance.fg_color;
     output.size = instance.size;
+    output.texture_index = instance.texture_index;
+    output.distance_range = instance.distance_range;
+    output.texture_extent = float2(texture_width, texture_height);
     return output;
 }
 
@@ -99,11 +105,9 @@ float screen_px_range(float2 uv, float distance_range, float2 texture_extent) {
 
 [shader("fragment")]
 float4 fragment_main(Vertex_Output input, uniform Push_Constant pc) {
-    Header header = *(Header*)pc.header;
-
-    float4 msd = font_texture.Sample(input.uv);
+    float4 msd = textures[NonUniformResourceIndex(input.texture_index)].Sample(sampler, input.uv);
     float sd   = median(msd.r, msd.g, msd.b);
-    float screen_px_distance = screen_px_range(input.uv, header.distance_range, header.texture_extent) * (sd - 0.5);
+    float screen_px_distance = screen_px_range(input.uv, input.distance_range, input.texture_extent) * (sd - 0.5);
     float opacity = clamp(screen_px_distance + 0.5, 0.0, 1.0);
 
     // lerp() is mix() in glsl
