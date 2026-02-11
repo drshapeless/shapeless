@@ -44,3 +44,6 @@ Must not use R8G8B8A8_SRGB, it results in very blurry and thin font.
 Use R8G8B8A8_UNORM.
 
 I tracked down this bug for two days.
+
+* I remove vma after watching this talk
+https://www.youtube.com/watch?v=7bSzp-QildA

@@ -9,6 +9,7 @@ Renderer :: struct {
     graphics_queue:  VkQueue;
     present_queue:   VkQueue;
     vma:             VmaAllocator;
+    memory_indices:  Memory_Indices;
 
     command_pool:    VkCommandPool;
 
@@ -116,6 +117,23 @@ Renderer :: struct {
         // -1 means there is no buffer
         buffer_index: s64 = -1;
     }
+
+    Memory_Indices :: struct {
+        staging:  u32 = U32_MAX;
+        gpu_only: u32 = U32_MAX;
+        rebar:    u32 = U32_MAX;
+
+        STAGING_FLAG :VkMemoryPropertyFlags : .HOST_VISIBLE | .HOST_COHERENT;
+        GPU_ONLY_FLAG :VkMemoryPropertyFlags : .DEVICE_LOCAL;
+        REBAR_FLAG :VkMemoryPropertyFlags : .DEVICE_LOCAL | .HOST_VISIBLE;
+    }
+
+    Memory_Pool :: struct {
+        memory_type: u32;
+        memory:      VkDeviceMemory;
+        current_pos: u64;
+        bytes_left:  u64;
+    }
 }
 
 init :: (using renderer: *Renderer, window: *SDL_Window) -> ok:bool {
@@ -172,6 +190,9 @@ init :: (using renderer: *Renderer, window: *SDL_Window) -> ok:bool {
 
     vkGetDeviceQueue(device, queue_indices.graphics, 0, *graphics_queue);
     vkGetDeviceQueue(device, queue_indices.present, 0, *present_queue);
+
+    memory_indices = get_memory_indices(renderer);
+    log("%", memory_indices);
 
     result, vma = make_vma(instance, physical_device, device);
     if result return false;
@@ -1477,4 +1498,46 @@ make_descriptor_set_layout :: (renderer: *Renderer) -> VkResult, VkDescriptorSet
     layout: VkDescriptorSetLayout;
     result := check_vk(vkCreateDescriptorSetLayout(renderer.device, *layout_create_info, renderer.vka, *layout));
     return result, layout;
+}
+
+get_memory_indices :: (using renderer: *Renderer) -> Renderer.Memory_Indices {
+    indices: Renderer.Memory_Indices;
+    properties: VkPhysicalDeviceMemoryProperties;
+    vkGetPhysicalDeviceMemoryProperties(physical_device, *properties);
+
+    for i: 0..properties.memoryTypeCount - 1 {
+        if properties.memoryTypes[i].propertyFlags & indices.GPU_ONLY_FLAG == indices.GPU_ONLY_FLAG {
+            indices.gpu_only = xx i;
+        }
+
+        if properties.memoryTypes[i].propertyFlags & indices.REBAR_FLAG == indices.REBAR_FLAG {
+            indices.rebar = xx i;
+        }
+
+        if properties.memoryTypes[i].propertyFlags & indices.STAGING_FLAG == indices.STAGING_FLAG {
+            indices.staging = xx i;
+        }
+
+        if indices.staging != U32_MAX && indices.gpu_only != U32_MAX && indices.rebar != U32_MAX {
+            break;
+        }
+    }
+
+    return indices;
+}
+
+make_pool :: (using renderer: *Renderer, size: VkDeviceSize, memory_type_index: u32) -> VkResult, Renderer.Memory_Pool {
+    memory_allocate_info := VkMemoryAllocateInfo.{
+        allocationSize = size,
+        memoryTypeIndex = memory_type_index
+    };
+
+    pool: Renderer.Memory_Pool;
+    result: VkResult;
+
+    pool.bytes_left = size;
+    pool.memory_type = memory_type_index;
+    result = check_vk(vkAllocateMemory(device, *memory_allocate_info, vka, *pool.memory));
+
+    return result, pool;
 }
