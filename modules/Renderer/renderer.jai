@@ -185,11 +185,11 @@ init :: (using renderer: *Renderer, window: *SDL_Window) -> ok:bool {
     memory_indices = get_memory_indices(renderer);
     log("%", memory_indices);
 
-    result, renderer_preallocated_memory = gpu_allocate(renderer, Renderer.RENDERER_MEMORY_SIZE, memory_indices.rebar);
+    result, renderer_preallocated_memory = gpu_allocate(renderer, Renderer.RENDERER_MEMORY_SIZE, memory_indices.gpu_only);
     if result return false;
     renderer_memory_pool = make_memory_pool(renderer_preallocated_memory);
 
-    result, preallocated_memory = gpu_allocate(renderer, Renderer.DEFAULT_MEMORY_SIZE, memory_indices.rebar);
+    result, preallocated_memory = gpu_allocate_mapped(renderer, Renderer.DEFAULT_MEMORY_SIZE, memory_indices.rebar);
     if result return false;
 
     memory_pool = make_memory_pool(preallocated_memory);
@@ -1257,7 +1257,9 @@ get_memory_indices :: (using renderer: *Renderer) -> Renderer.Memory_Indices {
 
     for i: 0..properties.memoryTypeCount - 1 {
         if properties.memoryTypes[i].propertyFlags & indices.GPU_ONLY_FLAG == indices.GPU_ONLY_FLAG {
-            indices.gpu_only = xx i;
+            if indices.gpu_only == U32_MAX {
+                indices.gpu_only = xx i;
+            }
         }
 
         if properties.memoryTypes[i].propertyFlags & indices.REBAR_FLAG == indices.REBAR_FLAG {
@@ -1296,6 +1298,13 @@ gpu_allocate :: (renderer: *Renderer, size: u64, memory_type: u32) -> VkResult, 
     allocation.size        = size;
     allocation.offset      = 0;
     result := check_vk(vkAllocateMemory(renderer.device, *memory_allocate_info, renderer.vka, *allocation.memory));
+    if result return result, .{};
+
+    return .SUCCESS, allocation;
+}
+
+gpu_allocate_mapped :: (renderer: *Renderer, size: u64, memory_type: u32) -> VkResult, Renderer.Allocation {
+    result, allocation := gpu_allocate(renderer, size, memory_type);
     if result return result, .{};
 
     memory_map_info := VkMemoryMapInfo.{
