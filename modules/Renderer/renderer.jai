@@ -1118,7 +1118,7 @@ make_image :: (
         initialLayout = .UNDEFINED
     };
 
-    result = vkCreateImage(renderer.device, *image_create_info, renderer.vka, *image.vk);
+    result = check_vk(vkCreateImage(renderer.device, *image_create_info, renderer.vka, *image.vk));
     if result return result, .{};
 
     memory_requirements: VkMemoryRequirements;
@@ -1126,7 +1126,7 @@ make_image :: (
 
     image.allocation = get(memory_pool, memory_requirements.size, memory_requirements.alignment);
 
-    result = vkBindImageMemory(renderer.device, image.vk, image.allocation.memory, image.allocation.offset);
+    result = check_vk(vkBindImageMemory(renderer.device, image.vk, image.allocation.memory, image.allocation.offset));
     if result {
         vkDestroyImage(renderer.device, image.vk, renderer.vka);
         return result, .{};
@@ -1313,7 +1313,7 @@ gpu_allocate_mapped :: (renderer: *Renderer, size: u64, memory_type: u32) -> VkR
         size   = allocation.size
     };
 
-    result = vkMapMemory2(renderer.device, *memory_map_info, *allocation.mapped_pointer);
+    result = check_vk(vkMapMemory2(renderer.device, *memory_map_info, *allocation.mapped_pointer));
     if result return result, .{};
 
     return .SUCCESS, allocation;
