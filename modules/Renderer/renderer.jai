@@ -8,7 +8,6 @@ Renderer :: struct {
     queue_indices:   Queue_Family_Indices;
     graphics_queue:  VkQueue;
     present_queue:   VkQueue;
-    vma:             VmaAllocator;
 
     memory_indices:       Memory_Indices;
 
@@ -57,8 +56,6 @@ Renderer :: struct {
 
     resize_requested := false;
 
-    staging_pool: Staging_Pool;
-
     next_pipeline_id: Pipeline.ID = 1;
     pipelines: Table(Pipeline.ID, Pipeline);
 
@@ -84,7 +81,7 @@ Renderer :: struct {
 
     Image :: struct {
         vk:         VkImage;
-        allocation: VmaAllocation;
+        allocation: Allocation;
     }
 
     Texture :: struct {
@@ -95,9 +92,7 @@ Renderer :: struct {
 
     Buffer :: struct {
         vk:         VkBuffer;
-        allocation: VmaAllocation;
-        size:       u64;
-        mapped_ptr: *void;
+        allocation: Allocation;
         address:    VkDeviceAddress;
     }
 
@@ -107,19 +102,6 @@ Renderer :: struct {
         layout: VkPipelineLayout;
     }
 
-    Staging_Pool :: struct {
-        // The block size should be adjust by staging pool info reported by the renderer
-        BLOCK_SIZE :u64 : 4 * 1024 * 1024;
-
-        buffers: [..] Buffer;
-
-        current_pos: u64;
-        bytes_left:  u64;
-
-        // -1 means there is no buffer
-        buffer_index: s64 = -1;
-    }
-
     Memory_Indices :: struct {
         staging:  u32 = U32_MAX;
         gpu_only: u32 = U32_MAX;
@@ -127,7 +109,7 @@ Renderer :: struct {
 
         STAGING_FLAG :VkMemoryPropertyFlags : .HOST_VISIBLE | .HOST_COHERENT;
         GPU_ONLY_FLAG :VkMemoryPropertyFlags : .DEVICE_LOCAL;
-        REBAR_FLAG :VkMemoryPropertyFlags : .DEVICE_LOCAL | .HOST_VISIBLE;
+        REBAR_FLAG :VkMemoryPropertyFlags : .DEVICE_LOCAL | .HOST_VISIBLE | .HOST_COHERENT;
     }
 
     Memory_Pool :: struct {
@@ -212,9 +194,6 @@ init :: (using renderer: *Renderer, window: *SDL_Window) -> ok:bool {
 
     memory_pool = make_memory_pool(preallocated_memory);
 
-    result, vma = make_vma(instance, physical_device, device);
-    if result return false;
-
     result, command_pool = make_command_pools(renderer);
     if result return false;
 
@@ -243,7 +222,6 @@ deinit :: (using renderer: *Renderer) {
     destroy_frames(renderer);
     destroy_swapchain(renderer, *swapchain);
     vkDestroySurfaceKHR(instance, surface, vka);
-    vmaDestroyAllocator(vma);
     gpu_free(renderer, preallocated_memory);
     gpu_free(renderer, renderer_preallocated_memory);
     vkDestroyDevice(device, vka);
@@ -550,101 +528,32 @@ set_clear_color :: (using renderer: *Renderer, color: [4]float) {
 // All buffer are mapped and randomly accessed by default.
 // In modern GPU, most of the GPU memory are accessible by the CPU.
 // In M-series macOS, all of the memory are accessible by CPU.
-make_buffer :: (using renderer: *Renderer, size: VkDeviceSize, buffer_usage: VkBufferUsageFlags, memory_usage: VmaMemoryUsage = .AUTO, flags: VmaAllocationCreateFlags = 0) -> VkResult, Renderer.Buffer {
-    buffer_info := VkBufferCreateInfo.{
+make_buffer :: (using renderer: *Renderer, size: VkDeviceSize, buffer_usage: VkBufferUsageFlags) -> VkResult, Renderer.Buffer {
+    buffer_create_info := VkBufferCreateInfo.{
         size        = size,
         usage       = buffer_usage | .SHADER_DEVICE_ADDRESS,
         sharingMode = .EXCLUSIVE
     };
 
-    alloc_create_info := VmaAllocationCreateInfo.{
-        usage = memory_usage,
-        flags = flags | .MAPPED_BIT | .HOST_ACCESS_RANDOM_BIT
-    };
+    buffer: Renderer.Buffer;
+    result: VkResult;
+    result = check_vk(vkCreateBuffer(device, *buffer_create_info, vka, *buffer.vk));
+    if result return result, .{};
 
-    buffer := Renderer.Buffer.{
-        size = size
-    };
-    allocation_info: VmaAllocationInfo;
-    result := check_vk(vmaCreateBuffer(vma, *buffer_info, *alloc_create_info, *buffer.vk, *buffer.allocation, *allocation_info));
-    buffer.mapped_ptr = allocation_info.pMappedData;
+    buffer.allocation = get(*memory_pool, size);
+    result = check_vk(vkBindBufferMemory(device, buffer.vk, buffer.allocation.memory, buffer.allocation.offset));
+    if result return result, .{};
 
     address_info := VkBufferDeviceAddressInfo.{
         buffer = buffer.vk
     };
     buffer.address = vkGetBufferDeviceAddress(device, *address_info);
 
-    return result, buffer;
+    return .SUCCESS, buffer;
 }
 
-destroy_buffer :: (vma: VmaAllocator, buffer: Renderer.Buffer) {
-    vmaDestroyBuffer(vma, buffer.vk, buffer.allocation);
-}
-
-// This function is obsolete when using host image copy, but it is
-// currently kept because AMD driver does not support it well at the
-// moment.
-copy_buffer_to_image :: (command: VkCommandBuffer, source: Renderer.Buffer, offset: u64, destination: VkImage, extent: VkExtent2D) {
-    barrier := VkImageMemoryBarrier2.{
-        srcStageMask     = .TOP_OF_PIPE,
-        srcAccessMask    = 0,
-        dstStageMask     = .TRANSFER,
-        dstAccessMask    = .TRANSFER_WRITE,
-        oldLayout        = .UNDEFINED,
-        newLayout        = .TRANSFER_DST_OPTIMAL,
-        image            = destination,
-        subresourceRange = .{
-            aspectMask   = .COLOR,
-            baseMipLevel   = 0,
-            levelCount     = 1,
-            baseArrayLayer = 0,
-            layerCount     = 1
-        }
-    };
-
-    dependency_info := VkDependencyInfo.{
-        imageMemoryBarrierCount = 1,
-        pImageMemoryBarriers    = *barrier
-    };
-    vkCmdPipelineBarrier2(command, *dependency_info);
-
-    region := VkBufferImageCopy2.{
-        bufferOffset = offset,
-        bufferRowLength = 0,
-        bufferImageHeight = 0,
-        imageSubresource = .{.COLOR, 0, 0, 1},
-        imageOffset = .{0, 0, 0},
-        imageExtent = .{width = extent.width, height = extent.height, depth = 1}
-    };
-
-    copy_info := VkCopyBufferToImageInfo2.{
-        srcBuffer = source.vk,
-        dstImage = destination,
-        dstImageLayout = .TRANSFER_DST_OPTIMAL,
-        regionCount = 1,
-        pRegions = *region
-    };
-
-    vkCmdCopyBufferToImage2(command, *copy_info);
-
-    barrier.oldLayout = .TRANSFER_DST_OPTIMAL;
-    barrier.newLayout = .SHADER_READ_ONLY_OPTIMAL;
-    barrier.srcAccessMask = .TRANSFER_WRITE;
-    barrier.dstAccessMask = .SHADER_READ;
-    barrier.srcStageMask = .TRANSFER;
-    barrier.dstStageMask = .FRAGMENT_SHADER;
-
-    vkCmdPipelineBarrier2(command, *dependency_info);
-}
-
-// Is this function necessary?
-make_buffer_copying_data :: (using renderer: *Renderer, data: [] $T, buffer_usage: VkBufferUsageFlags) -> VkResult, Renderer.Buffer {
-    size := data.count * size_of(T);
-    result, buffer := make_buffer(renderer, xx size, buffer_usage);
-    if result return result, .{};
-
-    memcpy(buffer.mapped_ptr, data.data, size);
-    return result, buffer;
+destroy_buffer :: (renderer: *Renderer, buffer: Renderer.Buffer) {
+    vkDestroyBuffer(renderer.device, buffer.vk, renderer.vka);
 }
 
 begin_single_time_commands :: (using renderer: *Renderer) -> VkResult, VkCommandBuffer {
@@ -689,7 +598,7 @@ end_single_time_commands :: (using renderer: *Renderer, command: VkCommandBuffer
 
 destroy_texture :: (using renderer: *Renderer, texture: Renderer.Texture) {
     vkDestroyImageView(device, texture.image_view, vka);
-    vmaDestroyImage(vma, texture.image.vk, texture.image.allocation);
+    vkDestroyImage(device, texture.image.vk, vka);
 }
 
 destroy_pipeline :: (using renderer: *Renderer, pipeline: Renderer.Pipeline) {
@@ -703,16 +612,16 @@ destroy_pipeline :: (using renderer: *Renderer, pipeline: Renderer.Pipeline) {
 }
 
 // This version of make texture uses host image copy
-make_texture :: (using renderer: *Renderer, data: *void, extent: VkExtent2D, format: VkFormat = .R8G8B8A8_UNORM) -> VkResult, Renderer.Texture {
+make_texture :: (renderer: *Renderer, memory_pool: *Renderer.Memory_Pool, data: *void, extent: VkExtent2D, format: VkFormat = .R8G8B8A8_UNORM) -> VkResult, Renderer.Texture {
     texture: Renderer.Texture;
     texture.format = format;
     result: VkResult;
-    result, texture.image = make_image(vma, extent, texture.format, .SAMPLED | .HOST_TRANSFER);
+    result, texture.image = make_image(renderer, memory_pool, extent, texture.format, .SAMPLED | .HOST_TRANSFER);
     if result return result, .{};
 
     result, texture.image_view = make_image_view(renderer, texture.image.vk, texture.format, .COLOR);
     if result {
-        vmaDestroyImage(vma, texture.image.vk, texture.image.allocation);
+        vkDestroyImage(renderer.device, texture.image.vk, renderer.vka);
         return result, .{};
     }
 
@@ -729,7 +638,7 @@ make_texture :: (using renderer: *Renderer, data: *void, extent: VkExtent2D, for
         }
     };
 
-    result = check_vk(vkTransitionImageLayout(device, 1, *host_image_layout_transition_info));
+    result = check_vk(vkTransitionImageLayout(renderer.device, 1, *host_image_layout_transition_info));
     if result {
         destroy_texture(renderer, texture);
         return result, .{};
@@ -757,7 +666,7 @@ make_texture :: (using renderer: *Renderer, data: *void, extent: VkExtent2D, for
         pRegions       = *memory_to_image_copy
     };
 
-    result = check_vk(vkCopyMemoryToImage(device, *copy_memory_to_image_info));
+    result = check_vk(vkCopyMemoryToImage(renderer.device, *copy_memory_to_image_info));
     if result {
         destroy_texture(renderer, texture);
         return result, .{};
@@ -767,7 +676,7 @@ make_texture :: (using renderer: *Renderer, data: *void, extent: VkExtent2D, for
 }
 
 // This function relies on SDL_image
-make_texture_from_file :: (using renderer: *Renderer, file_path: string, format: VkFormat = .R8G8B8A8_UNORM) -> VkResult, Renderer.Texture {
+make_texture_from_file :: (renderer: *Renderer, memory_pool: *Renderer.Memory_Pool, file_path: string, format: VkFormat = .R8G8B8A8_UNORM) -> VkResult, Renderer.Texture {
     original_surface := IMG_Load(to_c_string(file_path));
     assert(original_surface != null);
     defer SDL_DestroySurface(original_surface);
@@ -776,13 +685,14 @@ make_texture_from_file :: (using renderer: *Renderer, file_path: string, format:
     assert(converted_surface != null);
     defer SDL_DestroySurface(converted_surface);
 
-    result, texture := make_texture(renderer, converted_surface.pixels, .{xx converted_surface.w, xx converted_surface.h}, format);
+    result, texture := make_texture(renderer, memory_pool, converted_surface.pixels, .{xx converted_surface.w, xx converted_surface.h}, format);
     return result, texture;
 }
 
 resize_callback :: (using renderer: *Renderer, extent: VkExtent2D) {
     vkDeviceWaitIdle(device);
     destroy_draw_images(renderer);
+    reset(*renderer.renderer_memory_pool);
     make_draw_images(renderer, extent);
     remake_swapchain(renderer, extent);
     resize_requested = false;
@@ -1039,26 +949,6 @@ make_device :: (renderer: *Renderer, device_extensions: [] *u8) -> VkResult, VkD
     return result, device;
 }
 
-make_vma :: (instance: VkInstance, physical_device: VkPhysicalDevice, device: VkDevice) -> VkResult, VmaAllocator {
-    vma_vulkan_functions := VmaVulkanFunctions.{
-        vkGetInstanceProcAddr = vkGetInstanceProcAddr,
-        vkGetDeviceProcAddr = vkGetDeviceProcAddr,
-    };
-
-    create_info := VmaAllocatorCreateInfo.{
-        vulkanApiVersion = VK_API_VERSION_1_4,
-        physicalDevice = physical_device,
-        device = device,
-        instance = instance,
-        flags = .BUFFER_DEVICE_ADDRESS_BIT,
-        pVulkanFunctions = *vma_vulkan_functions,
-    };
-
-    allocator: VmaAllocator;
-    result := check_vk(vmaCreateAllocator(*create_info, *allocator));
-    return result, allocator;
-}
-
 make_swapchain :: (renderer: *Renderer, extent: VkExtent2D, old_swapchain: VkSwapchainKHR = null) -> VkResult, Renderer.Swapchain {
     support := get_swapchain_support(renderer.physical_device, renderer.surface);
 
@@ -1199,18 +1089,20 @@ remake_swapchain :: (renderer: *Renderer, extent: VkExtent2D) -> VkResult {
 }
 
 make_image :: (
-    vma: VmaAllocator,
+    renderer: *Renderer,
+    memory_pool: *Renderer.Memory_Pool,
     extent: VkExtent2D,
     format: VkFormat,
     image_usage: VkImageUsageFlags,
-    memory_usage: VmaMemoryUsage = .AUTO,
     tiling: VkImageTiling = .OPTIMAL,
     image_type: VkImageType = .e2D,
     layer_count: u32 = 1,
     sample_count: VkSampleCountFlagBits = .e1,
     mip_levels: u32 = 1
 ) -> VkResult, Renderer.Image {
-    image_info := VkImageCreateInfo.{
+    image: Renderer.Image;
+    result: VkResult;
+    image_create_info := VkImageCreateInfo.{
         imageType = image_type,
         format = format,
         extent = .{
@@ -1226,16 +1118,21 @@ make_image :: (
         initialLayout = .UNDEFINED
     };
 
-    alloc_info := VmaAllocationCreateInfo.{
-        // flags = .DEDICATED_MEMORY_BIT,
-        usage = memory_usage,
-        // requiredFlags = .DEVICE_LOCAL
-    };
+    result = vkCreateImage(renderer.device, *image_create_info, renderer.vka, *image.vk);
+    if result return result, .{};
 
-    image: VkImage;
-    allocation: VmaAllocation;
-    result := check_vk(vmaCreateImage(vma, *image_info, *alloc_info, *image, *allocation, null));
-    return result, .{vk = image, allocation = allocation};
+    memory_requirements: VkMemoryRequirements;
+    vkGetImageMemoryRequirements(renderer.device, image.vk, *memory_requirements);
+
+    image.allocation = get(memory_pool, memory_requirements.size, memory_requirements.alignment);
+
+    result = vkBindImageMemory(renderer.device, image.vk, image.allocation.memory, image.allocation.offset);
+    if result {
+        vkDestroyImage(renderer.device, image.vk, renderer.vka);
+        return result, .{};
+    }
+
+    return .SUCCESS, image;
 }
 
 make_image_view :: (using renderer: *Renderer, image: VkImage, format: VkFormat, aspect_flag: VkImageAspectFlags, layer_count: u32 = 1, mip_levels: u32 = 1) -> VkResult, VkImageView {
@@ -1275,28 +1172,28 @@ find_depth_format :: (using renderer: *Renderer) -> VkFormat {
 
 // The word image here is not the same as Renderer.Image, it also
 // includes an image view.
-make_draw_images :: (using renderer: *Renderer, extent: VkExtent2D) -> VkResult {
-    draw_extent = extent;
-    result, draw_image := make_image(vma, extent, swapchain.format, .TRANSFER_SRC | .COLOR_ATTACHMENT);
+make_draw_images :: (renderer: *Renderer, extent: VkExtent2D) -> VkResult {
+    renderer.draw_extent = extent;
+    result, draw_image := make_image(renderer, *renderer.renderer_memory_pool, extent, renderer.swapchain.format, .TRANSFER_SRC | .COLOR_ATTACHMENT);
     if result return result;
 
-    result=, draw_image_view := make_image_view(renderer, draw_image.vk, swapchain.format, .COLOR);
+    result=, draw_image_view := make_image_view(renderer, draw_image.vk, renderer.swapchain.format, .COLOR);
     if result return result;
 
-    draw_texture = .{
+    renderer.draw_texture = .{
         image = draw_image,
         image_view = draw_image_view,
-        format = swapchain.format
+        format = renderer.swapchain.format
     };
 
     depth_format := find_depth_format(renderer);
-    result=, depth_image := make_image(vma, extent, depth_format, .DEPTH_STENCIL_ATTACHMENT);
+    result=, depth_image := make_image(renderer, *renderer.renderer_memory_pool, extent, depth_format, .DEPTH_STENCIL_ATTACHMENT);
     if result return result;
 
     result=, depth_image_view := make_image_view(renderer, depth_image.vk, depth_format, .DEPTH);
     if result return result;
 
-    depth_texture = .{
+    renderer.depth_texture = .{
         image = depth_image,
         image_view = depth_image_view,
         format = depth_format
@@ -1353,50 +1250,6 @@ acquire_next_image_index :: (using renderer: *Renderer) -> bool {
     return true;
 }
 
-make_descriptor_pool :: (renderer: *Renderer, pool_sizes: [] VkDescriptorPoolSize, max_sets: u32) -> VkResult, VkDescriptorPool {
-    pool_create_info := VkDescriptorPoolCreateInfo.{
-        maxSets = max_sets,
-        poolSizeCount = xx pool_sizes.count,
-        pPoolSizes = pool_sizes.data
-    };
-
-    pool: VkDescriptorPool;
-    result := check_vk(vkCreateDescriptorPool(renderer.device, *pool_create_info, renderer.vka, *pool));
-    return result, pool;
-}
-
-make_sampler :: (renderer: *Renderer) -> VkResult, VkSampler {
-    sampler_create_info := VkSamplerCreateInfo.{
-        magFilter = .LINEAR,
-        minFilter = .LINEAR,
-        mipmapMode = .LINEAR,
-        anisotropyEnable = VK_TRUE,
-        maxAnisotropy  = 8
-    };
-
-    sampler: VkSampler;
-    result := check_vk(vkCreateSampler(renderer.device, *sampler_create_info, renderer.vka, *sampler));
-    return result, sampler;
-}
-
-make_descriptor_set_layout :: (renderer: *Renderer) -> VkResult, VkDescriptorSetLayout {
-    binding := VkDescriptorSetLayoutBinding.{
-        descriptorType = .COMBINED_IMAGE_SAMPLER,
-        descriptorCount = 1,
-        stageFlags = .FRAGMENT,
-        pImmutableSamplers = null
-    };
-
-    layout_create_info := VkDescriptorSetLayoutCreateInfo.{
-        bindingCount = 1,
-        pBindings = *binding
-    };
-
-    layout: VkDescriptorSetLayout;
-    result := check_vk(vkCreateDescriptorSetLayout(renderer.device, *layout_create_info, renderer.vka, *layout));
-    return result, layout;
-}
-
 get_memory_indices :: (using renderer: *Renderer) -> Renderer.Memory_Indices {
     indices: Renderer.Memory_Indices;
     properties: VkPhysicalDeviceMemoryProperties;
@@ -1426,7 +1279,15 @@ get_memory_indices :: (using renderer: *Renderer) -> Renderer.Memory_Indices {
 gpu_allocate :: (renderer: *Renderer, size: u64, memory_type: u32) -> VkResult, Renderer.Allocation {
     allocation: Renderer.Allocation;
 
+    // Not all memory should be device address compatible, e.g. the
+    // draw texture and depth texture, but it doesn't matter that
+    // much.
+    memory_allocate_flags_info := VkMemoryAllocateFlagsInfo.{
+        flags = .DEVICE_ADDRESS
+    };
+
     memory_allocate_info := VkMemoryAllocateInfo.{
+        pNext = *memory_allocate_flags_info,
         allocationSize = size,
         memoryTypeIndex = memory_type
     };
@@ -1453,21 +1314,24 @@ gpu_free :: (renderer: *Renderer, allocation: Renderer.Allocation) {
     vkFreeMemory(renderer.device, allocation.memory, renderer.vka);
 }
 
-get :: (pool: *Renderer.Memory_Pool, size: u64) -> Renderer.Allocation {
-    assert(pool.bytes_left >= size, "Renderer Memory Pool out of memory");
+get :: (pool: *Renderer.Memory_Pool, size: u64, alignment: u64 = 8) -> Renderer.Allocation {
+    mask := alignment - 1;
+    padding := (alignment - (pool.current_pos & mask)) & mask;
+    assert(pool.bytes_left >= (size + padding), "Renderer Memory Pool out of memory");
 
     allocation := pool.allocation;
     allocation.size = size;
-    allocation.offset += pool.current_pos;
+    allocation.offset += pool.current_pos + padding;
+    allocation.mapped_pointer += pool.current_pos + padding;
 
-    pool.current_pos += size;
-    pool.bytes_left -= size;
+    pool.current_pos += size + padding;
+    pool.bytes_left -= size + padding;
 
     return allocation;
 }
 
 reset :: (pool: *Renderer.Memory_Pool) {
-    pool.bytes_left = pool.size;
+    pool.bytes_left = pool.allocation.size;
     pool.current_pos = 0;
 }
 

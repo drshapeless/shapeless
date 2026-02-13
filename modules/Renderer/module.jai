@@ -79,7 +79,6 @@ check_vk :: (result: VkResult, $call := #caller_code, loc := #caller_location) -
 
 #scope_file
 #import "Vulkan";
-#import "Vulkan_Memory_Allocator";
 #import "SDL3";
 #import "Math";
 #import "Compiler";

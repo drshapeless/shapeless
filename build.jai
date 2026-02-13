@@ -3,10 +3,10 @@ OUTPUT_EXECUTABLE_NAME := "shapeless";
 #run {
     set_build_options_dc(.{do_output = false});
 
-    if !compile_shaders() {
-        log("Failed to compile shaders");
-        exit(-1);
-    }
+    // if !compile_shaders() {
+    //     log("Failed to compile shaders");
+    //     exit(-1);
+    // }
 
     root_options := get_build_options();
     w := compiler_create_workspace("Target workspace");
@@ -22,8 +22,6 @@ OUTPUT_EXECUTABLE_NAME := "shapeless";
     #if OS == .MACOS {
         log("This is mac" );
         compiler_add_library_search_directory("/opt/homebrew/lib");
-        make_directory_if_it_does_not_exist("macos");
-        copy_file("modules/Vulkan_Memory_Allocator/macos/libvma.dylib", "macos/libvma.dylib");
     }
 
     set_build_options(options, w);

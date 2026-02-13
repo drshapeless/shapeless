@@ -101,7 +101,7 @@ make_font_family :: (system: *Font_System, renderer: *Renderer, name: string) ->
         member.msdf = load_msdf(output_json);
         generate_glyphs(*member);
 
-        result, texture := make_texture_from_file(renderer, output_image);
+        result, texture := make_texture_from_file(renderer, *renderer.memory_pool, output_image);
         if result != .SUCCESS return false, 0;
 
         array_add(*system.font_textures, texture);
@@ -297,7 +297,7 @@ destroy_font_system :: (using renderer: *Renderer, system: *Font_System) {
     vkDestroyDescriptorSetLayout(device, system.descriptor_set_layout, vka);
     vkDestroySampler(device, system.sampler, vka);
     hb_buffer_destroy(system.harfbuzz_buffer);
-    destroy_buffer(vma, system.block_buffer);
+    destroy_buffer(renderer, system.block_buffer);
 }
 
 begin_text_draw :: (system: *Font_System, renderer: *Renderer) {
@@ -426,7 +426,7 @@ generate_msdf_atlas :: (file_path: string, em_range: float, size: int, output_di
 
 #scope_file
 current_buffer_ptr :: (system: *Font_System, renderer: *Renderer) -> *void {
-    return system.block_buffer.mapped_ptr + renderer.frame_index * system.BUFFER_SIZE;
+    return system.block_buffer.allocation.mapped_pointer + renderer.frame_index * system.BUFFER_SIZE;
 }
 
 current_buffer_address :: (system: *Font_System, renderer: *Renderer) -> VkDeviceAddress {
