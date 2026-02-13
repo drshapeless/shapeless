@@ -1,6 +1,7 @@
 Font_System :: struct {
     pipeline_id:           Renderer.Pipeline.ID;
     pipeline:              Renderer.Pipeline;
+    sampler:               VkSampler;
     descriptor_pool:       VkDescriptorPool;
     descriptor_set_layout: VkDescriptorSetLayout;
     descriptor_set:        VkDescriptorSet;
@@ -127,6 +128,15 @@ make_font_system :: (using renderer: *Renderer) -> Font_System {
     ok=, default_font_id := make_font_family(*system, renderer, system.DEFAULT_FONT);
     assert(ok, "cannot load default font family");
 
+    sampler_create_info := VkSamplerCreateInfo.{
+        magFilter = .LINEAR,
+        minFilter = .LINEAR,
+        mipmapMode = .LINEAR,
+        anisotropyEnable = VK_TRUE,
+        maxAnisotropy  = 8
+    };
+    result = check_vk(vkCreateSampler(device, *sampler_create_info, vka, *system.sampler));
+    assert(result == .SUCCESS);
 
     descriptor_binding_flags := VkDescriptorBindingFlags.[
     0,
@@ -203,14 +213,14 @@ make_font_system :: (using renderer: *Renderer) -> Font_System {
         size = size_of(Font_System.Push_Constant)
     };
 
-    descriptor_image_infos := NewArray(system.font_textures.count, VkDescriptorImageInfo);
+    descriptor_image_infos := NewArray(system.font_textures.count, VkDescriptorImageInfo,, temp);
     for i: 0..system.font_textures.count - 1 {
         descriptor_image_infos[i].imageView = system.font_textures[i].image_view;
         descriptor_image_infos[i].imageLayout = .SHADER_READ_ONLY_OPTIMAL;
     }
 
     sampler_info := VkDescriptorImageInfo.{
-        sampler = texture_sampler
+        sampler = system.sampler
     };
 
     write_descriptor_sets := VkWriteDescriptorSet.[
@@ -285,6 +295,7 @@ destroy_font_system :: (using renderer: *Renderer, system: *Font_System) {
     }
     vkDestroyDescriptorPool(device, system.descriptor_pool, vka);
     vkDestroyDescriptorSetLayout(device, system.descriptor_set_layout, vka);
+    vkDestroySampler(device, system.sampler, vka);
     hb_buffer_destroy(system.harfbuzz_buffer);
     destroy_buffer(vma, system.block_buffer);
 }

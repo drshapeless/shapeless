@@ -9,7 +9,22 @@ Renderer :: struct {
     graphics_queue:  VkQueue;
     present_queue:   VkQueue;
     vma:             VmaAllocator;
-    memory_indices:  Memory_Indices;
+
+    memory_indices:       Memory_Indices;
+
+    // renderer memory pool is for draw image and depth image only, in
+    // 1080p, they are just about 8.3MB respectively. So a 32MB pool
+    // should be more than enough. But in the case of macbook retina
+    // screen, 2560x1600, each would need 15.9MB. If there is even a
+    // 4k screen, the number only goes up, but max below 64MB, which
+    // is fine.
+    renderer_preallocated_memory:  Allocation;
+    renderer_memory_pool:          Memory_Pool;
+    RENDERER_MEMORY_SIZE :: 64 * 1024 * 1024; // 64MB
+
+    preallocated_memory:  Allocation;
+    memory_pool:          Memory_Pool;
+    DEFAULT_MEMORY_SIZE :: 256 * 1024 * 1024; // 256MB
 
     command_pool:    VkCommandPool;
 
@@ -35,14 +50,6 @@ Renderer :: struct {
     // linux, we use descriptor indexing, it still need a descriptor
     // pool, but the same descriptor set can be reuse over and over
     // again. Complicated logic is no longer needed.
-
-    // Persistent means the set in this pool is usually not changed
-    // throughout the whole life of the app, like the font atlas
-    // texture
-    persistent_descriptor_pool: VkDescriptorPool;
-
-    texture_sampler: VkSampler;
-    texture_descriptor_set_layout: VkDescriptorSetLayout;
 
     // This is for dynamic rendering
     cmd: VkCommandBuffer;
@@ -94,11 +101,6 @@ Renderer :: struct {
         address:    VkDeviceAddress;
     }
 
-    Mesh :: struct {
-        vertex_buffer: Buffer;
-        index_buffer:  Buffer;
-    }
-
     Pipeline :: struct {
         ID :: #type,distinct u64;
         vk:     VkPipeline;
@@ -129,10 +131,17 @@ Renderer :: struct {
     }
 
     Memory_Pool :: struct {
-        memory_type: u32;
-        memory:      VkDeviceMemory;
+        allocation:  Allocation;
         current_pos: u64;
         bytes_left:  u64;
+    }
+
+    Allocation :: struct {
+        memory_type: u32;
+        memory:      VkDeviceMemory;
+        size:        u64;
+        offset:      u64;
+        mapped_pointer: *void;
     }
 }
 
@@ -194,10 +203,16 @@ init :: (using renderer: *Renderer, window: *SDL_Window) -> ok:bool {
     memory_indices = get_memory_indices(renderer);
     log("%", memory_indices);
 
-    result, vma = make_vma(instance, physical_device, device);
+    result, renderer_preallocated_memory = gpu_allocate(renderer, Renderer.RENDERER_MEMORY_SIZE, memory_indices.rebar);
+    if result return false;
+    renderer_memory_pool = make_memory_pool(renderer_preallocated_memory);
+
+    result, preallocated_memory = gpu_allocate(renderer, Renderer.DEFAULT_MEMORY_SIZE, memory_indices.rebar);
     if result return false;
 
-    result, staging_pool = make_staging_pool(renderer);
+    memory_pool = make_memory_pool(preallocated_memory);
+
+    result, vma = make_vma(instance, physical_device, device);
     if result return false;
 
     result, command_pool = make_command_pools(renderer);
@@ -212,24 +227,6 @@ init :: (using renderer: *Renderer, window: *SDL_Window) -> ok:bool {
     result = make_draw_images(renderer, .{xx window_width, xx window_height});
     if result return false;
 
-    // It may not be a good idea to write the pool size here.
-    // But it needs constant fine tune, so be it.
-    persistent_pool_sizes := VkDescriptorPoolSize.[
-    .{
-        type = .COMBINED_IMAGE_SAMPLER,
-        descriptorCount = 10
-    }
-    ];
-
-    result, persistent_descriptor_pool = make_descriptor_pool(renderer, persistent_pool_sizes, 10);
-    if result return false;
-
-    result, texture_sampler = make_sampler(renderer);
-    if result return false;
-
-    result, texture_descriptor_set_layout = make_descriptor_set_layout(renderer);
-    if result return false;
-
     return true;
 }
 
@@ -241,17 +238,14 @@ deinit :: (using renderer: *Renderer) {
     }
     table_reset(*pipelines);
 
-    vkDestroyDescriptorSetLayout(device, texture_descriptor_set_layout, vka);
-    vkDestroySampler(device, texture_sampler, vka);
-    vkDestroyDescriptorPool(device, persistent_descriptor_pool, vka);
-
     destroy_command_pools(renderer);
     destroy_draw_images(renderer);
     destroy_frames(renderer);
     destroy_swapchain(renderer, *swapchain);
     vkDestroySurfaceKHR(instance, surface, vka);
-    destroy_staging_pool(renderer);
     vmaDestroyAllocator(vma);
+    gpu_free(renderer, preallocated_memory);
+    gpu_free(renderer, renderer_preallocated_memory);
     vkDestroyDevice(device, vka);
     vkDestroyInstance(instance, vka);
 }
@@ -300,8 +294,6 @@ begin_draw :: (using renderer: *Renderer) -> bool {
     };
 
     if check_vk(vkBeginCommandBuffer(cmd, *cmd_begin_info)) return false;
-
-    reset_staging_pool(*staging_pool);
 
     image_memory_barriers : [2]VkImageMemoryBarrier2;
     image_memory_barriers[0] = .{
@@ -710,31 +702,6 @@ destroy_pipeline :: (using renderer: *Renderer, pipeline: Renderer.Pipeline) {
     }
 }
 
-make_mesh :: (using renderer: *Renderer, vertices: []$T, indices: []u32) -> VkResult, Renderer.Mesh {
-    mesh: Renderer.Mesh;
-    result: VkResult;
-    result, mesh.vertex_buffer = make_buffer_copying_data(renderer, vertices, .VERTEX_BUFFER);
-    if result return result, .{};
-
-    result, mesh.index_buffer = make_buffer_copying_data(renderer, indices, .INDEX_BUFFER);
-    if result return result, .{};
-
-    return .SUCCESS, mesh;
-}
-
-destroy_mesh :: (using renderer: *Renderer, mesh: Renderer.Mesh) {
-    destroy_buffer(vma, mesh.vertex_buffer);
-    destroy_buffer(vma, mesh.index_buffer);
-}
-
-draw_mesh :: (command: VkCommandBuffer, mesh: Renderer.Mesh) {
-    offsets: VkDeviceSize;
-    vkCmdBindVertexBuffers(command, 0, 1, *mesh.vertex_buffer.vk, *offsets);
-    vkCmdBindIndexBuffer(command, mesh.index_buffer.vk, 0, .UINT32);
-    index_count: u32 = xx (mesh.index_buffer.size / size_of(u32));
-    vkCmdDrawIndexed(command, index_count, 1, 0, 0, 0);
-}
-
 // This version of make texture uses host image copy
 make_texture :: (using renderer: *Renderer, data: *void, extent: VkExtent2D, format: VkFormat = .R8G8B8A8_UNORM) -> VkResult, Renderer.Texture {
     texture: Renderer.Texture;
@@ -819,28 +786,6 @@ resize_callback :: (using renderer: *Renderer, extent: VkExtent2D) {
     make_draw_images(renderer, extent);
     remake_swapchain(renderer, extent);
     resize_requested = false;
-}
-
-allocate_staging_buffer :: (using renderer: *Renderer, size: u64) -> VkResult, Renderer.Buffer, u64 {
-    while staging_pool.bytes_left < size {
-        // First check if the current buffer is the last buffer
-        if staging_pool.buffer_index == staging_pool.buffers.count - 1 {
-            result := expand_staging_pool(renderer, *staging_pool, size);
-            if result return result, .{}, 0;
-        } else {
-            staging_pool.buffer_index += 1;
-            staging_pool.current_pos = 0;
-            staging_pool.bytes_left = staging_pool.buffers[staging_pool.buffer_index].size;
-        }
-    }
-
-    staging_buffer := staging_pool.buffers[staging_pool.buffer_index];
-    staging_buffer.size = size;
-
-    offset := staging_pool.current_pos;
-    staging_pool.current_pos += size;
-    staging_pool.bytes_left -= size;
-    return .SUCCESS, staging_buffer, offset;
 }
 
 make_pipeline :: (renderer: *Renderer, builder: *Pipeline_Builder, pipeline_layout: VkPipelineLayout) -> VkResult, Renderer.Pipeline.ID {
@@ -1408,54 +1353,6 @@ acquire_next_image_index :: (using renderer: *Renderer) -> bool {
     return true;
 }
 
-expand_staging_pool :: (renderer: *Renderer, pool: *Renderer.Staging_Pool, size: u64) -> VkResult {
-    real_size := pool.BLOCK_SIZE;
-    while size > real_size {
-        real_size *= 2;
-    }
-
-    result, buffer := make_buffer(renderer, real_size, .TRANSFER_SRC);
-    if result return result;
-
-    array_add(*pool.buffers, buffer);
-    pool.buffer_index = pool.buffers.count - 1;
-    pool.current_pos  = 0;
-    pool.bytes_left   = real_size;
-
-    return .SUCCESS;
-}
-
-make_staging_pool :: (renderer: *Renderer) -> VkResult, Renderer.Staging_Pool {
-    staging_pool: Renderer.Staging_Pool;
-
-    result := expand_staging_pool(renderer, *staging_pool, staging_pool.BLOCK_SIZE);
-    if result return result, .{};
-
-    return .SUCCESS, staging_pool;
-}
-
-reset_staging_pool :: (pool: *Renderer.Staging_Pool) {
-    if pool.buffer_index < 0 {
-        return;
-    }
-
-    pool.current_pos = 0;
-    pool.buffer_index = 0;
-    pool.bytes_left  = pool.buffers[pool.buffer_index].size;
-}
-
-destroy_staging_pool :: (using renderer: *Renderer) {
-    max_buffer_size :u64 = 0;
-    for staging_pool.buffers {
-        if it.size > max_buffer_size max_buffer_size = it.size;
-        destroy_buffer(vma, it);
-    }
-
-    log("Staging pool info:\nBuffer count: %, Max buffer size in staging pool: %", staging_pool.buffers.count, max_buffer_size);
-
-    array_free(staging_pool.buffers);
-}
-
 make_descriptor_pool :: (renderer: *Renderer, pool_sizes: [] VkDescriptorPoolSize, max_sets: u32) -> VkResult, VkDescriptorPool {
     pool_create_info := VkDescriptorPoolCreateInfo.{
         maxSets = max_sets,
@@ -1526,18 +1423,59 @@ get_memory_indices :: (using renderer: *Renderer) -> Renderer.Memory_Indices {
     return indices;
 }
 
-make_pool :: (using renderer: *Renderer, size: VkDeviceSize, memory_type_index: u32) -> VkResult, Renderer.Memory_Pool {
+gpu_allocate :: (renderer: *Renderer, size: u64, memory_type: u32) -> VkResult, Renderer.Allocation {
+    allocation: Renderer.Allocation;
+
     memory_allocate_info := VkMemoryAllocateInfo.{
         allocationSize = size,
-        memoryTypeIndex = memory_type_index
+        memoryTypeIndex = memory_type
     };
 
-    pool: Renderer.Memory_Pool;
-    result: VkResult;
+    allocation.memory_type = memory_type;
+    allocation.size        = size;
+    allocation.offset      = 0;
+    result := check_vk(vkAllocateMemory(renderer.device, *memory_allocate_info, renderer.vka, *allocation.memory));
+    if result return result, .{};
 
-    pool.bytes_left = size;
-    pool.memory_type = memory_type_index;
-    result = check_vk(vkAllocateMemory(device, *memory_allocate_info, vka, *pool.memory));
+    memory_map_info := VkMemoryMapInfo.{
+        memory = allocation.memory,
+        offset = 0,
+        size   = allocation.size
+    };
 
-    return result, pool;
+    result = vkMapMemory2(renderer.device, *memory_map_info, *allocation.mapped_pointer);
+    if result return result, .{};
+
+    return .SUCCESS, allocation;
+}
+
+gpu_free :: (renderer: *Renderer, allocation: Renderer.Allocation) {
+    vkFreeMemory(renderer.device, allocation.memory, renderer.vka);
+}
+
+get :: (pool: *Renderer.Memory_Pool, size: u64) -> Renderer.Allocation {
+    assert(pool.bytes_left >= size, "Renderer Memory Pool out of memory");
+
+    allocation := pool.allocation;
+    allocation.size = size;
+    allocation.offset += pool.current_pos;
+
+    pool.current_pos += size;
+    pool.bytes_left -= size;
+
+    return allocation;
+}
+
+reset :: (pool: *Renderer.Memory_Pool) {
+    pool.bytes_left = pool.size;
+    pool.current_pos = 0;
+}
+
+make_memory_pool :: (allocation: Renderer.Allocation) -> Renderer.Memory_Pool {
+    pool := Renderer.Memory_Pool.{
+        allocation = allocation,
+        bytes_left = allocation.size
+    };
+
+    return pool;
 }
