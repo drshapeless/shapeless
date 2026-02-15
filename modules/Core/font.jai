@@ -1,3 +1,10 @@
+Bound :: struct {
+    left:   float32;
+    top:    float32;
+    right:  float32;
+    bottom: float32;
+}
+
 Font_System :: struct {
     pipeline_id:           Renderer.Pipeline.ID;
     pipeline:              Renderer.Pipeline;
@@ -32,17 +39,15 @@ Font_System :: struct {
 
     Glyph :: struct {
         advance:      float32;
-        plane_bounds: Vector4;
-        atlas_bounds: Vector4;
+        plane_bounds: Bound;
+        atlas_bounds: Bound;
     }
 
     Vertex_Instance :: struct {
-        fg_color:     Vector4;
-        atlas_bounds: Vector4;
-        extent:       Vector2;
-        origin:       Vector2;
-        size:         float32;
-        distance_range: float32;
+        fg_color:      Vector4;
+        uvs:           Bound; // u_min, u_max, v_min, v_max
+        positions:     Bound; // x_min, x_max, y_min, y_max
+        unit_range:    Vector2;
         texture_index: u32;
     }
 
@@ -333,13 +338,11 @@ end_text_draw :: (system: *Font_System, renderer: *Renderer) {
     vkCmdDraw(command, 4, xx system.vertex_instances.count, 0, 0);
 }
 
-append_text :: (system: *Font_System, text: string, font_size: u32, offset: Vector2) {
-    // Should I allow constant changing in size?
-    ok, font := table_find(*system.font_families, 1);
+append_text :: (system: *Font_System, text: string, font_size: u32, offset: Vector2, family_index: Font_System.Font_Family.ID = 1, variation: string = "Regular") {
+    ok, font := table_find(*system.font_families, family_index);
     assert(ok);
 
-    // Hard code to find the regular font
-    ok=, regular := table_find(*font.members, "Regular");
+    ok=, regular := table_find(*font.members, variation);
     assert(ok);
 
     hb_font_set_scale(regular.hb, xx (font_size * 64), xx (font_size * 64));
@@ -358,23 +361,28 @@ append_text :: (system: *Font_System, text: string, font_size: u32, offset: Vect
     cursor := offset;
     instance := Font_System.Vertex_Instance.{
         fg_color = .{1, 1, 1, 1}, // White
-        size = xx font_size
     };
     for i: 0..infos.count - 1 {
         glyph_id := infos[i].codepoint;
         ok, glyph := table_find(*regular.glyphs, glyph_id);
         assert(ok, "Cannot find glyph id %", glyph_id);
 
-        instance.atlas_bounds = glyph.atlas_bounds;
-        instance.extent.x = (glyph.plane_bounds.z - glyph.plane_bounds.x) * font_size;
+        origin_x := cursor.x + (positions[i].x_offset / 64.0);
+        origin_y := cursor.y + (positions[i].y_offset / 64.0);
 
-        // The height is negative here, it makes the shader easier to work with.
-        instance.extent.y = (glyph.plane_bounds.w - glyph.plane_bounds.y) * font_size;
+        instance.positions.left   = origin_x + (glyph.plane_bounds.left   * font_size);
+        instance.positions.right  = origin_x + (glyph.plane_bounds.right  * font_size);
+        instance.positions.top    = origin_y + (glyph.plane_bounds.top    * font_size);
+        instance.positions.bottom = origin_y + (glyph.plane_bounds.bottom * font_size);
 
-        instance.origin.x = cursor.x + (positions[i].x_offset / 64.0);
-        instance.origin.y = cursor.y + (positions[i].y_offset / 64.0);
+        instance.uvs.left   = glyph.atlas_bounds.left   / regular.msdf.atlas.width;
+        instance.uvs.right  = glyph.atlas_bounds.right  / regular.msdf.atlas.width;
+        instance.uvs.top    = glyph.atlas_bounds.top    / regular.msdf.atlas.height;
+        instance.uvs.bottom = glyph.atlas_bounds.bottom / regular.msdf.atlas.height;
+
         instance.texture_index = xx regular.texture_index;
-        instance.distance_range = regular.msdf.atlas.distanceRange;
+        instance.unit_range.x = regular.msdf.atlas.distanceRange / regular.msdf.atlas.width;
+        instance.unit_range.y = regular.msdf.atlas.distanceRange / regular.msdf.atlas.height;
 
         array_add(*system.vertex_instances, instance);
 
@@ -455,8 +463,8 @@ generate_glyphs :: inline (font_family_member: *Font_System.Font_Family.Member) 
     for g: font_family_member.msdf.glyphs {
         glyph: Font_System.Glyph;
         glyph.advance = g.advance;
-        glyph.plane_bounds = bound_to_vector4(g.planeBounds);
-        glyph.atlas_bounds = bound_to_vector4(g.atlasBounds);
+        glyph.plane_bounds = g.planeBounds;
+        glyph.atlas_bounds = g.atlasBounds;
         table_set(*font_family_member.glyphs, g.index, glyph);
     }
 }
@@ -471,8 +479,8 @@ MSDF :: struct {
         type:          string;
         distanceRange: float;
         size:          float32;
-        width:         u32;
-        height:        u32;
+        width:         float;
+        height:        float;
         yOrigin:       string;
     }
 
@@ -495,31 +503,11 @@ MSDF :: struct {
         atlasBounds: Bound;
     }
 
-    Bound :: struct {
-        left:   float32;
-        bottom: float32;
-        right:  float32;
-        top:    float32;
-    }
-
     Kerning :: struct {
         unicode1: u64;
         unicode2: u64;
         advance:  float32;
     }
-}
-
-bound_to_vector4 :: (bound: MSDF.Bound) -> Vector4 {
-    // In theory, a memcpy is enough, but it creates a variable.
-    // v: Vector4;
-    // memcpy(*v, *bound, size_of(Vector4));
-    // return v;
-
-    // This is a stupid and clean way.
-    // return .{left, bottom, right, top};
-
-    // This is the evil way.
-    return cast,force(Vector4) bound;
 }
 
 load_msdf :: (file_path: string) -> MSDF {

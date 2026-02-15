@@ -183,7 +183,6 @@ init :: (using renderer: *Renderer, window: *SDL_Window) -> ok:bool {
     vkGetDeviceQueue(device, queue_indices.present, 0, *present_queue);
 
     memory_indices = get_memory_indices(renderer);
-    log("%", memory_indices);
 
     result, renderer_preallocated_memory = gpu_allocate(renderer, Renderer.RENDERER_MEMORY_SIZE, memory_indices.gpu_only);
     if result return false;

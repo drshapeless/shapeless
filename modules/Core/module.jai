@@ -30,7 +30,7 @@ Buffer :: struct {
 #import "Json";
 #import "Math";
 #import "HarfBuzz";
-#import "ICU";
+// #import "ICU";
 #import "File";
 #import "fontconfig";
 #import "Process";

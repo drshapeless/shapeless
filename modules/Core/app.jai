@@ -36,8 +36,6 @@ appinit :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
 
     last_render_time = to_float64_seconds(current_time_monotonic());
 
-    log("renderer frame count: %", renderer.frames.count);
-
     return .CONTINUE;
 }
 

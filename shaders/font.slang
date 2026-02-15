@@ -1,3 +1,10 @@
+struct Bound {
+    float left;
+    float top;
+    float right;
+    float bottom;
+};
+
 struct Push_Constant {
     float4x4 projection;
     uint64_t vertex_data;
@@ -5,11 +12,9 @@ struct Push_Constant {
 
 struct Vertex_Instance {
     float4 fg_color;
-    float4 atlas_bounds;
-    float2 extent;
-    float2 origin;
-    float size;
-    float distance_range;
+    Bound uvs;
+    Bound positions;
+    float2 unit_range;
     uint32_t texture_index;
 };
 
@@ -19,7 +24,7 @@ struct Vertex_Output {
     float2 uv : UV0;
     float size : SIZE0;
     uint32_t texture_index : INDEX0;
-    float distance_range : RANGE0;
+    float2 unit_range : RANGE0;
     float2 texture_extent : EXTENT0;
 };
 
@@ -47,42 +52,33 @@ Vertex_Output vertex_main(uint vertex_id : SV_VertexID, uint instance_id : SV_In
     Vertex_Instance *instance = (Vertex_Instance*)(pc.vertex_data + sizeof(Vertex_Instance) * instance_id);
 
     // Hardcode for now
-    float width = instance.extent.x;
-    float height = instance.extent.y;
-
-    float2 poss[4] = {
-        {instance.origin.x, instance.origin.y},
-        {instance.origin.x, instance.origin.y + height},
-        {instance.origin.x + width, instance.origin.y},
-        {instance.origin.x + width, instance.origin.y + height}
+    float2 positions[4] = {
+        {instance.positions.left, instance.positions.top},
+        {instance.positions.left, instance.positions.bottom},
+        {instance.positions.right, instance.positions.top},
+        {instance.positions.right, instance.positions.bottom},
     };
     // This projection matrix needs to be transpose because of some
     // stupid slang shader shit, I don't really understand right now.
     //
     // TODO: understand this shit
-    output.pos = mul(transpose(pc.projection), float4(poss[vertex_id], 0, 1));
+    output.pos = mul(transpose(pc.projection), float4(positions[vertex_id], 0, 1));
 
     uint texture_width, texture_height;
     textures[NonUniformResourceIndex(instance.texture_index)].GetDimensions(texture_width, texture_height);
 
-    float u_min = instance.atlas_bounds.x / texture_width;
-    float u_max = instance.atlas_bounds.z / texture_width;
-    float v_min = instance.atlas_bounds.y / texture_height;
-    float v_max = instance.atlas_bounds.w / texture_height;
-
     float2 uvs[4] = {
-        {u_min, v_min},
-        {u_min, v_max},
-        {u_max, v_min},
-        {u_max, v_max}
+        {instance.uvs.left, instance.uvs.top},
+        {instance.uvs.left, instance.uvs.bottom},
+        {instance.uvs.right, instance.uvs.top},
+        {instance.uvs.right, instance.uvs.bottom},
     };
 
     output.uv = uvs[vertex_id];
 
     output.fg_color = instance.fg_color;
-    output.size = instance.size;
     output.texture_index = instance.texture_index;
-    output.distance_range = instance.distance_range;
+    output.unit_range = instance.unit_range;
     output.texture_extent = float2(texture_width, texture_height);
     return output;
 }
@@ -95,8 +91,9 @@ float2 sqr(float2 x) {
     return x * x;
 }
 
-float screen_px_range(float2 uv, float distance_range, float2 texture_extent) {
-    float2 unit_range = float2(distance_range) / texture_extent;
+float screen_px_range(float2 uv, float2 unit_range, float2 texture_extent) {
+    // Unit range is precalculated in CPU
+    // float2 unit_range = float2(distance_range) / texture_extent;
     // This is approximation.
     // float2 screen_tex_size = float2(1.0) / fwidth(uv);
     float2 screen_tex_size = rsqrt(sqr(ddx(uv)) + sqr(ddy(uv)));
@@ -107,7 +104,7 @@ float screen_px_range(float2 uv, float distance_range, float2 texture_extent) {
 float4 fragment_main(Vertex_Output input, uniform Push_Constant pc) {
     float4 msd = textures[NonUniformResourceIndex(input.texture_index)].Sample(sampler, input.uv);
     float sd   = median(msd.r, msd.g, msd.b);
-    float screen_px_distance = screen_px_range(input.uv, input.distance_range, input.texture_extent) * (sd - 0.5);
+    float screen_px_distance = screen_px_range(input.uv, input.unit_range, input.texture_extent) * (sd - 0.5);
     float opacity = clamp(screen_px_distance + 0.5, 0.0, 1.0);
 
     // lerp() is mix() in glsl
