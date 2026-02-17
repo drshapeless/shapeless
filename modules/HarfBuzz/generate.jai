@@ -40,6 +40,10 @@ EOF;
 }
 
 visitor :: (decl: *Declaration, parent_decl: *Declaration) -> Declaration_Visit_Result {
+    if parent_decl && parent_decl.name == "hb_script_t" {
+        decl.output_name = replace(decl.name, "HB_SCRIPT_", "");
+    }
+
     return .RECURSE;
 }
 
