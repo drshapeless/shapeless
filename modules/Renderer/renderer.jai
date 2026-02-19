@@ -11,19 +11,15 @@ Renderer :: struct {
 
     memory_indices:       Memory_Indices;
 
-    // renderer memory pool is for draw image and depth image only, in
+    // internal memory pool is for draw image and depth image only, in
     // 1080p, they are just about 8.3MB respectively. So a 32MB pool
     // should be more than enough. But in the case of macbook retina
     // screen, 2560x1600, each would need 15.9MB. If there is even a
     // 4k screen, the number only goes up, but max below 64MB, which
     // is fine.
-    renderer_preallocated_memory:  Allocation;
-    renderer_memory_pool:          Memory_Pool;
+    internal_preallocated_memory:  Allocation;
+    internal_memory_pool:          Memory_Pool;
     RENDERER_MEMORY_SIZE :: 64 * 1024 * 1024; // 64MB
-
-    preallocated_memory:  Allocation;
-    memory_pool:          Memory_Pool;
-    DEFAULT_MEMORY_SIZE :: 256 * 1024 * 1024; // 256MB
 
     command_pool:    VkCommandPool;
 
@@ -184,14 +180,9 @@ init :: (using renderer: *Renderer, window: *SDL_Window) -> ok:bool {
 
     memory_indices = get_memory_indices(renderer);
 
-    result, renderer_preallocated_memory = gpu_allocate(renderer, Renderer.RENDERER_MEMORY_SIZE, memory_indices.gpu_only);
+    result, internal_preallocated_memory = gpu_allocate(renderer, Renderer.RENDERER_MEMORY_SIZE, memory_indices.gpu_only);
     if result return false;
-    renderer_memory_pool = make_memory_pool(renderer_preallocated_memory);
-
-    result, preallocated_memory = gpu_allocate_mapped(renderer, Renderer.DEFAULT_MEMORY_SIZE, memory_indices.rebar);
-    if result return false;
-
-    memory_pool = make_memory_pool(preallocated_memory);
+    internal_memory_pool = make_memory_pool(internal_preallocated_memory);
 
     result, command_pool = make_command_pools(renderer);
     if result return false;
@@ -221,8 +212,7 @@ deinit :: (using renderer: *Renderer) {
     destroy_frames(renderer);
     destroy_swapchain(renderer, *swapchain);
     vkDestroySurfaceKHR(instance, surface, vka);
-    gpu_free(renderer, preallocated_memory);
-    gpu_free(renderer, renderer_preallocated_memory);
+    gpu_free(renderer, internal_preallocated_memory);
     vkDestroyDevice(device, vka);
     vkDestroyInstance(instance, vka);
 }
@@ -527,7 +517,7 @@ set_clear_color :: (using renderer: *Renderer, color: [4]float) {
 // All buffer are mapped and randomly accessed by default.
 // In modern GPU, most of the GPU memory are accessible by the CPU.
 // In M-series macOS, all of the memory are accessible by CPU.
-make_buffer :: (using renderer: *Renderer, size: VkDeviceSize, buffer_usage: VkBufferUsageFlags) -> VkResult, Renderer.Buffer {
+make_buffer :: (renderer: *Renderer, memory_pool: *Renderer.Memory_Pool, size: VkDeviceSize, buffer_usage: VkBufferUsageFlags) -> VkResult, Renderer.Buffer {
     buffer_create_info := VkBufferCreateInfo.{
         size        = size,
         usage       = buffer_usage | .SHADER_DEVICE_ADDRESS,
@@ -536,17 +526,17 @@ make_buffer :: (using renderer: *Renderer, size: VkDeviceSize, buffer_usage: VkB
 
     buffer: Renderer.Buffer;
     result: VkResult;
-    result = check_vk(vkCreateBuffer(device, *buffer_create_info, vka, *buffer.vk));
+    result = check_vk(vkCreateBuffer(renderer.device, *buffer_create_info, renderer.vka, *buffer.vk));
     if result return result, .{};
 
-    buffer.allocation = get(*memory_pool, size);
-    result = check_vk(vkBindBufferMemory(device, buffer.vk, buffer.allocation.memory, buffer.allocation.offset));
+    buffer.allocation = get(memory_pool, size);
+    result = check_vk(vkBindBufferMemory(renderer.device, buffer.vk, buffer.allocation.memory, buffer.allocation.offset));
     if result return result, .{};
 
     address_info := VkBufferDeviceAddressInfo.{
         buffer = buffer.vk
     };
-    buffer.address = vkGetBufferDeviceAddress(device, *address_info);
+    buffer.address = vkGetBufferDeviceAddress(renderer.device, *address_info);
 
     return .SUCCESS, buffer;
 }
@@ -691,7 +681,7 @@ make_texture_from_file :: (renderer: *Renderer, memory_pool: *Renderer.Memory_Po
 resize_callback :: (using renderer: *Renderer, extent: VkExtent2D) {
     vkDeviceWaitIdle(device);
     destroy_draw_images(renderer);
-    reset(*renderer.renderer_memory_pool);
+    reset(*renderer.internal_memory_pool);
     make_draw_images(renderer, extent);
     remake_swapchain(renderer, extent);
     resize_requested = false;
@@ -710,6 +700,81 @@ make_pipeline :: (renderer: *Renderer, builder: *Pipeline_Builder, pipeline_layo
     defer renderer.next_pipeline_id += 1;
 
     return .SUCCESS, renderer.next_pipeline_id;
+}
+
+gpu_allocate :: (renderer: *Renderer, size: u64, memory_type: u32) -> VkResult, Renderer.Allocation {
+    allocation: Renderer.Allocation;
+
+    // Not all memory should be device address compatible, e.g. the
+    // draw texture and depth texture, but it doesn't matter that
+    // much.
+    memory_allocate_flags_info := VkMemoryAllocateFlagsInfo.{
+        flags = .DEVICE_ADDRESS
+    };
+
+    memory_allocate_info := VkMemoryAllocateInfo.{
+        pNext = *memory_allocate_flags_info,
+        allocationSize = size,
+        memoryTypeIndex = memory_type
+    };
+
+    allocation.memory_type = memory_type;
+    allocation.size        = size;
+    allocation.offset      = 0;
+    result := check_vk(vkAllocateMemory(renderer.device, *memory_allocate_info, renderer.vka, *allocation.memory));
+    if result return result, .{};
+
+    return .SUCCESS, allocation;
+}
+
+gpu_allocate_mapped :: (renderer: *Renderer, size: u64, memory_type: u32) -> VkResult, Renderer.Allocation {
+    result, allocation := gpu_allocate(renderer, size, memory_type);
+    if result return result, .{};
+
+    memory_map_info := VkMemoryMapInfo.{
+        memory = allocation.memory,
+        offset = 0,
+        size   = allocation.size
+    };
+
+    result = check_vk(vkMapMemory2(renderer.device, *memory_map_info, *allocation.mapped_pointer));
+    if result return result, .{};
+
+    return .SUCCESS, allocation;
+}
+
+gpu_free :: (renderer: *Renderer, allocation: Renderer.Allocation) {
+    vkFreeMemory(renderer.device, allocation.memory, renderer.vka);
+}
+
+get :: (pool: *Renderer.Memory_Pool, size: u64, alignment: u64 = 8) -> Renderer.Allocation {
+    mask := alignment - 1;
+    padding := (alignment - (pool.current_pos & mask)) & mask;
+    assert(pool.bytes_left >= (size + padding), "Renderer Memory Pool out of memory");
+
+    allocation := pool.allocation;
+    allocation.size = size;
+    allocation.offset += pool.current_pos + padding;
+    allocation.mapped_pointer += pool.current_pos + padding;
+
+    pool.current_pos += size + padding;
+    pool.bytes_left -= size + padding;
+
+    return allocation;
+}
+
+reset :: (pool: *Renderer.Memory_Pool) {
+    pool.bytes_left = pool.allocation.size;
+    pool.current_pos = 0;
+}
+
+make_memory_pool :: (allocation: Renderer.Allocation) -> Renderer.Memory_Pool {
+    pool := Renderer.Memory_Pool.{
+        allocation = allocation,
+        bytes_left = allocation.size
+    };
+
+    return pool;
 }
 
 #scope_file
@@ -1173,7 +1238,7 @@ find_depth_format :: (using renderer: *Renderer) -> VkFormat {
 // includes an image view.
 make_draw_images :: (renderer: *Renderer, extent: VkExtent2D) -> VkResult {
     renderer.draw_extent = extent;
-    result, draw_image := make_image(renderer, *renderer.renderer_memory_pool, extent, renderer.swapchain.format, .TRANSFER_SRC | .COLOR_ATTACHMENT);
+    result, draw_image := make_image(renderer, *renderer.internal_memory_pool, extent, renderer.swapchain.format, .TRANSFER_SRC | .COLOR_ATTACHMENT);
     if result return result;
 
     result=, draw_image_view := make_image_view(renderer, draw_image.vk, renderer.swapchain.format, .COLOR);
@@ -1186,7 +1251,7 @@ make_draw_images :: (renderer: *Renderer, extent: VkExtent2D) -> VkResult {
     };
 
     depth_format := find_depth_format(renderer);
-    result=, depth_image := make_image(renderer, *renderer.renderer_memory_pool, extent, depth_format, .DEPTH_STENCIL_ATTACHMENT);
+    result=, depth_image := make_image(renderer, *renderer.internal_memory_pool, extent, depth_format, .DEPTH_STENCIL_ATTACHMENT);
     if result return result;
 
     result=, depth_image_view := make_image_view(renderer, depth_image.vk, depth_format, .DEPTH);
@@ -1275,79 +1340,4 @@ get_memory_indices :: (using renderer: *Renderer) -> Renderer.Memory_Indices {
     }
 
     return indices;
-}
-
-gpu_allocate :: (renderer: *Renderer, size: u64, memory_type: u32) -> VkResult, Renderer.Allocation {
-    allocation: Renderer.Allocation;
-
-    // Not all memory should be device address compatible, e.g. the
-    // draw texture and depth texture, but it doesn't matter that
-    // much.
-    memory_allocate_flags_info := VkMemoryAllocateFlagsInfo.{
-        flags = .DEVICE_ADDRESS
-    };
-
-    memory_allocate_info := VkMemoryAllocateInfo.{
-        pNext = *memory_allocate_flags_info,
-        allocationSize = size,
-        memoryTypeIndex = memory_type
-    };
-
-    allocation.memory_type = memory_type;
-    allocation.size        = size;
-    allocation.offset      = 0;
-    result := check_vk(vkAllocateMemory(renderer.device, *memory_allocate_info, renderer.vka, *allocation.memory));
-    if result return result, .{};
-
-    return .SUCCESS, allocation;
-}
-
-gpu_allocate_mapped :: (renderer: *Renderer, size: u64, memory_type: u32) -> VkResult, Renderer.Allocation {
-    result, allocation := gpu_allocate(renderer, size, memory_type);
-    if result return result, .{};
-
-    memory_map_info := VkMemoryMapInfo.{
-        memory = allocation.memory,
-        offset = 0,
-        size   = allocation.size
-    };
-
-    result = check_vk(vkMapMemory2(renderer.device, *memory_map_info, *allocation.mapped_pointer));
-    if result return result, .{};
-
-    return .SUCCESS, allocation;
-}
-
-gpu_free :: (renderer: *Renderer, allocation: Renderer.Allocation) {
-    vkFreeMemory(renderer.device, allocation.memory, renderer.vka);
-}
-
-get :: (pool: *Renderer.Memory_Pool, size: u64, alignment: u64 = 8) -> Renderer.Allocation {
-    mask := alignment - 1;
-    padding := (alignment - (pool.current_pos & mask)) & mask;
-    assert(pool.bytes_left >= (size + padding), "Renderer Memory Pool out of memory");
-
-    allocation := pool.allocation;
-    allocation.size = size;
-    allocation.offset += pool.current_pos + padding;
-    allocation.mapped_pointer += pool.current_pos + padding;
-
-    pool.current_pos += size + padding;
-    pool.bytes_left -= size + padding;
-
-    return allocation;
-}
-
-reset :: (pool: *Renderer.Memory_Pool) {
-    pool.bytes_left = pool.allocation.size;
-    pool.current_pos = 0;
-}
-
-make_memory_pool :: (allocation: Renderer.Allocation) -> Renderer.Memory_Pool {
-    pool := Renderer.Memory_Pool.{
-        allocation = allocation,
-        bytes_left = allocation.size
-    };
-
-    return pool;
 }

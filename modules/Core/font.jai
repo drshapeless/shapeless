@@ -6,6 +6,10 @@ Bound :: struct {
 }
 
 Font_System :: struct {
+    gpu_memory:            Renderer.Allocation;
+    gpu_memory_pool:       Renderer.Memory_Pool;
+    MEMORY_SIZE ::         256 * 1024 * 1024; // 256MB
+
     pipeline_id:           Renderer.Pipeline.ID;
     pipeline:              Renderer.Pipeline;
     sampler:               VkSampler;
@@ -36,6 +40,9 @@ Font_System :: struct {
     font_families: Table(Font_Family.ID, Font_Family);
 
     font_textures: [..] Renderer.Texture;
+
+    default_unicode_function: *hb_unicode_funcs_t;
+    script_font_family_map: Table(hb_script_t, Font_Family.ID);
 
     Glyph :: struct {
         advance:      float32;
@@ -72,6 +79,13 @@ Font_System :: struct {
         file_path: string;
         style:     string;
     }
+
+    Run :: struct {
+        script: hb_script_t;
+        is_emoji: bool;
+        codepoints: [] u32;
+    }
+
 }
 // When this function failed, it does not free the memory.
 make_font_family :: (system: *Font_System, renderer: *Renderer, name: string) -> bool, Font_System.Font_Family.ID {
@@ -106,7 +120,7 @@ make_font_family :: (system: *Font_System, renderer: *Renderer, name: string) ->
         member.msdf = load_msdf(output_json);
         generate_glyphs(*member);
 
-        result, texture := make_texture_from_file(renderer, *renderer.memory_pool, output_image);
+        result, texture := make_texture_from_file(renderer, *system.gpu_memory_pool, output_image);
         if result != .SUCCESS return false, 0;
 
         array_add(*system.font_textures, texture);
@@ -128,7 +142,11 @@ make_font_system :: (using renderer: *Renderer) -> Font_System {
     result: VkResult;
     ok:     bool;
 
-    load_system_fonts(*system);
+    result, system.gpu_memory = gpu_allocate_mapped(renderer, Font_System.MEMORY_SIZE, memory_indices.rebar);
+    assert(result == .SUCCESS);
+    system.gpu_memory_pool = make_memory_pool(system.gpu_memory);
+
+    system.available_font_families = get_system_fonts();
 
     ok=, default_font_id := make_font_family(*system, renderer, system.DEFAULT_FONT);
     assert(ok, "cannot load default font family");
@@ -282,7 +300,7 @@ make_font_system :: (using renderer: *Renderer) -> Font_System {
     result, system.pipeline_id = make_pipeline(renderer, *pb, pipeline_layout);
     assert(result == .SUCCESS);
 
-    result, system.block_buffer = make_buffer(renderer, xx (renderer.frames.count * system.BUFFER_SIZE), .STORAGE_BUFFER);
+    result, system.block_buffer = make_buffer(renderer, *system.gpu_memory_pool, xx (renderer.frames.count * system.BUFFER_SIZE), .STORAGE_BUFFER);
     assert(result == .SUCCESS);
 
 
@@ -290,6 +308,8 @@ make_font_system :: (using renderer: *Renderer) -> Font_System {
     assert(ok);
 
     system.harfbuzz_buffer = hb_buffer_create();
+
+    system.default_unicode_function = hb_unicode_funcs_get_default();
 
     return system;
 }
@@ -303,6 +323,7 @@ destroy_font_system :: (using renderer: *Renderer, system: *Font_System) {
     vkDestroySampler(device, system.sampler, vka);
     hb_buffer_destroy(system.harfbuzz_buffer);
     destroy_buffer(renderer, system.block_buffer);
+    gpu_free(renderer, system.gpu_memory);
 }
 
 begin_text_draw :: (system: *Font_System, renderer: *Renderer) {
@@ -338,6 +359,21 @@ end_text_draw :: (system: *Font_System, renderer: *Renderer) {
     vkCmdDraw(command, 4, xx system.vertex_instances.count, 0, 0);
 }
 
+draw_text :: (system: *Font_System, text: string, font_size: u32, offset: Vector2, variation: string = "Regular") {
+    runs := itemize(system.default_unicode_function, text,, temp);
+    defer reset_temporary_storage();
+
+    cursor := offset;
+    for runs {
+        cursor = internal_draw_text_run(system, it, font_size, cursor, variation);
+
+    }
+}
+
+internal_draw_text_run :: (system: *Font_System, run: Font_System.Run, font_size: u32, offset: Vector2, variation: string = "Regular") -> cursor:Vector2 {
+
+}
+
 append_text :: (system: *Font_System, text: string, font_size: u32, offset: Vector2, family_index: Font_System.Font_Family.ID = 1, variation: string = "Regular") {
     ok, font := table_find(*system.font_families, family_index);
     assert(ok);
@@ -352,6 +388,7 @@ append_text :: (system: *Font_System, text: string, font_size: u32, offset: Vect
 
     // TODO: now the font system only handles latin characters
     // hb_buffer_set_script(system.harfbuzz_buffer, .HB_SCRIPT_LATIN);
+
 
     hb_shape(regular.hb, system.harfbuzz_buffer, null, 0);
 
@@ -431,6 +468,124 @@ generate_msdf_atlas :: (file_path: string, em_range: float, size: int, output_di
     return true, output_image, output_json;
 }
 
+itemize :: (unicode_function: *hb_unicode_funcs_t, text: string) -> [] Font_System.Run {
+    prev_script :hb_script_t = .INVALID;
+    prev_is_emoji := false;
+
+    codepoints: [..] u32;
+    runs:       [..] Font_System.Run;
+
+    add_run :: () #expand {
+        run := Font_System.Run.{
+            script = prev_script,
+            is_emoji = prev_is_emoji,
+            codepoints = array_copy(codepoints)
+        };
+
+        array_add(*runs, run);
+        array_reset_keeping_memory(*codepoints);
+    }
+
+    for :utf8_iter text {
+        script := hb_unicode_script(unicode_function, it);
+        if prev_script == .INVALID {
+            prev_script = script;
+        } if script == .COMMON {
+            is_emoji := is_codepoint_emoji(it);
+            if is_emoji {
+                if !prev_is_emoji {
+                    add_run();
+                    prev_is_emoji = true;
+                }
+            } else {
+                if prev_is_emoji {
+                    add_run();
+                    prev_script = script;
+                    prev_is_emoji = false;
+                }
+            }
+        } else if script != .COMMON && script != .INHERITED && script != prev_script {
+            add_run();
+            prev_script = script;
+            prev_is_emoji = false;
+        }
+
+        array_add(*codepoints, it);
+    }
+
+    // The last one
+    run := Font_System.Run.{
+        script = prev_script,
+        codepoints = array_copy(codepoints)
+    };
+    array_add(*runs, run);
+
+    return runs;
+}
+
+get_system_fonts :: () -> Table(string, [..] Font_System.Variation) {
+    ok := FcInit();
+    assert(ok != 0, "cannot init fontconfig");
+
+    available_font_families: Table(string, [..] Font_System.Variation);
+
+    pattern := FcPatternCreate();
+    object_set := FcObjectSetCreate();
+    defer {
+        FcObjectSetDestroy(object_set);
+        FcPatternDestroy(pattern);
+    }
+
+    FcObjectSetAdd(object_set, FC_FILE);
+    FcObjectSetAdd(object_set, FC_FAMILY);
+    FcObjectSetAdd(object_set, FC_STYLE);
+    font_set := FcFontList(null, pattern, object_set);
+
+    if font_set {
+        log("Found % fonts", font_set.nfont);
+        for 0..font_set.nfont - 1 {
+            family:    *FcChar8;
+            style:     *FcChar8;
+            file_path: *FcChar8;
+
+            result: FcResult;
+            result = FcPatternGetString(font_set.fonts[it], FC_FILE, 0, *file_path);
+            assert(result == .Match);
+
+            result = FcPatternGetString(font_set.fonts[it], FC_FAMILY, 0, *family);
+            assert(result == .Match);
+
+            result = FcPatternGetString(font_set.fonts[it], FC_STYLE, 0, *style);
+
+            family_name := to_string(family);
+
+            variation := Font_System.Variation.{
+                file_path = copy_string(to_string(file_path))
+            };
+
+            if result == .Match {
+                variation.style = copy_string(to_string(style));
+            }
+
+            variations := table_find_pointer(*available_font_families, family_name);
+            if variations != null {
+                array_add(variations, variation);
+            } else {
+                new_variations: [..] Font_System.Variation;
+                array_add(*new_variations, variation);
+                table_add(*available_font_families, copy_string(family_name), new_variations);
+            }
+        }
+
+        log("The are % distinct font families", available_font_families.count);
+
+        FcFontSetDestroy(font_set);
+    }
+
+    FcFini();
+
+    return available_font_families;
+}
 
 #scope_file
 current_buffer_ptr :: (system: *Font_System, renderer: *Renderer) -> *void {
@@ -523,62 +678,8 @@ load_msdf :: (file_path: string) -> MSDF {
 }
 
 
-load_system_fonts :: (system: *Font_System) {
-    ok := FcInit();
-    assert(ok != 0, "cannot init fontconfig");
-
-    pattern := FcPatternCreate();
-    object_set := FcObjectSetCreate();
-    defer {
-        FcObjectSetDestroy(object_set);
-        FcPatternDestroy(pattern);
-    }
-
-    FcObjectSetAdd(object_set, FC_FILE);
-    FcObjectSetAdd(object_set, FC_FAMILY);
-    FcObjectSetAdd(object_set, FC_STYLE);
-    font_set := FcFontList(null, pattern, object_set);
-
-    if font_set {
-        log("Found % fonts", font_set.nfont);
-        for 0..font_set.nfont - 1 {
-            family:    *FcChar8;
-            style:     *FcChar8;
-            file_path: *FcChar8;
-
-            result: FcResult;
-            result = FcPatternGetString(font_set.fonts[it], FC_FILE, 0, *file_path);
-            assert(result == .Match);
-
-            result = FcPatternGetString(font_set.fonts[it], FC_FAMILY, 0, *family);
-            assert(result == .Match);
-
-            result = FcPatternGetString(font_set.fonts[it], FC_STYLE, 0, *style);
-
-            family_name := to_string(family);
-
-            variation := Font_System.Variation.{
-                file_path = copy_string(to_string(file_path))
-            };
-
-            if result == .Match {
-                variation.style = copy_string(to_string(style));
-            }
-
-            variations := table_find_pointer(*system.available_font_families, family_name);
-            if variations != null {
-                array_add(variations, variation);
-            } else {
-                new_variations: [..] Font_System.Variation;
-                array_add(*new_variations, variation);
-                table_add(*system.available_font_families, copy_string(family_name), new_variations);
-            }
-        }
-
-        log("The are % distinct font families", system.available_font_families.count);
-
-        FcFontSetDestroy(font_set);
-    }
-
-    FcFini();
+is_codepoint_emoji :: (codepoint: u32) -> bool {
+    // This function is not a good checker for emoji, since some of the emoji
+    return u_hasBinaryProperty(xx codepoint, .EMOJI_PRESENTATION) ||
+    u_hasBinaryProperty(xx codepoint, .EXTENDED_PICTOGRAPHIC);
 }
