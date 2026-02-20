@@ -6,10 +6,21 @@ Renderer :: struct {
     physical_device: VkPhysicalDevice;
     device:          VkDevice;
     queue_indices:   Queue_Family_Indices;
+
+    // There is no a separate compute queue here, as Nvidia, Intel and
+    // Apple do not have a separated async compute family. Only AMD
+    // has, and almost 100% of the case, the graphics queue does
+    // compute thing, making a separated compute queue a pain in the
+    // ass. So that the command pool created at init is for graphics
+    // queue only.
     graphics_queue:  VkQueue;
     present_queue:   VkQueue;
+    command_pool:    VkCommandPool;
 
-    memory_indices:       Memory_Indices;
+    memory_indices:  Memory_Indices;
+
+    // All properties below is for swapchain only. Do not access them
+    // if your renderer is created without swapchina support.
 
     // internal memory pool is for draw image and depth image only, in
     // 1080p, they are just about 8.3MB respectively. So a 32MB pool
@@ -20,8 +31,6 @@ Renderer :: struct {
     internal_preallocated_memory:  Allocation;
     internal_memory_pool:          Memory_Pool;
     RENDERER_MEMORY_SIZE :: 64 * 1024 * 1024; // 64MB
-
-    command_pool:    VkCommandPool;
 
     swapchain:       Swapchain;
     frames:          [] Frame_Data;
@@ -47,7 +56,7 @@ Renderer :: struct {
     // again. Complicated logic is no longer needed.
 
     // This is for dynamic rendering
-    cmd: VkCommandBuffer;
+    current_swapchain_command_buffer: VkCommandBuffer;
     clear_color: [4]float;
 
     resize_requested := false;
@@ -102,6 +111,9 @@ Renderer :: struct {
         staging:  u32 = U32_MAX;
         gpu_only: u32 = U32_MAX;
         rebar:    u32 = U32_MAX;
+        // rebar is an Nvidia name, other vendors may call it
+        // differently, but it means GPU memory that is accessible by
+        // CPU via PCIE magic.
 
         STAGING_FLAG :VkMemoryPropertyFlags : .HOST_VISIBLE | .HOST_COHERENT;
         GPU_ONLY_FLAG :VkMemoryPropertyFlags : .DEVICE_LOCAL;
@@ -178,14 +190,14 @@ init :: (using renderer: *Renderer, window: *SDL_Window) -> ok:bool {
     vkGetDeviceQueue(device, queue_indices.graphics, 0, *graphics_queue);
     vkGetDeviceQueue(device, queue_indices.present, 0, *present_queue);
 
+    result, command_pool = make_command_pools(renderer);
+    if result return false;
+
     memory_indices = get_memory_indices(renderer);
 
     result, internal_preallocated_memory = gpu_allocate(renderer, Renderer.RENDERER_MEMORY_SIZE, memory_indices.gpu_only);
     if result return false;
     internal_memory_pool = make_memory_pool(internal_preallocated_memory);
-
-    result, command_pool = make_command_pools(renderer);
-    if result return false;
 
     result, swapchain = make_swapchain(renderer, .{xx window_width, xx window_height});
     if result return false;
@@ -196,9 +208,62 @@ init :: (using renderer: *Renderer, window: *SDL_Window) -> ok:bool {
     result = make_draw_images(renderer, .{xx window_width, xx window_height});
     if result return false;
 
+    reset_temporary_storage();
     return true;
 }
 
+// In some case, you may not need the swapchain, e.g. when you only
+// uses compute shader to do some calculations. Is it bad to still
+// call this thing a ...renderer?
+init_without_swapchain :: (using renderer: *Renderer) -> bool {
+    vk_load_global_functions(xx SDL_Vulkan_GetVkGetInstanceProcAddr());
+    instance_extensions := get_vk_instance_extensions();
+    ok:, instance = make_instance(instance_extensions, vka);
+    if !ok return false;
+
+    vk_load_instance_functions(instance);
+
+    all_device_extensions: [..] *u8;
+    all_device_extensions.allocator = temp;
+    #if OS == .MACOS {
+        array_add(*all_device_extensions, VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
+    }
+
+    physical_device, queue_indices = choose_physical_device(instance, null, all_device_extensions);
+    if !physical_device {
+        log_error("Vulkan failed to find physical device");
+        vkDestroyInstance(instance, vka);
+        return false;
+    }
+
+    result: VkResult;
+    result, device = make_device(renderer, all_device_extensions);
+    if result {
+        vkDestroyInstance(instance, vka);
+        return false;
+    }
+
+    vk_load_device_functions(device);
+
+    defer {
+        if result deinit(renderer);
+    }
+
+    vkGetDeviceQueue(device, queue_indices.graphics, 0, *graphics_queue);
+    vkGetDeviceQueue(device, queue_indices.present, 0, *present_queue);
+
+    result, command_pool = make_command_pools(renderer);
+    if result return false;
+
+    memory_indices = get_memory_indices(renderer);
+
+    reset_temporary_storage();
+    return true;
+}
+
+// If the renderer is created with init_without_swapchain, you can
+// still use the same deinit as the vulkan objects are null-checked
+// before calling destruction.
 deinit :: (using renderer: *Renderer) {
     if device vkDeviceWaitIdle(device);
 
@@ -207,11 +272,11 @@ deinit :: (using renderer: *Renderer) {
     }
     table_reset(*pipelines);
 
-    destroy_command_pools(renderer);
     destroy_draw_images(renderer);
     destroy_frames(renderer);
     destroy_swapchain(renderer, *swapchain);
     vkDestroySurfaceKHR(instance, surface, vka);
+    destroy_command_pools(renderer);
     gpu_free(renderer, internal_preallocated_memory);
     vkDestroyDevice(device, vka);
     vkDestroyInstance(instance, vka);
@@ -245,22 +310,22 @@ begin_draw :: (using renderer: *Renderer) -> bool {
 
     if check_vk(vkResetCommandPool(device, frame.command_pool, 0)) return false;
 
-    cmd_alloc_info := VkCommandBufferAllocateInfo.{
+    command_buffer_alloc_info := VkCommandBufferAllocateInfo.{
         commandPool = frame.command_pool,
         commandBufferCount = 1
     };
 
-    result = check_vk(vkAllocateCommandBuffers(device, *cmd_alloc_info, *cmd));
+    result = check_vk(vkAllocateCommandBuffers(device, *command_buffer_alloc_info, *current_swapchain_command_buffer));
     if result return false;
 
     ok := acquire_next_image_index(renderer);
     if !ok return false;
 
-    cmd_begin_info := VkCommandBufferBeginInfo.{
+    command_buffer_begin_info := VkCommandBufferBeginInfo.{
         flags = .ONE_TIME_SUBMIT,
     };
 
-    if check_vk(vkBeginCommandBuffer(cmd, *cmd_begin_info)) return false;
+    if check_vk(vkBeginCommandBuffer(current_swapchain_command_buffer, *command_buffer_begin_info)) return false;
 
     image_memory_barriers : [2]VkImageMemoryBarrier2;
     image_memory_barriers[0] = .{
@@ -306,7 +371,7 @@ begin_draw :: (using renderer: *Renderer) -> bool {
         imageMemoryBarrierCount = xx image_memory_barriers.count,
         pImageMemoryBarriers    = image_memory_barriers.data
     };
-    vkCmdPipelineBarrier2(cmd, *dependency_info);
+    vkCmdPipelineBarrier2(current_swapchain_command_buffer, *dependency_info);
 
     color_attachment := VkRenderingAttachmentInfo.{
         imageView   = draw_texture.image_view,
@@ -335,7 +400,7 @@ begin_draw :: (using renderer: *Renderer) -> bool {
         pStencilAttachment = null,
     };
 
-    vkCmdBeginRendering(cmd, *rendering_info);
+    vkCmdBeginRendering(current_swapchain_command_buffer, *rendering_info);
 
     viewport := VkViewport.{
         x = 0,
@@ -346,21 +411,21 @@ begin_draw :: (using renderer: *Renderer) -> bool {
         maxDepth = 1,
     };
 
-    vkCmdSetViewport(cmd, 0, 1, *viewport);
+    vkCmdSetViewport(current_swapchain_command_buffer, 0, 1, *viewport);
 
     scissor := VkRect2D.{
         offset = .{0, 0},
         extent = swapchain.extent,
     };
-    vkCmdSetScissor(cmd, 0, 1, *scissor);
+    vkCmdSetScissor(current_swapchain_command_buffer, 0, 1, *scissor);
 
     return true;
 }
 
 end_draw :: (using renderer: *Renderer) {
-    defer cmd = null;
+    defer current_swapchain_command_buffer = null;
     frame := frames[frame_index];
-    vkCmdEndRendering(cmd);
+    vkCmdEndRendering(current_swapchain_command_buffer);
 
     current_image := swapchain.images[image_index];
 
@@ -402,7 +467,7 @@ end_draw :: (using renderer: *Renderer) {
         imageMemoryBarrierCount = xx image_memory_barriers.count,
         pImageMemoryBarriers    = image_memory_barriers.data
     };
-    vkCmdPipelineBarrier2(cmd, *dependency_info);
+    vkCmdPipelineBarrier2(current_swapchain_command_buffer, *dependency_info);
 
     blit_region := VkImageBlit2.{
         srcSubresource = .{
@@ -433,7 +498,7 @@ end_draw :: (using renderer: *Renderer) {
         pRegions       = *blit_region,
         filter         = .LINEAR
     };
-    vkCmdBlitImage2(cmd, *blit_info);
+    vkCmdBlitImage2(current_swapchain_command_buffer, *blit_info);
 
     present_image_barrier := VkImageMemoryBarrier2.{
         srcStageMask     = .ALL_COMMANDS,
@@ -455,12 +520,12 @@ end_draw :: (using renderer: *Renderer) {
         imageMemoryBarrierCount = 1,
         pImageMemoryBarriers    = *present_image_barrier
     };
-    vkCmdPipelineBarrier2(cmd, *present_barrier_info);
+    vkCmdPipelineBarrier2(current_swapchain_command_buffer, *present_barrier_info);
 
-    if check_vk(vkEndCommandBuffer(cmd)) return;
+    if check_vk(vkEndCommandBuffer(current_swapchain_command_buffer)) return;
 
-    cmd_info := VkCommandBufferSubmitInfo.{
-        commandBuffer = cmd,
+    command_buffer_submit_info := VkCommandBufferSubmitInfo.{
+        commandBuffer = current_swapchain_command_buffer,
     };
     wait_info := VkSemaphoreSubmitInfo.{
         semaphore = frame.swapchain_semaphore,
@@ -478,7 +543,7 @@ end_draw :: (using renderer: *Renderer) {
         waitSemaphoreInfoCount = 1,
         pWaitSemaphoreInfos = *wait_info,
         commandBufferInfoCount = 1,
-        pCommandBufferInfos = *cmd_info,
+        pCommandBufferInfos = *command_buffer_submit_info,
         signalSemaphoreInfoCount = 1,
         pSignalSemaphoreInfos = *signal_info,
     };
@@ -586,8 +651,12 @@ end_single_time_commands :: (using renderer: *Renderer, command: VkCommandBuffer
 }
 
 destroy_texture :: (using renderer: *Renderer, texture: Renderer.Texture) {
-    vkDestroyImageView(device, texture.image_view, vka);
-    vkDestroyImage(device, texture.image.vk, vka);
+    if texture.image_view {
+        vkDestroyImageView(device, texture.image_view, vka);
+    }
+    if texture.image.vk {
+        vkDestroyImage(device, texture.image.vk, vka);
+    }
 }
 
 destroy_pipeline :: (using renderer: *Renderer, pipeline: Renderer.Pipeline) {
@@ -598,6 +667,85 @@ destroy_pipeline :: (using renderer: *Renderer, pipeline: Renderer.Pipeline) {
     if pipeline.vk {
         vkDestroyPipeline(device, pipeline.vk, vka);
     }
+}
+
+make_image :: (renderer: *Renderer, memory_pool: *Renderer.Memory_Pool, image_create_info: *VkImageCreateInfo) -> VkResult, Renderer.Image {
+    image: Renderer.Image;
+    result: VkResult;
+
+    result = check_vk(vkCreateImage(renderer.device, image_create_info, renderer.vka, *image.vk));
+    if result return result, .{};
+
+    memory_requirements: VkMemoryRequirements;
+    vkGetImageMemoryRequirements(renderer.device, image.vk, *memory_requirements);
+
+    image.allocation = get(memory_pool, memory_requirements.size, memory_requirements.alignment);
+
+    result = check_vk(vkBindImageMemory(renderer.device, image.vk, image.allocation.memory, image.allocation.offset));
+    if result {
+        vkDestroyImage(renderer.device, image.vk, renderer.vka);
+        return result, .{};
+    }
+
+    return .SUCCESS, image;
+}
+
+make_image :: (
+    renderer: *Renderer,
+    memory_pool: *Renderer.Memory_Pool,
+    extent: VkExtent2D,
+    format: VkFormat,
+    image_usage: VkImageUsageFlags,
+    tiling: VkImageTiling = .OPTIMAL,
+    image_type: VkImageType = .e2D,
+    layer_count: u32 = 1,
+    sample_count: VkSampleCountFlagBits = .e1,
+    mip_levels: u32 = 1
+) -> VkResult, Renderer.Image {
+    image_create_info := VkImageCreateInfo.{
+        imageType = image_type,
+        format = format,
+        extent = .{
+            width = extent.width,
+            height = extent.height,
+            depth = 1
+        },
+        mipLevels = mip_levels,
+        arrayLayers = layer_count,
+        samples = sample_count,
+        tiling = tiling,
+        usage = image_usage,
+        sharingMode = .EXCLUSIVE,
+        initialLayout = .UNDEFINED
+    };
+
+    result, image := make_image(renderer, memory_pool, *image_create_info);
+    return result, image;
+}
+
+// Is this function necessary? It is just for the api consistency.
+make_image_view :: (using renderer: *Renderer, image_view_create_info: *VkImageViewCreateInfo) -> VkResult, VkImageView {
+    view: VkImageView;
+    result := check_vk(vkCreateImageView(device, image_view_create_info, vka, *view));
+    return result, view;
+}
+
+make_image_view :: (renderer: *Renderer, image: VkImage, format: VkFormat, aspect_flag: VkImageAspectFlags, layer_count: u32 = 1, mip_levels: u32 = 1) -> VkResult, VkImageView {
+    image_view_create_info := VkImageViewCreateInfo.{
+        image = image,
+        viewType = ifx layer_count > 1 then .e2D_ARRAY else .e2D,
+        format = format,
+        subresourceRange = .{
+            aspectMask = aspect_flag,
+            baseMipLevel = 0,
+            levelCount = mip_levels,
+            baseArrayLayer = 0,
+            layerCount = layer_count,
+        },
+    };
+
+    result, view := make_image_view(renderer, *image_view_create_info);
+    return result, view;
 }
 
 // This version of make texture uses host image copy
@@ -744,7 +892,9 @@ gpu_allocate_mapped :: (renderer: *Renderer, size: u64, memory_type: u32) -> VkR
 }
 
 gpu_free :: (renderer: *Renderer, allocation: Renderer.Allocation) {
-    vkFreeMemory(renderer.device, allocation.memory, renderer.vka);
+    if allocation.memory {
+        vkFreeMemory(renderer.device, allocation.memory, renderer.vka);
+    }
 }
 
 get :: (pool: *Renderer.Memory_Pool, size: u64, alignment: u64 = 8) -> Renderer.Allocation {
@@ -1088,13 +1238,15 @@ make_swapchain :: (renderer: *Renderer, extent: VkExtent2D, old_swapchain: VkSwa
 }
 
 destroy_swapchain :: (renderer: *Renderer, swapchain: *Renderer.Swapchain) {
-    array_free(swapchain.images);
-    for view: swapchain.image_views {
-        vkDestroyImageView(renderer.device, view, renderer.vka);
+    if swapchain.vk {
+        array_free(swapchain.images);
+        for view: swapchain.image_views {
+            vkDestroyImageView(renderer.device, view, renderer.vka);
+        }
+        array_free(swapchain.image_views);
+        vkDestroySwapchainKHR(renderer.device, swapchain.vk, renderer.vka);
+        swapchain.vk = null;
     }
-    array_free(swapchain.image_views);
-    vkDestroySwapchainKHR(renderer.device, swapchain.vk, renderer.vka);
-    swapchain.vk = null;
 }
 
 make_frames :: (renderer: *Renderer) -> VkResult, [] Renderer.Frame_Data {
@@ -1150,72 +1302,6 @@ remake_swapchain :: (renderer: *Renderer, extent: VkExtent2D) -> VkResult {
     result, renderer.frames = make_frames(renderer);
     if result return result;
     return .SUCCESS;
-}
-
-make_image :: (
-    renderer: *Renderer,
-    memory_pool: *Renderer.Memory_Pool,
-    extent: VkExtent2D,
-    format: VkFormat,
-    image_usage: VkImageUsageFlags,
-    tiling: VkImageTiling = .OPTIMAL,
-    image_type: VkImageType = .e2D,
-    layer_count: u32 = 1,
-    sample_count: VkSampleCountFlagBits = .e1,
-    mip_levels: u32 = 1
-) -> VkResult, Renderer.Image {
-    image: Renderer.Image;
-    result: VkResult;
-    image_create_info := VkImageCreateInfo.{
-        imageType = image_type,
-        format = format,
-        extent = .{
-            width = extent.width,
-            height = extent.height,
-            depth = 1
-        },
-        mipLevels = mip_levels,
-        arrayLayers = layer_count,
-        samples = sample_count,
-        usage = image_usage,
-        sharingMode = .EXCLUSIVE,
-        initialLayout = .UNDEFINED
-    };
-
-    result = check_vk(vkCreateImage(renderer.device, *image_create_info, renderer.vka, *image.vk));
-    if result return result, .{};
-
-    memory_requirements: VkMemoryRequirements;
-    vkGetImageMemoryRequirements(renderer.device, image.vk, *memory_requirements);
-
-    image.allocation = get(memory_pool, memory_requirements.size, memory_requirements.alignment);
-
-    result = check_vk(vkBindImageMemory(renderer.device, image.vk, image.allocation.memory, image.allocation.offset));
-    if result {
-        vkDestroyImage(renderer.device, image.vk, renderer.vka);
-        return result, .{};
-    }
-
-    return .SUCCESS, image;
-}
-
-make_image_view :: (using renderer: *Renderer, image: VkImage, format: VkFormat, aspect_flag: VkImageAspectFlags, layer_count: u32 = 1, mip_levels: u32 = 1) -> VkResult, VkImageView {
-    view_info := VkImageViewCreateInfo.{
-        image = image,
-        viewType = ifx layer_count > 1 then .e2D_ARRAY else .e2D,
-        format = format,
-        subresourceRange = .{
-            aspectMask = aspect_flag,
-            baseMipLevel = 0,
-            levelCount = mip_levels,
-            baseArrayLayer = 0,
-            layerCount = layer_count,
-        },
-    };
-
-    view: VkImageView;
-    result := check_vk(vkCreateImageView(device, *view_info, vka, *view));
-    return result, view;
 }
 
 find_depth_format :: (using renderer: *Renderer) -> VkFormat {
@@ -1283,7 +1369,9 @@ make_command_pools :: (using renderer: *Renderer) -> VkResult, VkCommandPool {
 }
 
 destroy_command_pools :: (using renderer: *Renderer) {
-    vkDestroyCommandPool(device, command_pool, vka);
+    if command_pool {
+        vkDestroyCommandPool(device, command_pool, vka);
+    }
 }
 
 acquire_next_image_index :: (using renderer: *Renderer) -> bool {

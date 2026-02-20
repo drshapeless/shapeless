@@ -331,7 +331,7 @@ begin_text_draw :: (system: *Font_System, renderer: *Renderer) {
 }
 
 end_text_draw :: (system: *Font_System, renderer: *Renderer) {
-    command := renderer.cmd;
+    command := renderer.current_swapchain_command_buffer;
     current_ptr := current_buffer_ptr(system, renderer);
 
     memcpy(current_ptr, system.vertex_instances.data, size_of(Font_System.Vertex_Instance) * system.vertex_instances.count);
