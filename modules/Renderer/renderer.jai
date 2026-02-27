@@ -136,6 +136,7 @@ Renderer :: struct {
 }
 
 init :: (using renderer: *Renderer, window: *SDL_Window) -> ok:bool {
+    get_instance_proc_addr := SDL_Vulkan_GetVkGetInstanceProcAddr();
     vk_load_global_functions(xx SDL_Vulkan_GetVkGetInstanceProcAddr());
     instance_extensions := get_vk_instance_extensions();
     ok:, instance = make_instance(instance_extensions, vka);
@@ -1081,11 +1082,16 @@ get_swapchain_support :: (physical_device: VkPhysicalDevice, surface: VkSurfaceK
 }
 
 get_vk_instance_extensions :: () -> [] *u8 {
-    instance_extensions: []*u8;
+    instance_extensions: [..]*u8;
+    instance_extensions.allocator = temp;
     instance_extension_count: u32;
     instance_extension_data := SDL_Vulkan_GetInstanceExtensions(*instance_extension_count);
-    instance_extensions.count = instance_extension_count;
-    instance_extensions.data = instance_extension_data;
+
+    for 0..instance_extension_count - 1 {
+        array_add(*instance_extensions, instance_extension_data[it]);
+    }
+    array_add(*instance_extensions, VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+
     return instance_extensions;
 }
 
