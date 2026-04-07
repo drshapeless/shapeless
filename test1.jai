@@ -48,6 +48,7 @@ main :: () {
 
     result=, winding_buffer := make_buffer(*renderer, *gpu_pool, xx (size_of(s32) * windings.count), .STORAGE_BUFFER);
     memcpy(winding_buffer.allocation.mapped_pointer, windings.data, size_of(s32) * windings.count);
+    defer destroy_buffer(*renderer, winding_buffer);
 
     // We need an output memory here
     result=, output_buffer := make_buffer(*renderer, *gpu_pool, xx (size_sdf * size_sdf * 3 * size_of(float)), .STORAGE_BUFFER);
