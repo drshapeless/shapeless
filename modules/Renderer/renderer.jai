@@ -595,7 +595,10 @@ make_buffer :: (renderer: *Renderer, memory_pool: *Renderer.Memory_Pool, size: V
     result = check_vk(vkCreateBuffer(renderer.device, *buffer_create_info, renderer.vka, *buffer.vk));
     if result return result, .{};
 
-    buffer.allocation = get(memory_pool, size);
+    memory_requirements: VkMemoryRequirements;
+    vkGetBufferMemoryRequirements(renderer.device, buffer.vk, *memory_requirements);
+
+    buffer.allocation = get(memory_pool, memory_requirements.size, memory_requirements.alignment);
     result = check_vk(vkBindBufferMemory(renderer.device, buffer.vk, buffer.allocation.memory, buffer.allocation.offset));
     if result return result, .{};
 
