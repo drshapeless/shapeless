@@ -146,10 +146,19 @@ main :: () {
     result = end_single_time_commands(*renderer, cmd);
     assert(result == .SUCCESS);
 
-    for 0..30 -1 {
-        f := output_buffer.allocation.mapped_pointer.(*float) + it;
-        log("%: %", it, f.*);
+    bitmap_gpu: []float;
+    bitmap_gpu.data = output_buffer.allocation.mapped_pointer;
+    bitmap_gpu.count = size_sdf * size_sdf * 3;
+
+    bitmap := generate_msdf(shape, windings, metrics, size_sdf, size_sdf);
+    for 400..450 - 1 {
+        log("gpu % %", it, bitmap_gpu[it]);
+        log("cpu % %", it, bitmap[it]);
     }
+
+    check_block_memory(size_sdf, shape_buffer.allocation.mapped_pointer);
+
+    log("%", windings);
 }
 
 Push_Constant :: struct {
@@ -157,6 +166,23 @@ Push_Constant :: struct {
     output_memory: VkDeviceAddress;
     windings: VkDeviceAddress;
     metrics: Metrics;
+}
+
+check_block_memory :: (size_sdf: s64, block_memory: *void) {
+    block_shape := cast(*Block_Shape)(block_memory);
+
+    log("contour count = %", block_shape.contour_count);
+
+    for i: 0..block_shape.contour_count - 1 {
+        block_contour := cast(*Block_Contour) (block_memory.(*u8) + block_shape.first_contour_offset + i * size_of(Block_Contour));
+
+        log("edge count = %", block_contour.edge_count);
+        for j: 0..block_contour.edge_count - 1 {
+            edge := cast(*Edge_Segment)(block_memory.(*u8) + block_contour.first_edge_offset + j * size_of(Edge_Segment));
+
+            log("%", edge.*);
+        }
+    }
 }
 
 #import "Renderer";

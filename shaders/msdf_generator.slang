@@ -36,6 +36,7 @@ func getortho(v: float2, polarity: bool, allow_zero: bool) -> float2 {
 }
 
 func solve_quadratic(a: float, b: float, c: float, out solution_count: int32_t, out solutions: float2) {
+    solutions = {};
     if (abs(a) < 1.0e-14) {
         if (abs(b) < 1.0e-14) {
             if (c == 0) {
@@ -109,19 +110,19 @@ func solve_cubic_normed(a: float, b: float, c: float, out solution_count: int32_
 
 func solve_cubic(a: float, b: float, c: float, d: float, out solution_count:uint32_t, out solutions: float3) {
     if (abs(a) < 1.0e-14) {
-        uint32_t c;
+        uint32_t cnt;
         float2 ss;
-        solve_quadratic(b, c, d, c, ss);
+        solve_quadratic(b, c, d, cnt, ss);
         solutions[0] = ss[0];
         solutions[1] = ss[1];
-        solution_count = c;
+        solution_count = cnt;
         return;
     }
 
-    uint32_t c;
+    uint32_t cnt;
     float3 ss;
-    solve_cubic_normed(b/a, c/a, d/a, c, ss);
-    solution_count = c;
+    solve_cubic_normed(b/a, c/a, d/a, cnt, ss);
+    solution_count = cnt;
     solutions = ss;
 }
 
@@ -202,9 +203,7 @@ void main(uint3 dtid: SV_DispatchThreadID) {
         return;
     }
 
-    float* ptr = (float*)pc.output_memory;
-
-    ptr[pixel.y * 32 * 3 + pixel.x * 3] = 3.33;
+    generate_msdf(pixel);
 }
 
 func generate_msdf(pixel: uint2) {
@@ -234,7 +233,7 @@ func generate_msdf(pixel: uint2) {
 
     float d = abs(INF);
     float neg_dist = -INF;
-    float pos_dist = INF;
+    float pos_dist =  INF;
     int32_t winding = 0;
 
     for (int j = 0; j < block_shape.contour_count; j += 1) {
@@ -264,12 +263,12 @@ func generate_msdf(pixel: uint2) {
                 r.near_edge    = *edge;
                 r.near_param   = pa;
             }
-            if (edge.color == Edge_Color.GREEN && signed_compare(distance, r.min_distance)) {
+            if (edge.color == Edge_Color.GREEN && signed_compare(distance, g.min_distance)) {
                 g.min_distance = distance;
                 g.near_edge    = *edge;
                 g.near_param   = pa;
             }
-            if (edge.color == Edge_Color.BLUE && signed_compare(distance, r.min_distance)) {
+            if (edge.color == Edge_Color.BLUE && signed_compare(distance, b.min_distance)) {
                 b.min_distance = distance;
                 b.near_edge    = *edge;
                 b.near_param   = pa;
@@ -379,7 +378,7 @@ func linear_dist(e: Edge_Segment, origin: float2, out signed_distance: Signed_Di
 
     ab = normalize(ab);
     eq = normalize(eq);
-    float dist = nonzero_sign(cross(aq, ab)) * endpoint_distance;
+    float dist = (float)nonzero_sign(cross(aq, ab)) * endpoint_distance;
     float d = abs(dot(ab, eq));
     signed_distance = {dist, d};
 }
@@ -401,7 +400,7 @@ func quadratic_dist(e: Edge_Segment, origin: float2, out signed_distance: Signed
     solve_cubic(a, b, c, d, solution_count, solutions);
 
     // distance from a
-    float min_distance = nonzero_sign(cross(ab, qa)) * length(qa);
+    float min_distance = (float)nonzero_sign(cross(ab, qa)) * length(qa);
     p = -dot(qa, ab) / dot(ab, ab);
     {
         float2 a, b;
@@ -409,7 +408,7 @@ func quadratic_dist(e: Edge_Segment, origin: float2, out signed_distance: Signed
         b = e.end - origin;
 
         // distance from b
-        float distance = nonzero_sign(cross(a, b))*length(b);
+        float distance = (float)nonzero_sign(cross(a, b))*length(b);
         if (abs(distance) < abs(min_distance)) {
             min_distance = distance;
             a = origin - e.control;
@@ -427,7 +426,7 @@ func quadratic_dist(e: Edge_Segment, origin: float2, out signed_distance: Signed
 
             a = e.end - e.start;
             b = end_point - origin;
-            float distance = nonzero_sign(cross(a, b))*length(b);
+            float distance = (float)nonzero_sign(cross(a, b))*length(b);
             if (abs(distance) <= abs(min_distance)) {
                 min_distance = distance;
                 p = t;
@@ -462,13 +461,13 @@ func cubic_dist(e: Edge_Segment, origin: float2, out signed_distance: Signed_Dis
 
     float2 ep_dir = direction(e, 0);
     // distance from a
-    float min_distance = nonzero_sign(cross(ep_dir, qa))*length(qa);
+    float min_distance = (float)nonzero_sign(cross(ep_dir, qa))*length(qa);
     p = -dot(qa, ep_dir) / dot(ep_dir, ep_dir);
     {
         var a = e.end - origin;
         ep_dir = direction(e, 1);
         // distance from b
-        var distance = nonzero_sign(cross(ep_dir, a))*length(a);
+        var distance = (float)nonzero_sign(cross(ep_dir, a))*length(a);
         if (abs(distance) < abs(min_distance)) {
             min_distance = distance;
 
@@ -486,7 +485,7 @@ func cubic_dist(e: Edge_Segment, origin: float2, out signed_distance: Signed_Dis
             var qpt = point(e, t);
             qpt = qpt - origin;
             var d = direction(e, t);
-            var distance = nonzero_sign(cross(d, qpt))*length(qpt);
+            var distance = (float)nonzero_sign(cross(d, qpt))*length(qpt);
             if (abs(distance) < abs(min_distance)) {
                 min_distance = distance;
                 p = t;
@@ -618,6 +617,8 @@ func direction(e: Edge_Segment, p: float) -> float2 {
     case 4: //vcubic
         return cubic_direction(e, p);
     }
+
+    return {};
 }
 
 func linear_point(e: Edge_Segment, p: float) -> float2 {
@@ -648,4 +649,6 @@ func point(e: Edge_Segment, p: float) -> float2 {
     case 4:
         return cubic_point(e, p);
     }
+
+    return {};
 }
