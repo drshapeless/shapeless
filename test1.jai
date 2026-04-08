@@ -1,10 +1,11 @@
 main :: () {
     SDL_Init(.VIDEO);
     defer SDL_Quit();
-    SDL_Vulkan_LoadLibrary(null);
-
     ok: bool;
     result: VkResult;
+    ok = SDL_Vulkan_LoadLibrary(null);
+    assert(ok, "%", to_string(SDL_GetError()));
+
 
     renderer: Renderer;
     ok = init_without_swapchain(*renderer);
@@ -92,44 +93,45 @@ main :: () {
     result=, cmd := begin_single_time_commands(*renderer);
     assert(result == .SUCCESS);
 
-    memory_barriers := VkBufferMemoryBarrier2.[
-    .{
-        srcStageMask = .TOP_OF_PIPE,
-        srcAccessMask = 0,
-        dstStageMask = .COMPUTE_SHADER,
-        dstAccessMask = .SHADER_READ,
-        srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        buffer = shape_buffer.vk,
-        offset = 0,
-        size = xx shape_buffer.allocation.size
-    },
-    .{
-        srcStageMask = .TOP_OF_PIPE,
-        srcAccessMask = 0,
-        dstStageMask = .COMPUTE_SHADER,
-        dstAccessMask = .SHADER_WRITE,
-        srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        buffer = output_buffer.vk,
-        offset = 0,
-        size = xx output_buffer.allocation.size
-    }
-    ];
+    // memory_barriers := VkBufferMemoryBarrier2.[
+    // .{
+    //     srcStageMask = .TOP_OF_PIPE,
+    //     srcAccessMask = 0,
+    //     dstStageMask = .COMPUTE_SHADER,
+    //     dstAccessMask = .SHADER_READ,
+    //     srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+    //     dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+    //     buffer = shape_buffer.vk,
+    //     offset = 0,
+    //     size = xx shape_buffer.allocation.size
+    // },
+    // .{
+    //     srcStageMask = .TOP_OF_PIPE,
+    //     srcAccessMask = 0,
+    //     dstStageMask = .COMPUTE_SHADER,
+    //     dstAccessMask = .SHADER_WRITE,
+    //     srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+    //     dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+    //     buffer = output_buffer.vk,
+    //     offset = 0,
+    //     size = xx output_buffer.allocation.size
+    // }
+    // ];
 
-    dependency_info := VkDependencyInfo.{
-        bufferMemoryBarrierCount = 2,
-        pBufferMemoryBarriers = memory_barriers.data
-    };
+    // dependency_info := VkDependencyInfo.{
+    //     bufferMemoryBarrierCount = 2,
+    //     pBufferMemoryBarriers = memory_barriers.data
+    // };
 
-    vkCmdPipelineBarrier2(cmd, *dependency_info);
+    // vkCmdPipelineBarrier2(cmd, *dependency_info);
     vkCmdBindPipeline(cmd, .COMPUTE, compute_pipeline);
 
     pc := Push_Constant.{
         block_memory = shape_buffer.address,
         output_memory = output_buffer.address,
         windings = winding_buffer.address,
-        metrics = metrics
+        metrics = metrics,
+        size_sdf = size_sdf
     };
 
     push_constants_info := VkPushConstantsInfo.{
@@ -150,15 +152,8 @@ main :: () {
     bitmap_gpu.data = output_buffer.allocation.mapped_pointer;
     bitmap_gpu.count = size_sdf * size_sdf * 3;
 
-    bitmap := generate_msdf(shape, windings, metrics, size_sdf, size_sdf);
-    for 400..450 - 1 {
-        log("gpu % %", it, bitmap_gpu[it]);
-        log("cpu % %", it, bitmap[it]);
-    }
-
-    check_block_memory(size_sdf, shape_buffer.allocation.mapped_pointer);
-
-    log("%", windings);
+    sdf_image := make_bitmap_sdf(bitmap_gpu, size_sdf);
+    stbi_write_png("gpu_msdf.png", xx size_sdf, xx size_sdf, 3, sdf_image.data, xx (size_sdf*3));
 }
 
 Push_Constant :: struct {
@@ -166,23 +161,7 @@ Push_Constant :: struct {
     output_memory: VkDeviceAddress;
     windings: VkDeviceAddress;
     metrics: Metrics;
-}
-
-check_block_memory :: (size_sdf: s64, block_memory: *void) {
-    block_shape := cast(*Block_Shape)(block_memory);
-
-    log("contour count = %", block_shape.contour_count);
-
-    for i: 0..block_shape.contour_count - 1 {
-        block_contour := cast(*Block_Contour) (block_memory.(*u8) + block_shape.first_contour_offset + i * size_of(Block_Contour));
-
-        log("edge count = %", block_contour.edge_count);
-        for j: 0..block_contour.edge_count - 1 {
-            edge := cast(*Edge_Segment)(block_memory.(*u8) + block_contour.first_edge_offset + j * size_of(Edge_Segment));
-
-            log("%", edge.*);
-        }
-    }
+    size_sdf: s64;
 }
 
 #import "Renderer";
@@ -191,3 +170,4 @@ check_block_memory :: (size_sdf: s64, block_memory: *void) {
 #import "Vulkan";
 #import "Basic";
 #import "HarfBuzz";
+#import "stb_image_write";

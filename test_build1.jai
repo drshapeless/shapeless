@@ -23,6 +23,10 @@ OUTPUT_EXECUTABLE_NAME :: "test1";
     set_build_options(options, w);
 
     loop("test1.jai", w);
+
+    #if OS == .MACOS {
+        run_command("install_name_tool", "-add_rpath", "/opt/homebrew/lib", OUTPUT_EXECUTABLE_NAME);
+    }
 }
 
 loop :: (file: string, w: Workspace) {
@@ -46,3 +50,4 @@ loop :: (file: string, w: Workspace) {
 
 #import "Compiler";
 #import "Basic";
+#import "Process";

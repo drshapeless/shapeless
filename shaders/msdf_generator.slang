@@ -140,6 +140,7 @@ struct Push_Constant {
     uint64_t output_memory;
     uint64_t windings;
     Metrics metrics;
+    int64_t size_sdf;
 };
 
 struct Multi_Distance {
@@ -191,15 +192,13 @@ struct Block_Contour {
 [vk::push_constant]
 uniform Push_Constant pc;
 
-static const uint32_t SIZE_SDF = 32;
-
 [[numthreads(8, 8, 1)]]
 [shader("compute")]
 void main(uint3 dtid: SV_DispatchThreadID) {
     uint2 pixel = dtid.xy;
 
     // Hardcode as 32 for now
-    if (pixel.x >= SIZE_SDF || pixel.y >= SIZE_SDF) {
+    if (pixel.x >= pc.size_sdf || pixel.y >= pc.size_sdf) {
         return;
     }
 
@@ -209,7 +208,7 @@ void main(uint3 dtid: SV_DispatchThreadID) {
 func generate_msdf(pixel: uint2) {
     int y = pixel.y;
     int x = pixel.x;
-    int row = pc.metrics.y_flip ? pixel.y : SIZE_SDF - pixel.y - 1;
+    int64_t row = pc.metrics.y_flip ? pixel.y : pc.size_sdf - pixel.y - 1;
 
     Multi_Distance contour_sd[30];
 
@@ -222,8 +221,8 @@ func generate_msdf(pixel: uint2) {
     }
 
     float2 p = {
-        (x+pc.metrics.xoff - pc.metrics.translate_x)/(pc.metrics.scale*64.0),
-        (y+pc.metrics.yoff - pc.metrics.translate_y)/(pc.metrics.scale*64.0),
+        ((float)x+pc.metrics.xoff - pc.metrics.translate_x)/(pc.metrics.scale*64.0),
+        ((float)y+pc.metrics.yoff - pc.metrics.translate_y)/(pc.metrics.scale*64.0),
     };
 
     Edge_Point sr, sg, sb;
@@ -239,6 +238,9 @@ func generate_msdf(pixel: uint2) {
     for (int j = 0; j < block_shape.contour_count; j += 1) {
         Block_Contour *contour = (Block_Contour*) (pc.block_memory + block_shape.first_contour_offset + sizeof(Block_Contour) * j);
         Edge_Point r, g, b;
+        r = {};
+        g = {};
+        b = {};
         r.min_distance = {INF, 1};
         g.min_distance = {INF, 1};
         b.min_distance = {INF, 1};
@@ -258,17 +260,17 @@ func generate_msdf(pixel: uint2) {
                 cubic_dist(*edge, p, distance, pa);
             }
 
-            if (edge.color == Edge_Color.RED && signed_compare(distance, r.min_distance)) {
+            if ((bool)(edge.color&Edge_Color.RED) && signed_compare(distance, r.min_distance)) {
                 r.min_distance = distance;
                 r.near_edge    = *edge;
                 r.near_param   = pa;
             }
-            if (edge.color == Edge_Color.GREEN && signed_compare(distance, g.min_distance)) {
+            if ((bool)(edge.color&Edge_Color.GREEN) && signed_compare(distance, g.min_distance)) {
                 g.min_distance = distance;
                 g.near_edge    = *edge;
                 g.near_param   = pa;
             }
-            if (edge.color == Edge_Color.BLUE && signed_compare(distance, b.min_distance)) {
+            if ((bool)(edge.color&Edge_Color.BLUE) && signed_compare(distance, b.min_distance)) {
                 b.min_distance = distance;
                 b.near_edge    = *edge;
                 b.near_param   = pa;
@@ -346,7 +348,7 @@ func generate_msdf(pixel: uint2) {
         msd.b = sb.min_distance.dist;
     }
 
-    var index = 3*((row*SIZE_SDF)+x);
+    var index = 3*((row*pc.size_sdf)+x);
 
     float *bitmap = (float*) pc.output_memory;
     bitmap[index+0] = msd.r/RANGE+0.5;
@@ -565,8 +567,8 @@ func signed_compare(a: Signed_Distance, b: Signed_Distance) -> bool {
 
 func mix(a: float2, b: float2, weight: float) -> float2 {
     float2 r;
-    r.x = (1-weight)*a.x + weight*b.x;
-    r.y = (1-weight)*a.y + weight*b.y;
+    r.x = (1.0-weight)*a.x + weight*b.x;
+    r.y = (1.0-weight)*a.y + weight*b.y;
     return r;
 }
 
