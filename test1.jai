@@ -72,11 +72,14 @@ main :: () {
 
     ok=, compute_module := make_shader_module(*renderer, "shaders/msdf_generator.slang.spv");
     assert(ok);
-    defer vkDestroyShaderModule(device, compute_module, vka);
+
+    compute_shader_info, compute_shader_string := make_shader_module_create_info("shaders/msdf_generator.slang.spv");
+    defer free(compute_shader_string);
 
     pipeline_shader_stage_create_info := VkPipelineShaderStageCreateInfo.{
+        pNext = *compute_shader_info,
         stage = .COMPUTE,
-        module = compute_module,
+        // module = compute_module,
         pName = "main"
     };
 
@@ -88,7 +91,6 @@ main :: () {
     compute_pipeline: VkPipeline;
     result = check_vk(vkCreateComputePipelines(device, null, 1, *compute_pipeline_create_info, vka, *compute_pipeline));
     assert(result == .SUCCESS);
-    defer vkDestroyPipeline(device, compute_pipeline, vka);
 
     result=, cmd := begin_single_time_commands(*renderer);
     assert(result == .SUCCESS);
@@ -154,6 +156,10 @@ main :: () {
 
     sdf_image := make_bitmap_sdf(bitmap_gpu, size_sdf);
     stbi_write_png("gpu_msdf.png", xx size_sdf, xx size_sdf, 3, sdf_image.data, xx (size_sdf*3));
+    vkDestroyShaderModule(device, compute_module, vka);
+    vkDestroyPipeline(device, compute_pipeline, vka);
+
+    report_memory_leaks();
 }
 
 Push_Constant :: struct {
@@ -168,6 +174,6 @@ Push_Constant :: struct {
 #import "MSDF"(HARFBUZZ=true);
 #import "SDL3";
 #import "Vulkan";
-#import "Basic";
+#import "Basic"()(MEMORY_DEBUGGER=true);
 #import "HarfBuzz";
 #import "stb_image_write";

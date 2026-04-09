@@ -298,6 +298,16 @@ make_shader_module :: (using renderer: *Renderer, file_path: string) -> ok:bool,
     return result == .SUCCESS, module;
 }
 
+make_shader_module_create_info :: (file_path: string) -> VkShaderModuleCreateInfo, string {
+    shader_code := read_entire_file(file_path);
+
+    create_info := VkShaderModuleCreateInfo.{
+        codeSize = xx shader_code.count,
+        pCode = cast(*u32) shader_code.data
+    };
+    return create_info, shader_code;
+}
+
 destroy_shader_module :: (using renderer: *Renderer, module: VkShaderModule) {
     vkDestroyShaderModule(device, module, vka);
 }
@@ -1118,7 +1128,8 @@ make_device :: (renderer: *Renderer, device_extensions: [] *u8) -> VkResult, VkD
         // supported in AMD GPU, but in mesa, we can enable this
         // experiment feature by RADV_PERFTEST=hic
         //
-        hostImageCopy = VK_TRUE
+        hostImageCopy = VK_TRUE,
+        maintenance5  = VK_TRUE
     };
 
     features13 := VkPhysicalDeviceVulkan13Features.{
