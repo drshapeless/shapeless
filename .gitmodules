@@ -7,3 +7,6 @@
 [submodule "modules/Json"]
 	path = modules/Json
 	url = https://github.com/drshapeless/json-parser.git
+[submodule "modules/MSDF"]
+	path = modules/MSDF
+	url = https://github.com/drshapeless/msdfvk.git
