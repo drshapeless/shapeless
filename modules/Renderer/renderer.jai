@@ -1145,7 +1145,8 @@ make_device :: (renderer: *Renderer, device_extensions: [] *u8) -> VkResult, VkD
         scalarBlockLayout                             = VK_TRUE,
         runtimeDescriptorArray                        = VK_TRUE,
         descriptorBindingVariableDescriptorCount      = VK_TRUE,
-        descriptorBindingStorageBufferUpdateAfterBind = VK_TRUE
+        descriptorBindingStorageBufferUpdateAfterBind = VK_TRUE,
+        shaderInt8                                    = VK_TRUE
     };
 
     features11 := VkPhysicalDeviceVulkan11Features.{
