@@ -175,7 +175,7 @@ struct Signed_Distance {
 
 struct Edge_Point {
     Signed_Distance min_distance;
-    Edge_Segment    near_edge;
+    Edge_Segment    *near_edge;
     float32_t       near_param;
 };
 
@@ -262,17 +262,17 @@ func generate_msdf(pixel: uint2) {
 
             if ((bool)(edge.color&Edge_Color.RED) && signed_compare(distance, r.min_distance)) {
                 r.min_distance = distance;
-                r.near_edge    = *edge;
+                r.near_edge    = edge;
                 r.near_param   = pa;
             }
             if ((bool)(edge.color&Edge_Color.GREEN) && signed_compare(distance, g.min_distance)) {
                 g.min_distance = distance;
-                g.near_edge    = *edge;
+                g.near_edge    = edge;
                 g.near_param   = pa;
             }
             if ((bool)(edge.color&Edge_Color.BLUE) && signed_compare(distance, b.min_distance)) {
                 b.min_distance = distance;
-                b.near_edge    = *edge;
+                b.near_edge    = edge;
                 b.near_param   = pa;
             }
         }
@@ -294,9 +294,9 @@ func generate_msdf(pixel: uint2) {
             winding = -windings[j];
         }
 
-        dist_to_pseudo(r.min_distance, p, r.near_param, r.near_edge);
-        dist_to_pseudo(g.min_distance, p, g.near_param, g.near_edge);
-        dist_to_pseudo(b.min_distance, p, b.near_param, b.near_edge);
+        dist_to_pseudo(r.min_distance, p, r.near_param, *r.near_edge);
+        dist_to_pseudo(g.min_distance, p, g.near_param, *g.near_edge);
+        dist_to_pseudo(b.min_distance, p, b.near_param, *b.near_edge);
 
         med_min_dist = median3(r.min_distance.dist, g.min_distance.dist, b.min_distance.dist);
         contour_sd[j].r = r.min_distance.dist;
@@ -312,9 +312,9 @@ func generate_msdf(pixel: uint2) {
         }
     }
 
-    dist_to_pseudo(sr.min_distance, p, sr.near_param, sr.near_edge);
-    dist_to_pseudo(sg.min_distance, p, sg.near_param, sg.near_edge);
-    dist_to_pseudo(sb.min_distance, p, sb.near_param, sb.near_edge);
+    dist_to_pseudo(sr.min_distance, p, sr.near_param, *sr.near_edge);
+    dist_to_pseudo(sg.min_distance, p, sg.near_param, *sg.near_edge);
+    dist_to_pseudo(sb.min_distance, p, sb.near_param, *sb.near_edge);
 
     Multi_Distance msd = {INF, INF, INF, INF};
 
