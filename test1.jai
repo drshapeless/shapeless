@@ -3,9 +3,13 @@ main :: () {
     defer SDL_Quit();
     ok: bool;
     result: VkResult;
-    ok = SDL_Vulkan_LoadLibrary(null);
-    assert(ok, "%", to_string(SDL_GetError()));
+    #if OS == .MACOS {
+        SDL_SetHint(SDL_HINT_VULKAN_LIBRARY, "/Users/jacky/VulkanSDK/1.4.341.1/macOS/lib/libvulkan.dylib");
+        SDL_Vulkan_LoadLibrary("/Users/jacky/VulkanSDK/1.4.341.1/macOS/lib/libvulkan.dylib");
 
+    } else {
+        SDL_Vulkan_LoadLibrary(null);
+    }
 
     renderer: Renderer;
     ok = init_without_swapchain(*renderer);

@@ -978,6 +978,7 @@ make_instance_create_info :: (instance_extensions: [] *u8) -> VkInstanceCreateIn
 
 make_instance :: (instance_extensions: [] *u8, vka: *VkAllocationCallbacks) -> ok:bool, VkInstance {
     info := make_instance_create_info(instance_extensions);
+    info.pNext = *debug_utils_messenger_create_info;
     instance: VkInstance;
     result := check_vk(vkCreateInstance(*info, vka, *instance));
     return result == .SUCCESS, instance;
@@ -1116,6 +1117,7 @@ get_vk_instance_extensions :: () -> [] *u8 {
         array_add(*instance_extensions, instance_extension_data[it]);
     }
     array_add(*instance_extensions, VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+    array_add(*instance_extensions, VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 
     return instance_extensions;
 }

@@ -1,7 +1,13 @@
 main :: () {
     SDL_Init(.VIDEO);
     defer SDL_Quit();
-    SDL_Vulkan_LoadLibrary(null);
+    #if OS == .MACOS {
+        SDL_SetHint(SDL_HINT_VULKAN_LIBRARY, "/Users/jacky/VulkanSDK/1.4.341.1/macOS/lib/libvulkan.dylib");
+        SDL_Vulkan_LoadLibrary("/Users/jacky/VulkanSDK/1.4.341.1/macOS/lib/libvulkan.dylib");
+
+    } else {
+        SDL_Vulkan_LoadLibrary(null);
+    }
 
     ok: bool;
     result: VkResult;
