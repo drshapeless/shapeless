@@ -224,6 +224,14 @@ init_without_swapchain :: (using renderer: *Renderer) -> bool {
 
     vk_load_instance_functions(instance);
 
+    result: VkResult;
+    result = vkCreateDebugUtilsMessengerEXT(instance, *debug_utils_messenger_create_info, vka, *debug_messenger);
+    if result {
+        log_error("Cannot create debug messenger");
+        vkDestroyInstance(instance, vka);
+        return false;
+    }
+
     all_device_extensions: [..] *u8;
     all_device_extensions.allocator = temp;
     #if OS == .MACOS {
@@ -237,7 +245,6 @@ init_without_swapchain :: (using renderer: *Renderer) -> bool {
         return false;
     }
 
-    result: VkResult;
     result, device = make_device(renderer, all_device_extensions);
     if result {
         vkDestroyInstance(instance, vka);
@@ -276,10 +283,15 @@ deinit :: (using renderer: *Renderer) {
     destroy_draw_images(renderer);
     destroy_frames(renderer);
     destroy_swapchain(renderer, *swapchain);
-    vkDestroySurfaceKHR(instance, surface, vka);
+    if surface {
+        vkDestroySurfaceKHR(instance, surface, vka);
+    }
     destroy_command_pools(renderer);
     gpu_free(renderer, internal_preallocated_memory);
     vkDestroyDevice(device, vka);
+    if debug_messenger {
+        vkDestroyDebugUtilsMessengerEXT(instance, debug_messenger, vka);
+    }
     vkDestroyInstance(instance, vka);
 }
 
@@ -1450,3 +1462,26 @@ get_memory_indices :: (using renderer: *Renderer) -> Renderer.Memory_Indices {
 
     return indices;
 }
+
+debug_utils_callback :: (messageSeverity: VkDebugUtilsMessageSeverityFlagBitsEXT, messageTypes: VkDebugUtilsMessageTypeFlagsEXT, pCallbackData: *VkDebugUtilsMessengerCallbackDataEXT, pUserData: *void) -> VkBool32 #c_call {
+    push_context {
+        if messageSeverity == {
+        case .VERBOSE;
+            ;
+        case .INFO;
+            ;
+        case .WARNING;
+            log("[WARN ] %", to_string(pCallbackData.pMessage));
+        case .ERROR;
+            log("[ERROR] %", to_string(pCallbackData.pMessage));
+        }
+
+    }
+    return VK_FALSE;
+}
+
+debug_utils_messenger_create_info :: VkDebugUtilsMessengerCreateInfoEXT.{
+    messageSeverity = .VERBOSE | .INFO | .WARNING | .ERROR,
+    messageType     = .GENERAL | .VALIDATION | .PERFORMANCE,
+    pfnUserCallback = debug_utils_callback
+};
