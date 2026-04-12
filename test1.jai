@@ -145,7 +145,7 @@ main :: () {
         size = size_of(Push_Constant),
         pValues = *pc
     };
-    vkCmdPushConstants2(cmd, *push_constants_info);
+    vkCmdPushConstants(cmd, pipeline_layout, .COMPUTE, 0, xx size_of(Push_Constant), *pc);
 
     vkCmdDispatch(cmd, 4, 4, 1);
 
@@ -209,14 +209,7 @@ main :: () {
         size_bitmap = size_bitmap
     };
 
-    push_constants_info2 := VkPushConstantsInfo.{
-        layout = pipeline_layout2,
-        stageFlags = .COMPUTE,
-        offset = 0,
-        size = size_of(Push_Constant2),
-        pValues = *pc2
-    };
-    vkCmdPushConstants2(cmd2, *push_constants_info2);
+    vkCmdPushConstants(cmd2, pipeline_layout2, .COMPUTE, 0, xx size_of(Push_Constant2), *pc2);
     vkCmdDispatch(cmd2, 32, 32, 1);
 
     result = end_single_time_commands(*renderer, cmd2);

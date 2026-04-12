@@ -190,7 +190,8 @@ main :: () {
         dynamicOffsetCount = 0,
         pDynamicOffsets = null
     };
-    vkCmdBindDescriptorSets2(cmd, *bind_descriptor_set_info);
+    vkCmdBindDescriptorSets(cmd, .COMPUTE, pipeline_layout, 0, 1, *descriptor_set, 0, null);
+    // vkCmdBindDescriptorSets2(cmd, *bind_descriptor_set_info);
     vkCmdDispatch(cmd, 4, 4, 1);
 
     // This is a barrier that convert the image to host visible

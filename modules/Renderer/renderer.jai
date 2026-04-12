@@ -234,6 +234,7 @@ init_without_swapchain :: (using renderer: *Renderer) -> bool {
 
     all_device_extensions: [..] *u8;
     all_device_extensions.allocator = temp;
+    array_add(*all_device_extensions, ..ENABLED_DEVICE_EXTENSION_NAMES);
     #if OS == .MACOS {
         array_add(*all_device_extensions, VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
     }
@@ -960,7 +961,7 @@ application_info :: VkApplicationInfo.{
     applicationVersion = #run VK_MAKE_API_VERSION(0, 1, 0, 0),
     pEngineName        = "Shapeless Engine",
     engineVersion      = #run VK_MAKE_API_VERSION(0, 1, 0, 0),
-    apiVersion         = VK_API_VERSION_1_4
+    apiVersion         = VK_API_VERSION_1_3
 };
 
 validation_layers :: (*u8).["VK_LAYER_KHRONOS_validation"];
@@ -1137,17 +1138,35 @@ make_device :: (renderer: *Renderer, device_extensions: [] *u8) -> VkResult, VkD
         };
     }
 
-    features14 := VkPhysicalDeviceVulkan14Features.{
-        // I want to use this extension, but seems like it is not
-        // supported in AMD GPU, but in mesa, we can enable this
-        // experiment feature by RADV_PERFTEST=hic
-        //
-        hostImageCopy = VK_TRUE,
-        maintenance5  = VK_TRUE
-    };
+    // TODO: checking is a pain in the ass
+    // // This is for deprecating shader module before 1.4
+    // available_features_graphics_pipeline_library := VkPhysicalDeviceGraphicsPipelineLibraryFeaturesEXT.{};
+    // available_features_host_image_copy := VkPhysicalDeviceHostImageCopyFeatures.{
+    //     pNext = *available_features_graphics_pipeline_library
+    // };
+    // available_features13 := VkPhysicalDeviceVulkan13Features.{
+    //     pNext = *available_features_host_image_copy
+    // };
+    // available_features12 := VkPhysicalDeviceVulkan12Features.{
+    //     pNext = *available_features13
+    // };
+    // available_features11 := VkPhysicalDeviceVulkan11Features.{
+    //     pNext = *available_features12
+    // };
+    // available_features := VkPhysicalDeviceFeatures2.{
+    //     pNext = *available_features11
+    // };
+    // vkGetPhysicalDeviceFeatures2(renderer.physical_device, *available_features);
 
+    features_graphics_pipeline_library := VkPhysicalDeviceGraphicsPipelineLibraryFeaturesEXT.{
+        graphicsPipelineLibrary = VK_TRUE
+    };
+    features_host_image_copy := VkPhysicalDeviceHostImageCopyFeatures.{
+        pNext = *features_graphics_pipeline_library,
+        hostImageCopy = VK_TRUE
+    };
     features13 := VkPhysicalDeviceVulkan13Features.{
-        pNext = *features14,
+        pNext = *features_host_image_copy,
         dynamicRendering = VK_TRUE,
         synchronization2 = VK_TRUE
     };
@@ -1178,9 +1197,6 @@ make_device :: (renderer: *Renderer, device_extensions: [] *u8) -> VkResult, VkD
             shaderInt64      = VK_TRUE // For pointer math inside shader
         }
     };
-
-    // TODO: Check if the features are available before use. Now it is
-    // not checked.
 
     device_create_info := VkDeviceCreateInfo.{
         pNext = *device_features,
