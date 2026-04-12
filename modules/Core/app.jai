@@ -12,8 +12,6 @@ App :: struct {
     current_buffer_index: s64;
     frames: [..] Frame;
 
-    font_system: Font_System;
-
     last_render_time: float64;
 }
 
@@ -31,8 +29,6 @@ appinit :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
     if !ok return .FAILURE;
 
     set_clear_color(*renderer, .[0.1, 0.2, 0.3, 1.0]);
-
-    font_system = make_font_system(*renderer);
 
     last_render_time = to_float64_seconds(current_time_monotonic());
 
@@ -77,10 +73,6 @@ appiter :: (appstate: *void) -> SDL_AppResult {
         fps := 1.0 / delta;
 
         if begin_draw(*renderer) {
-            begin_text_draw(*font_system, *renderer);
-            append_text(*font_system, tprint("%", cast(u32) fps), 16, .{10, 30});
-            append_text(*font_system, "hello, world", 32, .{10, 150});
-            end_text_draw(*font_system, *renderer);
             end_draw(*renderer);
         }
     }
@@ -93,7 +85,7 @@ appquit :: (appstate: *void, result: SDL_AppResult) {
     app := cast(*App)appstate;
 
     vkDeviceWaitIdle(app.renderer.device);
-    destroy_font_system(*app.renderer, *app.font_system);
+
     deinit(*app.renderer);
     SDL_Quit();
 }

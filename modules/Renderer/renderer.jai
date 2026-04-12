@@ -776,82 +776,82 @@ make_image_view :: (renderer: *Renderer, image: VkImage, format: VkFormat, aspec
 }
 
 // This version of make texture uses host image copy
-make_texture :: (renderer: *Renderer, memory_pool: *Renderer.Memory_Pool, data: *void, extent: VkExtent2D, format: VkFormat = .R8G8B8A8_UNORM) -> VkResult, Renderer.Texture {
-    texture: Renderer.Texture;
-    texture.format = format;
-    result: VkResult;
-    result, texture.image = make_image(renderer, memory_pool, extent, texture.format, .SAMPLED | .HOST_TRANSFER);
-    if result return result, .{};
+// make_texture :: (renderer: *Renderer, memory_pool: *Renderer.Memory_Pool, data: *void, extent: VkExtent2D, format: VkFormat = .R8G8B8A8_UNORM) -> VkResult, Renderer.Texture {
+//     texture: Renderer.Texture;
+//     texture.format = format;
+//     result: VkResult;
+//     result, texture.image = make_image(renderer, memory_pool, extent, texture.format, .SAMPLED | .HOST_TRANSFER);
+//     if result return result, .{};
 
-    result, texture.image_view = make_image_view(renderer, texture.image.vk, texture.format, .COLOR);
-    if result {
-        vkDestroyImage(renderer.device, texture.image.vk, renderer.vka);
-        return result, .{};
-    }
+//     result, texture.image_view = make_image_view(renderer, texture.image.vk, texture.format, .COLOR);
+//     if result {
+//         vkDestroyImage(renderer.device, texture.image.vk, renderer.vka);
+//         return result, .{};
+//     }
 
-    host_image_layout_transition_info := VkHostImageLayoutTransitionInfo.{
-        image = texture.image.vk,
-        oldLayout = .UNDEFINED,
-        newLayout = .SHADER_READ_ONLY_OPTIMAL,
-        subresourceRange = .{
-            aspectMask     = .COLOR,
-            baseMipLevel   = 0,
-            levelCount     = 1,
-            baseArrayLayer = 0,
-            layerCount     = 1
-        }
-    };
+//     host_image_layout_transition_info := VkHostImageLayoutTransitionInfo.{
+//         image = texture.image.vk,
+//         oldLayout = .UNDEFINED,
+//         newLayout = .SHADER_READ_ONLY_OPTIMAL,
+//         subresourceRange = .{
+//             aspectMask     = .COLOR,
+//             baseMipLevel   = 0,
+//             levelCount     = 1,
+//             baseArrayLayer = 0,
+//             layerCount     = 1
+//         }
+//     };
 
-    result = check_vk(vkTransitionImageLayout(renderer.device, 1, *host_image_layout_transition_info));
-    if result {
-        destroy_texture(renderer, texture);
-        return result, .{};
-    }
+//     result = check_vk(vkTransitionImageLayout(renderer.device, 1, *host_image_layout_transition_info));
+//     if result {
+//         destroy_texture(renderer, texture);
+//         return result, .{};
+//     }
 
-    memory_to_image_copy := VkMemoryToImageCopy.{
-        imageSubresource = .{
-            aspectMask     = .COLOR,
-            mipLevel       = 0,
-            baseArrayLayer = 0,
-            layerCount     = 1
-        },
-        imageExtent = .{
-            width  = extent.width,
-            height = extent.height,
-            depth  = 1
-        },
-        pHostPointer = data
-    };
+//     memory_to_image_copy := VkMemoryToImageCopy.{
+//         imageSubresource = .{
+//             aspectMask     = .COLOR,
+//             mipLevel       = 0,
+//             baseArrayLayer = 0,
+//             layerCount     = 1
+//         },
+//         imageExtent = .{
+//             width  = extent.width,
+//             height = extent.height,
+//             depth  = 1
+//         },
+//         pHostPointer = data
+//     };
 
-    copy_memory_to_image_info := VkCopyMemoryToImageInfo.{
-        dstImage       = texture.image.vk,
-        dstImageLayout = .SHADER_READ_ONLY_OPTIMAL,
-        regionCount    = 1,
-        pRegions       = *memory_to_image_copy
-    };
+//     copy_memory_to_image_info := VkCopyMemoryToImageInfo.{
+//         dstImage       = texture.image.vk,
+//         dstImageLayout = .SHADER_READ_ONLY_OPTIMAL,
+//         regionCount    = 1,
+//         pRegions       = *memory_to_image_copy
+//     };
 
-    result = check_vk(vkCopyMemoryToImage(renderer.device, *copy_memory_to_image_info));
-    if result {
-        destroy_texture(renderer, texture);
-        return result, .{};
-    }
+//     result = check_vk(vkCopyMemoryToImage(renderer.device, *copy_memory_to_image_info));
+//     if result {
+//         destroy_texture(renderer, texture);
+//         return result, .{};
+//     }
 
-    return .SUCCESS, texture;
-}
+//     return .SUCCESS, texture;
+// }
 
-// This function relies on SDL_image
-make_texture_from_file :: (renderer: *Renderer, memory_pool: *Renderer.Memory_Pool, file_path: string, format: VkFormat = .R8G8B8A8_UNORM) -> VkResult, Renderer.Texture {
-    original_surface := IMG_Load(to_c_string(file_path));
-    assert(original_surface != null);
-    defer SDL_DestroySurface(original_surface);
+// // This function relies on SDL_image
+// make_texture_from_file :: (renderer: *Renderer, memory_pool: *Renderer.Memory_Pool, file_path: string, format: VkFormat = .R8G8B8A8_UNORM) -> VkResult, Renderer.Texture {
+//     original_surface := IMG_Load(to_c_string(file_path));
+//     assert(original_surface != null);
+//     defer SDL_DestroySurface(original_surface);
 
-    converted_surface := SDL_ConvertSurface(original_surface, .RGBA32);
-    assert(converted_surface != null);
-    defer SDL_DestroySurface(converted_surface);
+//     converted_surface := SDL_ConvertSurface(original_surface, .RGBA32);
+//     assert(converted_surface != null);
+//     defer SDL_DestroySurface(converted_surface);
 
-    result, texture := make_texture(renderer, memory_pool, converted_surface.pixels, .{xx converted_surface.w, xx converted_surface.h}, format);
-    return result, texture;
-}
+//     result, texture := make_texture(renderer, memory_pool, converted_surface.pixels, .{xx converted_surface.w, xx converted_surface.h}, format);
+//     return result, texture;
+// }
 
 resize_callback :: (using renderer: *Renderer, extent: VkExtent2D) {
     vkDeviceWaitIdle(device);
@@ -1158,15 +1158,14 @@ make_device :: (renderer: *Renderer, device_extensions: [] *u8) -> VkResult, VkD
     // };
     // vkGetPhysicalDeviceFeatures2(renderer.physical_device, *available_features);
 
+    features_shader_object := VkPhysicalDeviceShaderObjectFeaturesEXT.{
+        shaderObject = VK_TRUE
+    };
     features_graphics_pipeline_library := VkPhysicalDeviceGraphicsPipelineLibraryFeaturesEXT.{
         graphicsPipelineLibrary = VK_TRUE
     };
-    features_host_image_copy := VkPhysicalDeviceHostImageCopyFeatures.{
-        pNext = *features_graphics_pipeline_library,
-        hostImageCopy = VK_TRUE
-    };
     features13 := VkPhysicalDeviceVulkan13Features.{
-        pNext = *features_host_image_copy,
+        pNext = *features_graphics_pipeline_library,
         dynamicRendering = VK_TRUE,
         synchronization2 = VK_TRUE
     };
