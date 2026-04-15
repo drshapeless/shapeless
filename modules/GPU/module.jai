@@ -10,6 +10,90 @@ DEVICE_EXTENSIONS :: (*u8).[
 VK_EXT_SHADER_OBJECT_EXTENSION_NAME
 ];
 
+// I am lazy
+Result :: VkResult;
+Format :: VkFormat;
+
+// This name is so cursed.
+Pointer :: VkDeviceMemory;
+u32x3 :: VkExtent3D;
+Usage_Flags :: VkImageUsageFlags;
+
+Memory_Type :: enum {
+    DEFAULT; // This is rebar
+    GPU;
+    READBACK;
+}
+
+Allocation :: struct {
+    memory_type: Memory_Type;
+    memory:      VkDeviceMemory;
+    size:        u64;
+    offset:      u64;
+}
+
+// This has nothing to do with Allocation, this is a handy function to
+// store the user allocation informations
+Allocation_Info :: struct {
+    size: u64;
+    alignment: u64;
+}
+
+GPU_Pool :: struct {
+    allocation:       Allocation;
+    cpu:              *void;
+    gpu:              Pointer;
+    current_position: u64;
+    bytes_left:       u64;
+
+    initialized := false;
+
+    DEFAULT_SIZE :: 256 * 1024 * 1024; // 256MB
+}
+
+Queue_Type :: enum {
+    GRAPHICS;
+    COMPUTE;
+}
+
+// I think I made some mistake, this does not seem right
+Queue :: struct {
+    vk: VkQueue;
+    index: u32;
+}
+
+Command_Buffer :: struct {
+    vk: VkCommandBuffer;
+}
+
+Texture_Type :: VkImageViewType;
+
+Texture_Description :: struct {
+    type:         Texture_Type;
+    format:       Format;
+    dimensions:   u32x3;
+    mip_count:    u32 = 1;
+    layer_count:  u32 = 1;
+    sample_count: u32 = 1;
+    usage:        Usage_Flags;
+}
+
+Texture_Size_Alignment :: struct {
+    size: u64;
+    align: u64;
+}
+
+View_Description :: struct {
+    format:       Format;
+    base_mip:     u8 = 0;
+    mip_count:    u8 = ALL_MIPS;
+    base_layer:   u16 = 0;
+    layer_count:  u16 = ALL_LAYERS;
+
+    ALL_MIPS ::   ~cast(u8)0;
+    ALL_LAYERS :: ~cast(u16)0;
+}
+
 GPU_Context :: struct {
     vka:                          *VkAllocationCallbacks;
     instance:                     VkInstance;
@@ -17,48 +101,281 @@ GPU_Context :: struct {
     physical_device_properties:   VkPhysicalDeviceProperties2;
     device:                       VkDevice;
     debug_report_callback_handle: VkDebugReportCallbackEXT;
-    graphics_queue:               VkQueue;
-    compute_queue:                VkQueue;
+    graphics_queue:               Queue;
+    compute_queue:                Queue;
+    graphics_command_pool:        VkCommandPool;
+    compute_command_pool:         VkCommandPool;
+    // Even if we just have one queue, we still have two command pools.
+
+    // Memory related
+    default_memory_index:  u32 = U32_MAX;
+    gpu_memory_index:      u32 = U32_MAX;
+    readback_memory_index: u32 = U32_MAX;
 }
+
 #add_context gpu_context: GPU_Context;
 
-// I am lazy
-Result :: VkResult;
-
 init :: () -> bool {
-    ctx := *context.gpu_context;
-    return init(ctx);
-}
-
-init :: (ctx: *GPU_Context) -> bool {
+    using ctx := *context.gpu_context;
     get_instance_proc_addr := SDL_Vulkan_GetVkGetInstanceProcAddr();
     assert(get_instance_proc_addr != null);
     vk_load_global_functions(xx get_instance_proc_addr);
-
-    using context.gpu_context;
 
     result: Result;
     result = make_instance(ctx);
     if result return false;
 
+    // TODO: should free the instance here when failed.
     result = make_device(ctx);
     if result return false;
+
+    get_memory_indices(ctx);
+
+    make_command_pools(ctx);
 
     return true;
 }
 
 deinit :: () {
-    ctx := *context.gpu_context;
-    deinit(ctx);
-}
+    using context.gpu_context;
 
-deinit :: (using ctx: *GPU_Context) {
+    if command_pool {
+        vkDestroyCommandPool(device, command_pool, vka);
+    }
     if device {
         vkDestroyDevice(device, vka);
     }
     if instance {
         vkDestroyInstance(instance, vka);
     }
+}
+
+//// Memory
+
+// internal_allocate is for initializing memory_pool, you should not
+// call it directly.
+internal_allocate :: (size: u64, memory_type: Memory_Type = .DEFAULT) -> Allocation {
+    using context.gpu_context;
+    allocation: Allocation;
+    result: VkResult;
+
+    memory_allocate_flags_info := VkMemoryAllocateFlagsInfo.{
+        flags = .DEVICE_ADDRESS
+    };
+
+    memory_allocate_info := VkMemoryAllocateInfo.{
+        pNext = ifx memory_type == .DEFAULT then *memory_allocate_flags_info else null,
+        allocationSize = size,
+        memoryTypeIndex = memory_type_to_index(ctx, memory_type),
+    };
+
+    allocation.memory_type = memory_type;
+    allocation.size = size;
+    allocation.offset = 0;
+    result: VkResult;
+    result = check_vk(vkAllocateMemory(device, *memory_allocate_info, vka, *allocation.memory));
+    assert(result == .SUCCESS);
+
+    return allocation;
+}
+
+free :: (allocation: Allocation) {
+    using context.gpu_context;
+    if allocation.memory {
+        vkFreeMemory(device, buffer.memory, vka);
+    }
+}
+
+allocate :: (pool: *GPU_Pool, size: u64, alignment: u64 = 16) -> cpu:*void, gpu:Pointer {
+    using context.gpu_context;
+    if !pool.initialized {
+        init(pool, GPU_Pool.DEFAULT_SIZE);
+    }
+    real_size := size;
+    real_alignment := alignment;
+    if buffer.memory_type != .GPU {
+        // After some research, stating TRANSFER_SRC and TRANSFER_DST
+        // on every buffer creation have almost no performance
+        // difference. Nvidia does not care, AMD does not care since
+        // RDNA2, Apple uses unified memory.
+        buffer_create_info := VkBufferCreateInfo.{
+            size = size,
+            usage = .STORAGE_BUFFER | .SHADER_DEVICE_ADDRESS | .TRANSFER_SRC | .TRANSFER_DST,
+            sharingMode = .EXCLUSIVE
+        };
+
+        query_info := VkDeviceBufferMemoryRequirements.{
+            pCreateInfo = *buffer_create_info,
+        };
+
+        memory_requirements: VkMemoryRequirements2;
+
+        vkGetDeviceBufferMemoryRequirements(device, *query_info, *memory_requirements);
+
+        real_size = memory_requirements.memoryRequirements.size;
+        real_alignment = memory_requirements.memoryRequirements.alignment;
+    }
+
+    mask := real_alignment - 1;
+    padding := (real_alignment - (pool.current_position & mask)) & mask;
+    increment := real_size + padding;
+    assert(pool.bytes_left >= increment, "GPU pool out of memory");
+
+    pool.current_position += increment;
+    pool.bytes_left -= increment;
+
+    real_offset := pool.current_position + padding;
+
+    if pool.cpu == null {
+        return null, pool.gpu + real_offset;
+    }
+
+    return pool.cpu + real_offset, pool.gpu + real_offset;
+}
+
+// The way it works is by creating a dummy buffer, get the
+// mapped_pointer and BDA, then immediately destroy it. So as long as
+// this memory is not free, those pointer would still be usable.
+init :: (pool: *GPU_Pool, default_size: u64, memory_type: Memory_Type = .DEFAULT) {
+    using context.gpu_context;
+    if pool.initialized return;
+    allocation = internal_allocate(ctx, size, memory_type);
+
+    dummy_buffer: VkBuffer;
+    buffer_create_info := VkBufferCreateInfo.{
+        size = size,
+        usage = .STORAGE_BUFFER | .SHADER_DEVICE_ADDRESS | .TRANSFER_SRC | .TRANSFER_DST,
+        sharingMode = .EXCLUSIVE
+    };
+    result = check_vk(vkCreateBuffer(device, *buffer_create_info, vka, *buffer.vk));
+    assert(result == .SUCCESS);
+    defer vkDestroyBuffer(device, dummy_buffer, vka);
+
+    // Here we don't care about the memory requirements, since the
+    // memory allocated by vkAllocateMemory always fit the strictest
+    // alignment requirement.
+
+    if memory_type != .GPU {
+        result = check_vk(vkMapMemory(device, allocation.memory, 0, allocation.size, 0, *pool.cpu));
+        assert(result == .SUCCESS);
+    }
+
+    result = check_vk(vkBindBufferMemory(device, dummy_buffer, allocation.memory, 0));
+    assert(result == .SUCCESS);
+
+    buffer_device_address_info := VkBufferDeviceAddressInfo.{
+        buffer = dummy_buffer
+    };
+    pool.gpu = vkGetBufferDeviceAddress(device, *buffer_device_address_info);
+
+    pool.allocation = allocation;
+    pool.current_position = 0;
+    pool.bytes_left = buffer.size;
+}
+
+reset :: (pool: *GPU_Pool) {
+    using context.gpu_context;
+    pool.current_position = 0;
+    pool.bytes_left = pool.buffer.size;
+}
+
+deinit :: (pool: GPU_Pool) {
+    using context.gpu_context;
+    free(pool.allocation);
+}
+
+make_queue :: (queue_type: Queue_Type) -> Queue {
+    using context.gpu_context;
+    queue: Queue;
+    if queue_type == {
+    case .GRAPHICS;
+        queue = graphics_queue;
+    case .COMPUTE;
+        queue = compute_queue;
+    }
+    return queue;
+}
+
+start_command_recording :: (queue: Queue) -> Command_Buffer {
+    using context.gpu_context;
+    command_buffer_allocate_info := VkCommandBufferAllocateInfo.{
+        commandPool = ifx queue.vk == graphics_queue.vk then graphics_command_pool else compute_command_pool,
+        commandBufferCount = 1,
+        level = .PRIMARY,
+    };
+    command_buffer: Command_Buffer;
+    result: VkResult;
+    result = check_vk(vkAllocateCommandBuffers(device, *command_buffer_allocate_info, *command_buffer.vk));
+    assert(result == .SUCCESS);
+
+    command_buffer_begin_info := VkCommandBufferBeginInfo.{
+        flags = .ONE_TIME_SUBMIT,
+    };
+    result = check_vk(vkBeginCommandBuffer(command_buffer.vk, *command_buffer_begin_info));
+    assert(result == .SUCCESS);
+
+    return command_buffer;
+}
+
+submit :: (queue: Queue, command_buffers: []Command_Buffer) {
+    using context.gpu_context;
+    auto_release_temp();
+    push_allocator(temp);
+
+    result: VkResult;
+    for command_buffers {
+        result = check_vk(vkEndCommandBuffer(it.vk));
+        assert(result == .SUCCESS);
+    }
+
+    command_buffer_infos := NewArray(command_buffer.count, VkCommandBufferSubmitInfo);
+    for * command_buffer_infos {
+        it.commandBuffer = command_buffers[it_index];
+    }
+
+    submit_info := VkSubmitInfo2.{
+        commandBufferInfoCount = xx command_buffer_infos.count,
+        pCommandBufferInfos = command_buffer_infos.data,
+    };
+
+    result = check_vk(vkQueueSubmit2(queue.vk, 1, *submit_info, null));
+    assert(result == .SUCCESS);
+
+    result = vkQueueWaitIdle(queue.vk);
+    assert(result == .SUCCESS);
+
+    result = vkResetCommandPool(device, ifx queue.vk == graphics_queue.vk then graphics_command_pool else compute_command_pool, 0);
+    assert(result == .SUCCESS);
+}
+
+// GpuTextureSizeAlign gpuTextureSizeAlign(GpuTextureDesc desc);
+//
+// The original proposed name is fucked up, why would you call a
+// function just like its return type.
+get_texture_size_alignment :: (description: Texture_Description) -> Texture_Size_Alignment {
+    using context.gpu_context;
+    image_create_info := VkImageCreateInfo.{
+        imageType     = texture_type_to_image_type(description.type),
+        format        = description.format,
+        extent        = description.dimensions,
+        mipLevels     = description.mip_count,
+        arrayLayers   = description.layer_count,
+        samples       = description.sample_count,
+        tiling        = .OPTIMAL,
+        usage         = description.usage,
+        sharingMode   = .EXCLUSIVE,
+        initialLayout = .UNDEFINED
+    };
+
+    query_info := VkDeviceImageMemoryRequirements.{
+        pCreateInfo = *image_create_info,
+        planeAspect = .NONE // WTF is this
+    };
+
+    memory_requirements: VkMemoryRequirements2;
+    vkGetDeviceImageMemoryRequirements(device, *query_info, *memory_requirements);
+
+    return .{memory_requirements.memoryRequirements.size, memory_requirements.memoryRequirements.alignment};
 }
 
 #scope_module
@@ -150,7 +467,7 @@ make_instance :: (using ctx: *GPU_Context) -> Result {
     instance_create_info.enabledLayerCount = xx enabled_layers.count;
     instance_create_info.ppEnabledLayerNames = enabled_layers.data;
 
-    result = vkCreateInstance(*instance_create_info, vka, *instance);
+    result = check_vk(vkCreateInstance(*instance_create_info, vka, *instance));
     return_if_error(result);
 
     #if VALIDATION {
@@ -159,7 +476,7 @@ make_instance :: (using ctx: *GPU_Context) -> Result {
             pfnCallback = debug_report_callback
         };
 
-        result = vkCreateDebugReportCallbackEXT(instance, *debug_report_callback_create_info, vka, debug_report_callback_handle);
+        result = check_vk(vkCreateDebugReportCallbackEXT(instance, *debug_report_callback_create_info, vka, debug_report_callback_handle));
         return_if_error(result);
     }
 
@@ -217,7 +534,8 @@ make_device :: (using ctx: *GPU_Context) -> Result {
     features_13 := VkPhysicalDeviceVulkan13Features.{
         pNext = chain,
         dynamicRendering = VK_TRUE,
-        synchronization2 = VK_TRUE
+        synchronization2 = VK_TRUE,
+        maintenance4     = VK_TRUE
     };
     chain = *features_13;
     features_12 := VkPhysicalDeviceVulkan12Features.{
@@ -256,15 +574,21 @@ make_device :: (using ctx: *GPU_Context) -> Result {
         ppEnabledExtensionNames = extensions.data,
     };
 
-    result := vkCreateDevice(physical_device, *device_create_info, vka, *device);
+    result := check_vk(vkCreateDevice(physical_device, *device_create_info, vka, *device));
     return_if_error(result);
 
     vk_load_device_functions(device);
 
     // TODO: not very clean to put it here, but I don't want to query
     // the family indices again.
-    vkGetDeviceQueue(device, graphics_index, 0, *graphics_queue);
-    vkGetDeviceQueue(device, compute_index,  0, *compute_queue);
+    vkGetDeviceQueue(device, graphics_index, 0, *graphics_queue.vk);
+    graphics_queue.index = graphics_index;
+    #if OS == .MACOS {
+        compute_queue = graphics_queue;
+    } else {
+        vkGetDeviceQueue(device, compute_index,  0, *compute_queue.vk);
+        compute_queue.index = compute_index;
+    }
     return .SUCCESS;
 }
 
@@ -429,7 +753,128 @@ get_vk_instance_extensions :: () -> []*u8 {
     }
 }
 
+get_memory_indices :: (using ctx: *GPU_Context) {
+    properties: VkPhysicalDeviceMemoryProperties;
+    vkGetPhysicalDeviceMemoryProperties(physical_device, *properties);
+
+    DEFAULT_FLAG: VkMemoryPropertyFlags: .DEVICE_LOCAL | .HOST_VISIBLE | .HOST_COHERENT;
+    READBACK_FLAG: VkMemoryPropertyFlags: .HOST_VISIBLE | .HOST_COHERENT | .HOST_CACHED;
+
+    for i: 0..properties.memoryTypeCount - 1 {
+        flags := properties.memoryTypes[i].propertyFlags;
+
+        if flags & DEFAULT_FLAG == DEFAULT_FLAG {
+            if default_memory_index == U32_MAX default_memory_index = i;
+        }
+
+        if flags & .DEVICE_LOCAL == .DEVICE_LOCAL && flags & .HOST_VISIBLE == 0 {
+            if gpu_memory_index == U32_MAX gpu_memory_index = i;
+        }
+
+        if flags & READBACK_FLAG == READBACK_FLAG {
+            if readback_memory_index == U32_MAX readback_memory_index = i;
+        }
+
+        if default_memory_index != U32_MAX && gpu_memory_index != U32_MAX && readback_memory_index != U32_MAX {
+            break;
+        }
+    }
+}
+
+memory_type_to_index :: (using ctx: *GPU_Context, memory_type: Memory_Type) -> u32 {
+    index: u32;
+    if memory_type == {
+    case .DEFAULT;
+        index = default_memory_index;
+    case .GPU;
+        index = gpu_memory_index;
+    case .READBACK;
+        index = readback_memory_index;
+    case;
+        assert(false, "Unexpected memory type");
+    }
+
+    return index;
+}
+
+make_command_pools :: (ctx: *GPU_Context) {
+    create_info := VkCommandPoolCreateInfo.{
+        flags = .TRANSIENT | .RESET_COMMAND_BUFFER,
+        queueFamilyIndex = graphics_queue.index
+    };
+    result: VkResult;
+    result := check_vk(vkCreateCommandPool(device, *create_info, vka, *command_pool));
+    assert(result == .SUCCESS);
+
+    create_info.queueFamilyIndex = compute_queue_index;
+    result := check_vk(vkCreateCommandPool(device, *create_info, vka, *command_pool));
+    assert(result == .SUCCESS);
+}
+
+// Stolen from JBlow's Vulkan_Renderer
+// Generic api result logging helper, useful for Khronos apis
+check_api_result :: (result: $Result, api: string, $call := #caller_code, loc := #caller_location) -> Result {
+    call_string :: #run -> string {
+        root := compiler_get_nodes(call);
+
+        if root.kind == {
+        case .PROCEDURE_CALL;
+            proc_call := cast(*Code_Procedure_Call) root;
+            expression := proc_call.arguments_sorted[0];
+
+            if expression.kind != .PROCEDURE_CALL {
+                return "";
+            }
+
+            call := cast(*Code_Procedure_Call) expression;
+            if call.procedure_expression.kind != .IDENT {
+                return "";
+            }
+
+            return (cast(*Code_Ident) call.procedure_expression).name;
+
+        case .IDENT;
+            return (cast(*Code_Ident) root).name;
+
+        case;
+            return "";
+        }
+    };
+
+    if result != .SUCCESS {
+        action := ifx call_string else api;
+
+        result_string: string;
+        {
+            info := type_info(VkResult);
+            for info.values {
+                if xx result == it {
+                    result_string = info.names[it_index];
+                    break;
+                }
+            }
+        }
+        printed_result := ifx result_string
+            then cast(Any) result_string
+            else cast(Any) result;
+        log_error("% '%' failed: %", api, action, printed_result, loc = loc);
+        return result;
+    }
+    return .SUCCESS;
+}
+
+check_vk :: (result: VkResult, $call := #caller_code, loc := #caller_location) -> VkResult {
+    return check_api_result(result, "Vulkan call", call, loc);
+}
+
+texture_type_to_image_type :: (texture_type: Texture_Type) -> VkImageType {
+    assert(texture_type < 3, "Invalid texture type");
+
+    return cast(VkImageType) texture_type;
+}
+
 #import "Vulkan";
 #import "SDL3";
 #import "Basic";
 #import "Math";
+#import "Compiler";
