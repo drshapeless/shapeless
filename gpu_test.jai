@@ -16,6 +16,10 @@ main :: () {
 
     gpu.init();
     defer gpu.deinit();
+
+    log("rebar %", context.gpu_context.default_memory_index);
+    log("gpu %", context.gpu_context.gpu_memory_index);
+    log("readback %", context.gpu_context.readback_memory_index);
 }
 
 sdl_error :: () -> string {

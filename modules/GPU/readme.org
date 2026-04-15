@@ -170,3 +170,7 @@ void gpuDrawIndexedInstancedIndirectMulti(GpuCommandBuffer cb, void* dataVxGpu, 
 void gpuDrawMeshlets(GpuCommandBuffer cb, void* meshletDataGpu, void* pixelDataGpu, uvec3 dim);
 void gpuDrawMeshletsIndirect(GpuCommandBuffer cb, void* meshletDataGpu, void* pixelDataGpu, void *dimGpu);
 #+end_src
+
+* descriptor buffer and descriptor heap
+Once descriptor heap is out, the descriptor buffer related
+implementation is gone.
