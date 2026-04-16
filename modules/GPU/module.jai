@@ -100,7 +100,7 @@ GPU_Context :: struct {
     physical_device:              VkPhysicalDevice;
     physical_device_properties:   VkPhysicalDeviceProperties2;
     device:                       VkDevice;
-    debug_report_callback_handle: VkDebugReportCallbackEXT;
+    debug_messenger:              VkDebugUtilsMessengerEXT;
     graphics_queue:               Queue;
     compute_queue:                Queue;
     graphics_command_pool:        VkCommandPool;
@@ -139,11 +139,17 @@ init :: () -> bool {
 deinit :: () {
     using context.gpu_context;
 
-    if command_pool {
-        vkDestroyCommandPool(device, command_pool, vka);
+    if graphics_command_pool {
+        vkDestroyCommandPool(device, graphics_command_pool, vka);
+    }
+    if compute_command_pool {
+        vkDestroyCommandPool(device, compute_command_pool, vka);
     }
     if device {
         vkDestroyDevice(device, vka);
+    }
+    if debug_messenger {
+        vkDestroyDebugUtilsMessengerEXT(instance, debug_messenger, vka);
     }
     if instance {
         vkDestroyInstance(instance, vka);
@@ -441,6 +447,7 @@ make_instance :: (using ctx: *GPU_Context) -> Result {
 
     #if VALIDATION {
         array_add(*enabled_layers, "VK_LAYER_KHRONOS_validation");
+
         enabled_validation_features := VkValidationFeatureEnableEXT.[
         .SYNCHRONIZATION_VALIDATION
         ];
@@ -449,9 +456,8 @@ make_instance :: (using ctx: *GPU_Context) -> Result {
             enabledValidationFeatureCount = xx enabled_validation_features.count,
             pEnabledValidationFeatures = enabled_validation_features.data
         };
-
         debug_utils_messenger_create_info := VkDebugUtilsMessengerCreateInfoEXT.{
-            messageSeverity = .WARNING | .ERROR,
+            messageSeverity = .VERBOSE | .INFO | .WARNING | .ERROR,
             messageType = .GENERAL | .VALIDATION | .PERFORMANCE,
             pfnUserCallback = debug_utils_messenger_callback,
             pNext = *validation_features
@@ -470,17 +476,12 @@ make_instance :: (using ctx: *GPU_Context) -> Result {
     result = check_vk(vkCreateInstance(*instance_create_info, vka, *instance));
     return_if_error(result);
 
-    #if VALIDATION {
-        debug_report_callback_create_info := VkDebugReportCallbackCreateInfoEXT.{
-            flags = .ERROR | .WARNING,
-            pfnCallback = debug_report_callback
-        };
+    vk_load_instance_functions(instance);
 
-        result = check_vk(vkCreateDebugReportCallbackEXT(instance, *debug_report_callback_create_info, vka, debug_report_callback_handle));
+    #if VALIDATION {
+        result = check_vk(vkCreateDebugUtilsMessengerEXT(instance, *debug_utils_messenger_create_info, vka, *debug_messenger));
         return_if_error(result);
     }
-
-    vk_load_instance_functions(instance);
 
     return .SUCCESS;
 }
@@ -526,11 +527,6 @@ make_device :: (using ctx: *GPU_Context) -> Result {
         shaderObject = VK_TRUE
     };
     chain = *features_shader_object;
-    features_graphics_pipeline_library := VkPhysicalDeviceGraphicsPipelineLibraryFeaturesEXT.{
-        pNext = chain,
-        graphicsPipelineLibrary = VK_TRUE
-    };
-    chain = *features_graphics_pipeline_library;
     features_13 := VkPhysicalDeviceVulkan13Features.{
         pNext = chain,
         dynamicRendering = VK_TRUE,
@@ -561,7 +557,6 @@ make_device :: (using ctx: *GPU_Context) -> Result {
         pNext = chain,
         features = .{
             samplerAnisotropy = VK_TRUE,
-            fillModeNonSolid = VK_TRUE,
             shaderInt64      = VK_TRUE // For pointer math inside shader
         }
     };
@@ -734,19 +729,15 @@ get_vk_instance_extensions :: () -> []*u8 {
     debug_utils_messenger_callback :: (messageSeverity: VkDebugUtilsMessageSeverityFlagBitsEXT, messageTypes: VkDebugUtilsMessageTypeFlagsEXT, pCallbackData: *VkDebugUtilsMessengerCallbackDataEXT, pUserData: *void) -> VkBool32 #c_call {
         push_context {
             if messageSeverity == {
+            case .VERBOSE;
+                ;
+            case .INFO;
+                ;
             case .WARNING;
-                log("[WARN ]: %", to_string(pCallbackData.pMessage));
+                log("[WARN ] %", to_string(pCallbackData.pMessage));
             case .ERROR;
-                log("[ERROR]: %", to_string(pCallbackData.pMessage));
+                log("[ERROR] %", to_string(pCallbackData.pMessage));
             }
-        }
-
-        return VK_FALSE;
-    }
-
-    debug_report_callback :: (flags: VkDebugReportFlagsEXT, objectType: VkDebugReportObjectTypeEXT, object: u64, location: u64, messageCode: s32, pLayerPrefix: *u8, pMessage: *u8, pUserData: *void) -> VkBool32 #c_call {
-        push_context {
-            log("[Validation]: %", to_string(pMessage));
         }
 
         return VK_FALSE;
@@ -754,6 +745,14 @@ get_vk_instance_extensions :: () -> []*u8 {
 }
 
 get_memory_indices :: (using ctx: *GPU_Context) {
+    #if OS == .MACOS {
+        // There is only a big chunk of unified memory
+        default_memory_index = 0;
+        gpu_memory_index = 0;
+        readback_memory_index = 0;
+        return;
+    }
+
     properties: VkPhysicalDeviceMemoryProperties;
     vkGetPhysicalDeviceMemoryProperties(physical_device, *properties);
 
@@ -797,17 +796,17 @@ memory_type_to_index :: (using ctx: *GPU_Context, memory_type: Memory_Type) -> u
     return index;
 }
 
-make_command_pools :: (ctx: *GPU_Context) {
+make_command_pools :: (using ctx: *GPU_Context) {
     create_info := VkCommandPoolCreateInfo.{
         flags = .TRANSIENT | .RESET_COMMAND_BUFFER,
         queueFamilyIndex = graphics_queue.index
     };
     result: VkResult;
-    result := check_vk(vkCreateCommandPool(device, *create_info, vka, *command_pool));
+    result = check_vk(vkCreateCommandPool(device, *create_info, vka, *graphics_command_pool));
     assert(result == .SUCCESS);
 
-    create_info.queueFamilyIndex = compute_queue_index;
-    result := check_vk(vkCreateCommandPool(device, *create_info, vka, *command_pool));
+    create_info.queueFamilyIndex = compute_queue.index;
+    result = check_vk(vkCreateCommandPool(device, *create_info, vka, *compute_command_pool));
     assert(result == .SUCCESS);
 }
 

@@ -8,7 +8,12 @@ main :: () {
     }
     defer SDL_Quit();
 
-    ok = SDL_Vulkan_LoadLibrary(null);
+    #if OS == .MACOS {
+        ok = SDL_Vulkan_LoadLibrary("/usr/local/lib/libvulkan.dylib");
+    } else {
+        ok = SDL_Vulkan_LoadLibrary(null);
+    }
+
     if !ok {
         log("%", sdl_error());
         return;
@@ -28,4 +33,4 @@ sdl_error :: () -> string {
 
 #import "Basic";
 #import "SDL3";
-gpu :: #import "GPU";
+gpu :: #import "GPU"(VALIDATION = true);
