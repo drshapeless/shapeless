@@ -1,0 +1,40 @@
+#+title: readme
+
+Shapeless is a Emacs-like editor written and configured in Jai.
+
+* Features
+It uses custom msdf generator together with compute shader to render
+text.
+
+This is an experimental attempt to render text in a weird pipeline.
+
+It also uses a custom GPU abstraction based on No Graphics API which
+uses pointer heavy shader code.
+
+* Limitation
+It requires a lot of recently features like VK_EXT_descriptor_heap and
+VK_EXT_shader_object in Vulkan.
+
+Its implementation in macos is Metal 4, the base layer is written in
+objc to avoid extensive use of generated binding.
+
+* Dependencies
+I hope the dependencies is as few as possible. Vulkan / Metal
+
+1. SDL
+2. HarfBuzz
+
+
+* Shaders
+All shader is currently written in Slang, and compile into the
+required shader code in different platform.
+
+The ultimate target is to write valid Jai code and compile to shader
+IR on different platform.
+
+But due to the limitation that the LLVM version of Jai does not
+support spirv64 as target architecture, the shader implementation is
+delayed.
+
+* Features that is not likely to be implemented
+- Pure CPU rendering
