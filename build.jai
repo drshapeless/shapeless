@@ -24,6 +24,7 @@ OUTPUT_EXECUTABLE_NAME := "shapeless";
 
     #if OS == .MACOS {
         compiler_add_library_search_directory("/opt/homebrew/lib");
+        compiler_add_library_search_directory("/Users/jacky/VulkanSDK/1.4.341.1/macOS/lib");
     }
 
     set_build_options(options, w);

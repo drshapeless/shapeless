@@ -217,6 +217,10 @@ init :: (using renderer: *Renderer, window: *SDL_Window) -> ok:bool {
 // uses compute shader to do some calculations. Is it bad to still
 // call this thing a ...renderer?
 init_without_swapchain :: (using renderer: *Renderer) -> bool {
+    if SDL_Vulkan_GetVkGetInstanceProcAddr() == null {
+        log("%", to_string(SDL_GetError()));
+        return false;
+    }
     vk_load_global_functions(xx SDL_Vulkan_GetVkGetInstanceProcAddr());
     instance_extensions := get_vk_instance_extensions();
     ok:, instance = make_instance(instance_extensions, vka);
@@ -964,13 +968,13 @@ application_info :: VkApplicationInfo.{
     apiVersion         = VK_API_VERSION_1_3
 };
 
-validation_layers :: (*u8).["VK_LAYER_KHRONOS_validation"];
+validation_layers :: (*u8).["VK_LAYER_KHRONOS_validation", "VK_LAYER_KHRONOS_shader_object"];
 
 make_instance_create_info :: (instance_extensions: [] *u8) -> VkInstanceCreateInfo {
     return .{
         flags = ifx OS == .MACOS then VkInstanceCreateFlags.ENUMERATE_PORTABILITY_KHR else 0,
         pApplicationInfo = *application_info,
-        enabledLayerCount = xx ifx VALIDATION then 1 else 0,
+        enabledLayerCount = xx ifx VALIDATION then 2 else 0,
         ppEnabledLayerNames = ifx VALIDATION then validation_layers.data else null,
         enabledExtensionCount = xx instance_extensions.count,
         ppEnabledExtensionNames = instance_extensions.data
@@ -1079,7 +1083,10 @@ device_supports_extensions :: (physical_device: VkPhysicalDevice, extensions: []
             }
         }
 
-        if !supported return false;
+        if !supported {
+            log("device does not support %", to_string(extension));
+            return false;
+        };
     }
 
     return true;

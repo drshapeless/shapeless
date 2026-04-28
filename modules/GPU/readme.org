@@ -174,3 +174,30 @@ void gpuDrawMeshletsIndirect(GpuCommandBuffer cb, void* meshletDataGpu, void* pi
 * descriptor buffer and descriptor heap
 Once descriptor heap is out, the descriptor buffer related
 implementation is gone.
+
+* macOS metal
+Since Vulkan on macOS is just an emulation layer on top of metal. If
+our goal is just a simple subset of API proposed by No Graphics API,
+we should just use metal to achieve those thing.
+
+In this way, we don't have to care about the compatibility of MoltenVK
+and KosmicKrisp, which lack some important extensions like
+descriptor_buffer.
+
+But metal is very tricky. Jai comes with a Metal module, but that does
+not provide any generation script, and it was last updated in 2024. I
+have no way to generate a newer version. Metal4 is released in fall
+of 2025. Such new API is a good way to experiment with.
+
+I tried to generate a binding by metal-cpp. That does not really
+work.
+
+Now the practical options is to either write it in Swift or write it
+in objc. I don't have that much experience in writing objc. However,
+working with pointer in Swift is a pain in the ass. I just don't
+understand why those "modern" languages discourage and set a lot of
+road block to working with pointer. I know what I am doing.
+
+So the way is to write in objc. How hard can it be? The shader part is
+fine, because slang can compile into metal. So at least we don't have
+to work with two shader languages.
