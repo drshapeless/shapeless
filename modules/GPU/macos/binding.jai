@@ -13,4 +13,4 @@ gpu_deinit :: (ctx: *void) -> void #foreign libmetal;
 
 #scope_file
 
-libmetal :: #library "libmetal";
+libmetal :: #library "./libmetal";
