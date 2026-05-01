@@ -8,8 +8,26 @@ OUTPUT_EXECUTABLE_NAME := "shapeless";
     options := get_build_options(w);
     copy_commonly_propagated_fields(root_options, *options);
     options.output_executable_name = OUTPUT_EXECUTABLE_NAME;
+    make_directory_if_it_does_not_exist("bin");
+    options.output_path = "bin";
+    linker_arguments: [..]string;
+
+    // This line fixes
+    // error: undefined symbol: ___isPlatformVersionAtLeast
+    // array_add(*linker_arguments, "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/21/lib/darwin/libclang_rt.osx.a");
+    //
+    // However, if the compiled SDL static library is targeting newer
+    // than OSX 13, the error will go away.
+    options.additional_linker_arguments = linker_arguments;
+
+    // This is to subpress the error of linking mismatch library version.
+    options.minimum_os_version = .{26, 0};
     set_build_options(options, w);
 
+    loop(w);
+}
+
+loop :: (w: Workspace) {
     compiler_begin_intercept(w);
     add_build_file("src/main.jai", w);
 
@@ -30,3 +48,4 @@ OUTPUT_EXECUTABLE_NAME := "shapeless";
 
 #import "Compiler";
 #import "Basic";
+#import "File";

@@ -1,6 +1,4 @@
 vulkan := false;
-image  := false;
-ttf    := false;
 
 #run {
     set_build_options_dc(.{do_output=false});
@@ -8,8 +6,6 @@ ttf    := false;
     options := get_build_options();
     args := options.compile_time_command_line;
     vulkan = array_find(args, "vulkan");
-    image  = array_find(args, "image");
-    ttf    = array_find(args, "ttf");
     update := array_find(args, "update");
 
     if update {
@@ -17,31 +13,9 @@ ttf    := false;
         return;
     }
 
-    copy_dynamic_libraries();
-
     if !generate_bindings() {
         compiler_set_workspace_status(.FAILED);
         return;
-    }
-}
-
-copy_dynamic_libraries :: () {
-    #if OS == .MACOS {
-        copy_file("/opt/homebrew/lib/libSDL3.dylib", "macos/libSDL3.dylib");
-        if image {
-            copy_file("/opt/homebrew/lib/lib_SDL3_image.dylib", "macos/libSDL3_image.dylib");
-        }
-        if ttf {
-            copy_file("/opt/homebrew/lib/lib_SDL3_ttf.dylib", "macos/libSDL3_ttf.dylib");
-        }
-    } else #if OS == .LINUX {
-        copy_file("/usr/lib64/libSDL3.so.0", "linux/libSDL3.so");
-        if image {
-            copy_file("/usr/lib64/libSDL3_image.so.0", "linux/libSDL3_image.so");
-        }
-        if ttf {
-            copy_file("/usr/lib64/libSDL3_ttf.so.0", "linux/libSDL3_ttf.so");
-        }
     }
 }
 
@@ -57,18 +31,6 @@ update_headers :: () {
     delete_directory("include/SDL3");
     make_directory_if_it_does_not_exist("include/SDL3");
     copy_directory(tprint("%/SDL3", system_include_prefix), "include/SDL3");
-
-    if image {
-        delete_directory("include/SDL3_image");
-        make_directory_if_it_does_not_exist("include/SDL3_image");
-        copy_directory(tprint("%/SDL3_image", system_include_prefix), "include/SDL3_image");
-    }
-
-    if ttf {
-        delete_directory("include/SDL3_ttf");
-        make_directory_if_it_does_not_exist("include/SDL3_ttf");
-        copy_directory(tprint("%/SDL3_ttf", system_include_prefix), "include/SDL3_ttf");
-    }
 }
 
 generate_bindings :: () -> bool {
@@ -83,67 +45,26 @@ generate_bindings :: () -> bool {
         FOOTER :: #string EOF
 libsdl3 :: #library "libSDL3";
 EOF;
-        FOOTER_IMAGE :: #string EOF
-libsdl3_image :: #library "libSDL3_image";
-EOF;
-        FOOTER_TTF   :: #string EOF
-libsdl3_ttf :: #library "libSDL3_ttf";
-EOF;
 
         opts.footer = FOOTER;
-
-        if image {
-            opts.footer = sprint("%%", opts.footer, FOOTER_IMAGE);
-        }
-
-        if ttf {
-            opts.footer = sprint("%%", opts.footer, FOOTER_TTF);
-        }
 
         opts.generate_library_declarations = false;
         array_add(*opts.library_search_paths, "linux");
         array_add(*opts.libraries, .{filename="libSDL3.so.0"});
-        if image {
-            array_add(*opts.libraries, .{filename="libSDL3_image.so.0"});
-        }
-        if ttf {
-            array_add(*opts.libraries, .{filename="libSDL3_ttf.so.0"});
-        }
-
     } else #if OS == .MACOS {
         make_directory_if_it_does_not_exist("macos");
         output_filename = "macos/macos.jai";
 
         FOOTER :: #string EOF
-libsdl3 :: #library "libSDL3";
-EOF;
-        FOOTER_IMAGE :: #string EOF
-libsdl3_image :: #library "libSDL3_image";
-EOF;
-        FOOTER_TTF   :: #string EOF
-libsdl3_ttf :: #library "libSDL3_ttf";
+libsdl3 :: #library "SDL3";
 EOF;
 
         array_add(*opts.library_search_paths, "macos");
 
         opts.footer = FOOTER;
 
-        if image {
-            opts.footer = sprint("%%", opts.footer, FOOTER_IMAGE);
-        }
-
-        if ttf {
-            opts.footer = sprint("%%", opts.footer, FOOTER_TTF);
-        }
-
         opts.generate_library_declarations = false;
-        array_add(*opts.libraries, .{filename = "libSDL3"});
-        if image {
-            array_add(*opts.libraries, .{filename = "libSDL3_image"});
-        }
-        if ttf {
-            array_add(*opts.libraries, .{filename = "libSDL3_ttf"});
-        }
+        array_add(*opts.libraries, .{filename = "libSDL3.0.dylib"});
     } else {
         assert(false, "the OS % is currently unsupported. You might be able to add support for it though!", OS);
     }
@@ -151,13 +72,6 @@ EOF;
     array_add(*opts.include_paths, "include");
     array_add(*opts.source_files, "include/SDL3/SDL.h");
     array_add(*opts.source_files, "include/SDL3/SDL_main.h");
-    if ttf {
-        array_add(*opts.source_files, "include/SDL3_ttf/SDL_ttf.h");
-    }
-
-    if image {
-        array_add(*opts.source_files, "include/SDL3_image/SDL_image.h");
-    }
 
     if vulkan {
         array_add(*opts.source_files, "include/SDL3/SDL_vulkan.h");

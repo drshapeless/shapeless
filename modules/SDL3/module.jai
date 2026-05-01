@@ -4,6 +4,21 @@
     #load "linux/linux.jai";
 } else #if OS == .MACOS {
     #load "macos/macos.jai";
+    // The following mess is the cost of linking SDL staticly
+    CoreVideo              :: #library,system,link_always "CoreVideo";
+    CoreAudio              :: #library,system,link_always "CoreAudio";
+    CoreMedia              :: #library,system,link_always "CoreMedia";
+    CoreHaptics            :: #library,system,link_always "CoreHaptics";
+    AudioToolbox           :: #library,system,link_always "AudioToolbox";
+    IOKit                  :: #library,system,link_always "IOKit";
+    Cocoa                  :: #library,system,link_always "Cocoa";
+    Carbon                 :: #library,system,link_always "Carbon";
+    Foundation             :: #library,system,link_always "Foundation";
+    AVFoundation           :: #library,system,link_always "AVFoundation";
+    GameController         :: #library,system,link_always "GameController";
+    ForceFeedback          :: #library,system,link_always "ForceFeedback";
+    UniformTypeIdentifiers :: #library,system,link_always "UniformTypeIdentifiers";
+    QuartzCore             :: #library,system,link_always "QuartzCore";
 }
 
 #load "sdl_callbacks.jai";
