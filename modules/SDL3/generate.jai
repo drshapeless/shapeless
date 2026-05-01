@@ -55,16 +55,10 @@ EOF;
         make_directory_if_it_does_not_exist("macos");
         output_filename = "macos/macos.jai";
 
-        FOOTER :: #string EOF
-libsdl3 :: #library "SDL3";
-EOF;
-
         array_add(*opts.library_search_paths, "macos");
 
-        opts.footer = FOOTER;
-
         opts.generate_library_declarations = false;
-        array_add(*opts.libraries, .{filename = "libSDL3.0.dylib"});
+        array_add(*opts.libraries, .{filename = "libSDL3"});
     } else {
         assert(false, "the OS % is currently unsupported. You might be able to add support for it though!", OS);
     }

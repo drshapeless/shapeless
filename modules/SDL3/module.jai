@@ -4,6 +4,7 @@
     #load "linux/linux.jai";
 } else #if OS == .MACOS {
     #load "macos/macos.jai";
+    libsdl3 :: #library "macos/libsdl3";
     // The following mess is the cost of linking SDL staticly
     CoreVideo              :: #library,system,link_always "CoreVideo";
     CoreAudio              :: #library,system,link_always "CoreAudio";
