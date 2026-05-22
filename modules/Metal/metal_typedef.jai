@@ -21,4 +21,3 @@ MTLSharedEventNotificationBlock :: #type (unknown0: id, unknown1: u64) -> void #
 MTL4CommitFeedbackHandler :: #type (unknown0: id) -> void #c_call;
 MTLIOCommandBufferHandler :: #type (unknown0: id) -> void #c_call;
 MTLIOCompressionContext :: *void;
-MTLDrawablePresentedHandler :: #type (unknown0: id) -> void #c_call;

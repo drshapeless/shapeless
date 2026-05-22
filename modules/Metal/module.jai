@@ -1,3 +1,4 @@
+#scope_export
 #load "metal_enum.jai";
 #load "metal_struct.jai";
 #load "metal_typedef.jai";
@@ -71,7 +72,7 @@ MTL4BufferRangeMake :: inline (bufferAddress: MTLGPUAddress, length: u64) -> MTL
 
 // These structs are not auto-generated, they are in MTLAccelerationStructureTypes.h
 MTLPackedFloat3 :: Math.Vector3;
-MTLPackedFloatQuaternion :: Math.Quaternion;
+// MTLPackedFloatQuaternion :: Math.Quaternion;
 MTLPackedFloat4x3 :: Math.Matrix4x3;
 
 MTLPackedFloat3Make :: inline (x: float, y: float, z: float) -> MTLPackedFloat3 {
@@ -87,20 +88,31 @@ MTLAxisAlignedBoundingBox :: struct {
     max: MTLPackedFloat3;
 }
 
-MTLComponentTransform :: struct {
-    scale: MTLPackedFloat3;
-    shear: MTLPackedFloat3;
-    pivot: MTLPackedFloat3;
-    rotation: MTLPackedFloatQuaternion;
-    translation: MTLPackedFloat3;
-}
+// MTLComponentTransform :: struct {
+//     scale: MTLPackedFloat3;
+//     shear: MTLPackedFloat3;
+//     pivot: MTLPackedFloat3;
+//     rotation: MTLPackedFloatQuaternion;
+//     translation: MTLPackedFloat3;
+// }
 
 MTLIndirectCommandBufferExecutionRangeMake :: inline (location: u32, length: u32) -> MTLIndirectCommandBufferExecutionRange {
     return .{location, length};
 }
 
-#scope_file
+// These are something that should not be included here.
+CGColorSpaceRef :: *void;
+CAEDRMetadata :: NSObject;
+IOSurfaceRef :: *void;
+MTLGPUAddress :: u64;
+MTLTimestamp :: u64;
+NSNumber :: NSObject;
+NSErrorDomain :: *NSString;
+NSErrorUserInfoKey :: *NSString;
+
+#scope_module
 #import "Objective_C";
+#import "macOS";
 Metal :: #library,system,link_always "Metal";
 QuartzCore :: #library,system,link_always "QuartzCore";
 Math :: #import "Math";

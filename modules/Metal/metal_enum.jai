@@ -1,6 +1,6 @@
 MTL4PipelineDataSetSerializerConfiguration :: enum_flags NSUInteger {
-    CaptureDescriptors :: 0x1;
-    CaptureBinaries :: 0x2;
+    CaptureDescriptors :: 1;
+    CaptureBinaries :: 2;
 }
 
 MTLArgumentBuffersTier :: enum NSUInteger {
@@ -52,12 +52,12 @@ MTLLogStateError :: enum NSUInteger {
 }
 
 MTLTextureUsage :: enum_flags NSUInteger {
-    Unknown :: 0x0;
-    ShaderRead :: 0x1;
-    ShaderWrite :: 0x2;
-    RenderTarget :: 0x4;
-    PixelFormatView :: 0x20;
-    ShaderAtomic :: 0x40;
+    Unknown :: 0;
+    ShaderRead :: 1;
+    ShaderWrite :: 2;
+    RenderTarget :: 4;
+    PixelFormatView :: 16;
+    ShaderAtomic :: 32;
 }
 
 MTLSamplerMinMagFilter :: enum NSUInteger {
@@ -66,14 +66,14 @@ MTLSamplerMinMagFilter :: enum NSUInteger {
 }
 
 MTLIndirectCommandType :: enum_flags NSUInteger {
-    Draw :: 0x1;
-    DrawIndexed :: 0x2;
-    DrawPatches :: 0x4;
-    DrawIndexedPatches :: 0x10;
-    ConcurrentDispatch :: 0x40;
-    ConcurrentDispatchThreads :: 0x100;
-    DrawMeshThreadgroups :: 0x200;
-    DrawMeshThreads :: 0x400;
+    Draw :: 1;
+    DrawIndexed :: 2;
+    DrawPatches :: 4;
+    DrawIndexedPatches :: 8;
+    ConcurrentDispatch :: 32;
+    ConcurrentDispatchThreads :: 64;
+    DrawMeshThreadgroups :: 128;
+    DrawMeshThreads :: 256;
 }
 
 MTLTensorDataType :: enum NSInteger {
@@ -92,13 +92,13 @@ MTLTensorDataType :: enum NSInteger {
 }
 
 MTLColorWriteMask :: enum_flags NSUInteger {
-    None :: 0x0;
-    Red :: 0x10;
-    Green :: 0x4;
-    Blue :: 0x2;
-    Alpha :: 0x1;
-    All :: 0x17;
-    Unspecialized :: 0x20;
+    None :: 0;
+    Red :: 8;
+    Green :: 4;
+    Blue :: 2;
+    Alpha :: 1;
+    All :: 15;
+    Unspecialized :: 16;
 }
 
 MTLStoreAction :: enum NSUInteger {
@@ -173,10 +173,10 @@ MTLVisibilityResultType :: enum NSInteger {
 }
 
 MTLBlitOption :: enum_flags NSUInteger {
-    None :: 0x0;
-    DepthFromDepthStencil :: 0x1;
-    StencilFromDepthStencil :: 0x2;
-    RowLinearPVRTC :: 0x4;
+    None :: 0;
+    DepthFromDepthStencil :: 1;
+    StencilFromDepthStencil :: 2;
+    RowLinearPVRTC :: 4;
 }
 
 MTLLogLevel :: enum NSInteger {
@@ -203,11 +203,11 @@ MTL4BlendState :: enum NSInteger {
 }
 
 MTLRenderStages :: enum_flags NSUInteger {
-    MTLRenderStageVertex :: 0x1;
-    MTLRenderStageFragment :: 0x2;
-    MTLRenderStageTile :: 0x4;
-    MTLRenderStageObject :: 0x10;
-    MTLRenderStageMesh :: 0x20;
+    MTLRenderStageVertex :: 1;
+    MTLRenderStageFragment :: 2;
+    MTLRenderStageTile :: 4;
+    MTLRenderStageObject :: 8;
+    MTLRenderStageMesh :: 16;
 }
 
 MTLSparseTextureMappingMode :: enum NSUInteger {
@@ -381,8 +381,8 @@ MTLShaderValidation :: enum NSInteger {
 }
 
 MTLAccelerationStructureRefitOptions :: enum_flags NSUInteger {
-    MTLAccelerationStructureRefitOptionVertexData :: 0x1;
-    MTLAccelerationStructureRefitOptionPerPrimitiveData :: 0x2;
+    MTLAccelerationStructureRefitOptionVertexData :: 1;
+    MTLAccelerationStructureRefitOptionPerPrimitiveData :: 2;
 }
 
 MTLTriangleFillMode :: enum NSUInteger {
@@ -466,9 +466,9 @@ MTLCounterSampleBufferError :: enum NSInteger {
 }
 
 MTLStitchedLibraryOptions :: enum_flags NSUInteger {
-    MTLStitchedLibraryOptionNone :: 0x0;
-    MTLStitchedLibraryOptionFailOnBinaryArchiveMiss :: 0x1;
-    MTLStitchedLibraryOptionStoreLibraryInMetalPipelinesScript :: 0x2;
+    MTLStitchedLibraryOptionNone :: 0;
+    MTLStitchedLibraryOptionFailOnBinaryArchiveMiss :: 1;
+    MTLStitchedLibraryOptionStoreLibraryInMetalPipelinesScript :: 2;
 }
 
 MTLFunctionType :: enum NSUInteger {
@@ -510,8 +510,8 @@ MTLIOError :: enum NSInteger {
 }
 
 MTL4BinaryFunctionOptions :: enum_flags NSUInteger {
-    MTL4BinaryFunctionOptionNone :: 0x0;
-    MTL4BinaryFunctionOptionPipelineIndependent :: 0x2;
+    MTL4BinaryFunctionOptionNone :: 0;
+    MTL4BinaryFunctionOptionPipelineIndependent :: 2;
 }
 
 MTLLoadAction :: enum NSUInteger {
@@ -526,17 +526,17 @@ MTLSparseTextureRegionAlignmentMode :: enum NSUInteger {
 }
 
 MTLIntersectionFunctionSignature :: enum_flags NSUInteger {
-    None :: 0x0;
-    Instancing :: 0x1;
-    TriangleData :: 0x2;
-    WorldSpaceData :: 0x4;
-    InstanceMotion :: 0x10;
-    PrimitiveMotion :: 0x20;
-    ExtendedLimits :: 0x40;
-    MaxLevels :: 0x100;
-    CurveData :: 0x200;
-    IntersectionFunctionBuffer :: 0x400;
-    UserData :: 0x1000;
+    None :: 0;
+    Instancing :: 1;
+    TriangleData :: 2;
+    WorldSpaceData :: 4;
+    InstanceMotion :: 8;
+    PrimitiveMotion :: 16;
+    ExtendedLimits :: 32;
+    MaxLevels :: 64;
+    CurveData :: 128;
+    IntersectionFunctionBuffer :: 256;
+    UserData :: 512;
 }
 
 MTLWinding :: enum NSUInteger {
@@ -563,12 +563,12 @@ MTL4AlphaToOneState :: enum NSInteger {
 }
 
 MTLFunctionOptions :: enum_flags NSUInteger {
-    MTLFunctionOptionNone :: 0x0;
-    MTLFunctionOptionCompileToBinary :: 0x1;
-    MTLFunctionOptionStoreFunctionInMetalPipelinesScript :: 0x2;
-    MTLFunctionOptionStoreFunctionInMetalScript :: 0x2;
-    MTLFunctionOptionFailOnBinaryArchiveMiss :: 0x4;
-    MTLFunctionOptionPipelineIndependent :: 0x10;
+    MTLFunctionOptionNone :: 0;
+    MTLFunctionOptionCompileToBinary :: 1;
+    MTLFunctionOptionStoreFunctionInMetalPipelinesScript :: 2;
+    MTLFunctionOptionStoreFunctionInMetalScript :: 2;
+    MTLFunctionOptionFailOnBinaryArchiveMiss :: 4;
+    MTLFunctionOptionPipelineIndependent :: 8;
 }
 
 MTLLibraryOptimizationLevel :: enum NSInteger {
@@ -577,17 +577,17 @@ MTLLibraryOptimizationLevel :: enum NSInteger {
 }
 
 MTLResourceOptions :: enum_flags NSUInteger {
-    MTLResourceCPUCacheModeDefaultCache :: 0x0;
-    MTLResourceCPUCacheModeWriteCombined :: 0x1;
-    MTLResourceStorageModeShared :: 0x0;
-    MTLResourceStorageModeManaged :: 0x20;
-    MTLResourceStorageModePrivate :: 0x40;
-    MTLResourceStorageModeMemoryless :: 0x60;
-    MTLResourceHazardTrackingModeDefault :: 0x0;
-    MTLResourceHazardTrackingModeUntracked :: 0x400;
-    MTLResourceHazardTrackingModeTracked :: 0x1000;
-    MTLResourceOptionCPUCacheModeDefault :: 0x0;
-    MTLResourceOptionCPUCacheModeWriteCombined :: 0x1;
+    MTLResourceCPUCacheModeDefaultCache :: 0;
+    MTLResourceCPUCacheModeWriteCombined :: 1;
+    MTLResourceStorageModeShared :: 0;
+    MTLResourceStorageModeManaged :: 16;
+    MTLResourceStorageModePrivate :: 32;
+    MTLResourceStorageModeMemoryless :: 48;
+    MTLResourceHazardTrackingModeDefault :: 0;
+    MTLResourceHazardTrackingModeUntracked :: 256;
+    MTLResourceHazardTrackingModeTracked :: 512;
+    MTLResourceOptionCPUCacheModeDefault :: 0;
+    MTLResourceOptionCPUCacheModeWriteCombined :: 1;
 }
 
 MTLReadWriteTextureTier :: enum NSUInteger {
@@ -615,9 +615,9 @@ MTLSamplerReductionMode :: enum NSUInteger {
 }
 
 MTL4VisibilityOptions :: enum_flags NSUInteger {
-    MTL4VisibilityOptionNone :: 0x0;
-    MTL4VisibilityOptionDevice :: 0x1;
-    MTL4VisibilityOptionResourceAlias :: 0x2;
+    MTL4VisibilityOptionNone :: 0;
+    MTL4VisibilityOptionDevice :: 1;
+    MTL4VisibilityOptionResourceAlias :: 2;
 }
 
 MTLLibraryType :: enum NSInteger {
@@ -652,9 +652,9 @@ MTLCommandEncoderErrorState :: enum NSInteger {
 }
 
 MTL4ShaderReflection :: enum_flags NSUInteger {
-    None :: 0x0;
-    BindingInfo :: 0x1;
-    BufferTypeInfo :: 0x2;
+    None :: 0;
+    BindingInfo :: 1;
+    BufferTypeInfo :: 2;
 }
 
 MTL4CommandQueueError :: enum NSInteger {
@@ -698,151 +698,11 @@ MTLCounterSamplingPoint :: enum NSUInteger {
 }
 
 MTLStoreActionOptions :: enum_flags NSUInteger {
-    MTLStoreActionOptionNone :: 0x0;
-    MTLStoreActionOptionCustomSamplePositions :: 0x1;
+    MTLStoreActionOptionNone :: 0;
+    MTLStoreActionOptionCustomSamplePositions :: 1;
 }
 
 MTLPixelFormat :: enum NSUInteger {
-    Invalid :: 0;
-    A8Unorm :: 1;
-    R8Unorm :: 10;
-    R8Unorm_sRGB :: 11;
-    R8Snorm :: 12;
-    R8Uint :: 13;
-    R8Sint :: 14;
-    R16Unorm :: 20;
-    R16Snorm :: 22;
-    R16Uint :: 23;
-    R16Sint :: 24;
-    R16Float :: 25;
-    RG8Unorm :: 30;
-    RG8Unorm_sRGB :: 31;
-    RG8Snorm :: 32;
-    RG8Uint :: 33;
-    RG8Sint :: 34;
-    B5G6R5Unorm :: 40;
-    A1BGR5Unorm :: 41;
-    ABGR4Unorm :: 42;
-    BGR5A1Unorm :: 43;
-    R32Uint :: 53;
-    R32Sint :: 54;
-    R32Float :: 55;
-    RG16Unorm :: 60;
-    RG16Snorm :: 62;
-    RG16Uint :: 63;
-    RG16Sint :: 64;
-    RG16Float :: 65;
-    RGBA8Unorm :: 70;
-    RGBA8Unorm_sRGB :: 71;
-    RGBA8Snorm :: 72;
-    RGBA8Uint :: 73;
-    RGBA8Sint :: 74;
-    BGRA8Unorm :: 80;
-    BGRA8Unorm_sRGB :: 81;
-    RGB10A2Unorm :: 90;
-    RGB10A2Uint :: 91;
-    RG11B10Float :: 92;
-    RGB9E5Float :: 93;
-    BGR10A2Unorm :: 94;
-    BGR10_XR :: 554;
-    BGR10_XR_sRGB :: 555;
-    RG32Uint :: 103;
-    RG32Sint :: 104;
-    RG32Float :: 105;
-    RGBA16Unorm :: 110;
-    RGBA16Snorm :: 112;
-    RGBA16Uint :: 113;
-    RGBA16Sint :: 114;
-    RGBA16Float :: 115;
-    BGRA10_XR :: 552;
-    BGRA10_XR_sRGB :: 553;
-    RGBA32Uint :: 123;
-    RGBA32Sint :: 124;
-    RGBA32Float :: 125;
-    BC1_RGBA :: 130;
-    BC1_RGBA_sRGB :: 131;
-    BC2_RGBA :: 132;
-    BC2_RGBA_sRGB :: 133;
-    BC3_RGBA :: 134;
-    BC3_RGBA_sRGB :: 135;
-    BC4_RUnorm :: 140;
-    BC4_RSnorm :: 141;
-    BC5_RGUnorm :: 142;
-    BC5_RGSnorm :: 143;
-    BC6H_RGBFloat :: 150;
-    BC6H_RGBUfloat :: 151;
-    BC7_RGBAUnorm :: 152;
-    BC7_RGBAUnorm_sRGB :: 153;
-    PVRTC_RGB_2BPP :: 160;
-    PVRTC_RGB_2BPP_sRGB :: 161;
-    PVRTC_RGB_4BPP :: 162;
-    PVRTC_RGB_4BPP_sRGB :: 163;
-    PVRTC_RGBA_2BPP :: 164;
-    PVRTC_RGBA_2BPP_sRGB :: 165;
-    PVRTC_RGBA_4BPP :: 166;
-    PVRTC_RGBA_4BPP_sRGB :: 167;
-    EAC_R11Unorm :: 170;
-    EAC_R11Snorm :: 172;
-    EAC_RG11Unorm :: 174;
-    EAC_RG11Snorm :: 176;
-    EAC_RGBA8 :: 178;
-    EAC_RGBA8_sRGB :: 179;
-    ETC2_RGB8 :: 180;
-    ETC2_RGB8_sRGB :: 181;
-    ETC2_RGB8A1 :: 182;
-    ETC2_RGB8A1_sRGB :: 183;
-    ASTC_4x4_sRGB :: 186;
-    ASTC_5x4_sRGB :: 187;
-    ASTC_5x5_sRGB :: 188;
-    ASTC_6x5_sRGB :: 189;
-    ASTC_6x6_sRGB :: 190;
-    ASTC_8x5_sRGB :: 192;
-    ASTC_8x6_sRGB :: 193;
-    ASTC_8x8_sRGB :: 194;
-    ASTC_10x5_sRGB :: 195;
-    ASTC_10x6_sRGB :: 196;
-    ASTC_10x8_sRGB :: 197;
-    ASTC_10x10_sRGB :: 198;
-    ASTC_12x10_sRGB :: 199;
-    ASTC_12x12_sRGB :: 200;
-    ASTC_4x4_LDR :: 204;
-    ASTC_5x4_LDR :: 205;
-    ASTC_5x5_LDR :: 206;
-    ASTC_6x5_LDR :: 207;
-    ASTC_6x6_LDR :: 208;
-    ASTC_8x5_LDR :: 210;
-    ASTC_8x6_LDR :: 211;
-    ASTC_8x8_LDR :: 212;
-    ASTC_10x5_LDR :: 213;
-    ASTC_10x6_LDR :: 214;
-    ASTC_10x8_LDR :: 215;
-    ASTC_10x10_LDR :: 216;
-    ASTC_12x10_LDR :: 217;
-    ASTC_12x12_LDR :: 218;
-    ASTC_4x4_HDR :: 222;
-    ASTC_5x4_HDR :: 223;
-    ASTC_5x5_HDR :: 224;
-    ASTC_6x5_HDR :: 225;
-    ASTC_6x6_HDR :: 226;
-    ASTC_8x5_HDR :: 228;
-    ASTC_8x6_HDR :: 229;
-    ASTC_8x8_HDR :: 230;
-    ASTC_10x5_HDR :: 231;
-    ASTC_10x6_HDR :: 232;
-    ASTC_10x8_HDR :: 233;
-    ASTC_10x10_HDR :: 234;
-    ASTC_12x10_HDR :: 235;
-    ASTC_12x12_HDR :: 236;
-    GBGR422 :: 240;
-    BGRG422 :: 241;
-    Depth16Unorm :: 250;
-    Depth32Float :: 252;
-    Stencil8 :: 253;
-    Depth24Unorm_Stencil8 :: 255;
-    Depth32Float_Stencil8 :: 260;
-    X32_Stencil8 :: 261;
-    X24_Stencil8 :: 262;
-    Unspecialized :: 263;
     Invalid :: 0;
     A8Unorm :: 1;
     R8Unorm :: 10;
@@ -1008,17 +868,17 @@ MTL4CounterHeapType :: enum NSInteger {
 }
 
 MTLStages :: enum_flags NSUInteger {
-    MTLStageVertex :: 0x1;
-    MTLStageFragment :: 0x2;
-    MTLStageTile :: 0x4;
-    MTLStageObject :: 0x10;
-    MTLStageMesh :: 0x20;
-    MTLStageResourceState :: 0x400000000;
-    MTLStageDispatch :: 0x1000000000;
-    MTLStageBlit :: 0x2000000000;
-    MTLStageAccelerationStructure :: 0x4000000000;
-    MTLStageMachineLearning :: 0x10000000000;
-    MTLStageAll :: 0x777777777777777777777;
+    MTLStageVertex :: 1;
+    MTLStageFragment :: 2;
+    MTLStageTile :: 4;
+    MTLStageObject :: 8;
+    MTLStageMesh :: 16;
+    MTLStageResourceState :: 67108864;
+    MTLStageDispatch :: 134217728;
+    MTLStageBlit :: 268435456;
+    MTLStageAccelerationStructure :: 536870912;
+    MTLStageMachineLearning :: 1073741824;
+    MTLStageAll :: 9223372036854775807;
 }
 
 MTLMathFloatingPointFunctions :: enum NSInteger {
@@ -1063,17 +923,17 @@ MTLFeatureSet :: enum NSUInteger {
 }
 
 MTLResourceUsage :: enum_flags NSUInteger {
-    Read :: 0x1;
-    Write :: 0x2;
-    Sample :: 0x4;
+    Read :: 1;
+    Write :: 2;
+    Sample :: 4;
 }
 
 MTLAccelerationStructureInstanceOptions :: enum_flags u32 {
-    MTLAccelerationStructureInstanceOptionNone :: 0x0;
-    MTLAccelerationStructureInstanceOptionDisableTriangleCulling :: 0x1;
-    MTLAccelerationStructureInstanceOptionTriangleFrontFacingWindingCounterClockwise :: 0x2;
-    MTLAccelerationStructureInstanceOptionOpaque :: 0x4;
-    MTLAccelerationStructureInstanceOptionNonOpaque :: 0x10;
+    MTLAccelerationStructureInstanceOptionNone :: 0;
+    MTLAccelerationStructureInstanceOptionDisableTriangleCulling :: 1;
+    MTLAccelerationStructureInstanceOptionTriangleFrontFacingWindingCounterClockwise :: 2;
+    MTLAccelerationStructureInstanceOptionOpaque :: 4;
+    MTLAccelerationStructureInstanceOptionNonOpaque :: 8;
 }
 
 MTLTessellationFactorStepFunction :: enum NSUInteger {
@@ -1124,8 +984,8 @@ MTLCompileSymbolVisibility :: enum NSInteger {
 }
 
 MTLCommandBufferErrorOption :: enum_flags NSUInteger {
-    None :: 0x0;
-    EncoderExecutionStatus :: 0x1;
+    None :: 0;
+    EncoderExecutionStatus :: 1;
 }
 
 MTLTessellationPartitionMode :: enum NSUInteger {
@@ -1141,12 +1001,12 @@ MTLBufferSparseTier :: enum NSInteger {
 }
 
 MTLAccelerationStructureUsage :: enum_flags NSUInteger {
-    None :: 0x0;
-    Refit :: 0x1;
-    PreferFastBuild :: 0x2;
-    ExtendedLimits :: 0x4;
-    PreferFastIntersection :: 0x20;
-    MinimizeMemory :: 0x40;
+    None :: 0;
+    Refit :: 1;
+    PreferFastBuild :: 2;
+    ExtendedLimits :: 4;
+    PreferFastIntersection :: 16;
+    MinimizeMemory :: 32;
 }
 
 MTLPatchType :: enum NSUInteger {
@@ -1256,9 +1116,9 @@ MTLDataType :: enum NSUInteger {
 }
 
 MTL4RenderEncoderOptions :: enum_flags NSUInteger {
-    MTL4RenderEncoderOptionNone :: 0x0;
-    MTL4RenderEncoderOptionSuspending :: 0x1;
-    MTL4RenderEncoderOptionResuming :: 0x2;
+    MTL4RenderEncoderOptionNone :: 0;
+    MTL4RenderEncoderOptionSuspending :: 1;
+    MTL4RenderEncoderOptionResuming :: 2;
 }
 
 MTL4LogicalToPhysicalColorAttachmentMappingState :: enum NSInteger {
@@ -1297,9 +1157,9 @@ MTLSamplerAddressMode :: enum NSUInteger {
 }
 
 MTLBarrierScope :: enum_flags NSUInteger {
-    Buffers :: 0x1;
-    Textures :: 0x2;
-    RenderTargets :: 0x4;
+    Buffers :: 1;
+    Textures :: 2;
+    RenderTargets :: 4;
 }
 
 MTLGPUFamily :: enum NSInteger {
@@ -1325,9 +1185,9 @@ MTLGPUFamily :: enum NSInteger {
 }
 
 MTLTensorUsage :: enum_flags NSUInteger {
-    Compute :: 0x1;
-    Render :: 0x2;
-    MachineLearning :: 0x4;
+    Compute :: 1;
+    Render :: 2;
+    MachineLearning :: 4;
 }
 
 MTLVertexStepFunction :: enum NSUInteger {
@@ -1401,11 +1261,11 @@ MTLStorageMode :: enum NSUInteger {
 }
 
 MTLPipelineOption :: enum_flags NSUInteger {
-    None :: 0x0;
-    ArgumentInfo :: 0x1;
-    BindingInfo :: 0x1;
-    BufferTypeInfo :: 0x2;
-    FailOnBinaryArchiveMiss :: 0x4;
+    None :: 0;
+    ArgumentInfo :: 1;
+    BindingInfo :: 1;
+    BufferTypeInfo :: 2;
+    FailOnBinaryArchiveMiss :: 4;
 }
 
 MTLMutability :: enum NSUInteger {

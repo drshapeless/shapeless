@@ -1,3 +1,5 @@
+// TODO: preserve the comment
+
 AT_COMPILE :: false;
 #if AT_COMPILE {
     #run {
@@ -51,7 +53,7 @@ generate_binding :: () {
 
     root1 := clang_getTranslationUnitCursor(tu1);
 
-    clang_visitChildren(root1, metal_visitor, null);
+    clang_visitChildren(root1, quartz_visitor, null);
 
     enum_sb: String_Builder;
     for metal_enum_table {
@@ -90,7 +92,11 @@ generate_binding :: () {
 
     protocol_sb: String_Builder;
     for protocol: metal_protocols {
-        print_to_builder(*protocol_sb, "% :: struct {\n", protocol.name);
+        // It complains about the size of the generated type info,
+        // maybe we should not preserve the type info in the
+        // executable, but at the moment, just disable the type info
+        // size complaint
+        print_to_builder(*protocol_sb, "% :: struct #type_info_no_size_complaint {\n", protocol.name);
         for method: protocol.instance_methods {
             write_instance_method(*protocol_sb, method, protocol.name);
         }
@@ -145,109 +151,61 @@ metal_visitor :: (cursor: CXCursor, parent: CXCursor, client_data: CXClientData)
     push_context {
         get_parent_and_child(cursor, parent);
         // If there is not parent, the parent kind would be TranslationUnit
-    if begins_with(name, "MTL") || begins_with(name, "CAMetal") {
-        if kind ==  {
-        case .EnumDecl;
-            // Find or create a new entry in table
-            metal_enum := find_or_add(*metal_enum_table, name);
-            metal_enum.name = copy_string(name);
-            enum_type := clang_getEnumDeclIntegerType(cursor);
-            type_name := get_type_string(enum_type);
-            if type_name == {
-            // Since the build-in Objective-C from Jai defines these
-            // two, I don't think it is a good idea to define again.
-            case "NSInteger";
+        if begins_with(name, "MTL") {
+            if kind ==  {
+            case .EnumDecl;
+                handle_enum(cursor);
+            case .StructDecl;
+                metal_struct := Metal_Struct.{
+                    name = copy_string(name),
+                };
+                clang_visitChildren(cursor, struct_visitor, *metal_struct);
+                array_add(*metal_structs, metal_struct);
+            case .TypedefDecl;
+                handle_typedef(cursor);
+            case .FunctionDecl;
+                handle_func(cursor);
+            case .ObjCProtocolDecl;
+                handle_objc_protocol(cursor);
+            case .ObjCInterfaceDecl;
+                handle_objc_interface(cursor);
+            case .MacroDefinition;
                 ;
-                metal_enum.type = "NSInteger";
-            case "NSUInteger";
+            case .MacroInstantiation;
                 ;
-                metal_enum.type = "NSUInteger";
-            case "uint8_t";
-                metal_enum.type = "u8";
-            case "uint32_t";
-                metal_enum.type = "u32";
+            case .ObjCProtocolRef;
+                // We don't care about ref right now?
+                ;
+            case .ObjCClassRef;
+                ;
+            case .VarDecl;
+                handle_var(cursor);
             case;
-                assert(false, "unexpected typedef in enum %", type_name);
+                assert(false, "%", kind);
             }
-            clang_visitChildren(cursor, enum_visitor, metal_enum);
-
-        case .StructDecl;
-            metal_struct := Metal_Struct.{
-                name = copy_string(name),
-            };
-            clang_visitChildren(cursor, struct_visitor, *metal_struct);
-            array_add(*metal_structs, metal_struct);
-        case .TypedefDecl;
-            handle_typedef(cursor);
-        case .FunctionDecl;
-            handle_func(cursor);
-        case .ObjCProtocolDecl;
-            handle_objc_protocol(cursor);
-        case .ObjCInterfaceDecl;
-            handle_objc_interface(cursor);
-        case .MacroDefinition;
-            ;
-        case .MacroInstantiation;
-            ;
-        case .ObjCProtocolRef;
-            // We don't care about ref right now?
-            ;
-        case .ObjCClassRef;
-            ;
-        case .VarDecl;
-            handle_var(cursor);
-        case;
-            assert(false, "%", kind);
         }
     }
-}
 
     return .Continue;
 }
 
-enum_visitor :: (cursor: CXCursor, parent: CXCursor, client_data: CXClientData) -> CXChildVisitResult #c_call {
+quartz_visitor :: (cursor: CXCursor, parent: CXCursor, client_data: CXClientData) -> CXChildVisitResult #c_call {
     push_context {
-        metal_enum := cast(*Metal_Enum)client_data;
-
-        get_parent_and_child(cursor, parent);
-
-        if kind == {
-        case .UnexposedAttr;
-            ;
-        case .VisibilityAttr;
-            ;
-        case .FlagEnum;
-            metal_enum.is_enum_flag = true;
-        case .EnumConstantDecl;
-            s := replace(name, parent_name, "");
-            member: Metal_Enum_Member;
-            member.key = copy_string(s);
-
-            if metal_enum.type == "s64" {
-                v := clang_getEnumConstantDeclValue(cursor);
-                if metal_enum.is_enum_flag {
-                    member.value = sprint("0x%", FormatInt.{value = v, base = 8});
-                } else {
-                    member.value = sprint("%", v);
-                }
-            } else {
-                v := clang_getEnumConstantDeclUnsignedValue(cursor);
-                if metal_enum.is_enum_flag {
-                    member.value = sprint("0x%", FormatInt.{value = v, base = 8});
-                } else {
-                    member.value = sprint("%", v);
-                }
+        name := get_cursor_string(cursor);
+        kind := clang_getCursorKind(cursor);
+        if begins_with(name, "CAMetal") {
+            if kind == {
+            case .ObjCClassRef;
+                // Don't care
+            case .ObjCProtocolDecl;
+                handle_objc_protocol(cursor);
+            case .ObjCInterfaceDecl;
+                handle_objc_interface(cursor);
+            case;
+                assert(false, "unexpected quartz type %", kind);
             }
-            if is_digit( member.key[0]) {
-                member.key = sprint("e%", member.key);
-            }
-            array_add(*metal_enum.members, member);
-        case;
-            assert(false, "unexpected enum member kind %", kind);
         }
-
     }
-
     return .Continue;
 }
 
@@ -494,6 +452,9 @@ method_visitor :: (cursor: CXCursor, parent: CXCursor, client_data: CXClientData
         if kind == .ParmDecl {
             param: Metal_Method_Param;
             param.name = name;
+            if param.name == "string" {
+                param.name = "str";
+            }
             param.type = to_jai_type(type);
 
             array_add(params, param);
@@ -653,13 +614,99 @@ handle_objc_interface :: (cursor: CXCursor) {
     array_add(*metal_interfaces, i);
 }
 
+handle_enum :: (cursor: CXCursor) {
+    enum_visitor :: (cursor: CXCursor, parent: CXCursor, client_data: CXClientData) -> CXChildVisitResult #c_call {
+        push_context {
+            metal_enum := cast(*Metal_Enum)client_data;
+
+            get_parent_and_child(cursor, parent);
+
+            if kind == {
+            case .UnexposedAttr;
+                ;
+            case .VisibilityAttr;
+                ;
+            case .FlagEnum;
+                metal_enum.is_enum_flag = true;
+            case .EnumConstantDecl;
+                s := replace(name, parent_name, "");
+                member: Metal_Enum_Member;
+                member.key = copy_string(s);
+
+                if metal_enum.type == "s64" {
+                    v := clang_getEnumConstantDeclValue(cursor);
+                    // if metal_enum.is_enum_flag {
+                    //     member.value = sprint("0x%", FormatInt.{value = v, base = 8});
+                    // } else {
+                    member.value = sprint("%", v);
+                    // }
+                } else {
+                    v := clang_getEnumConstantDeclUnsignedValue(cursor);
+                    // if metal_enum.is_enum_flag {
+                    //     member.value = sprint("0x%", FormatInt.{value = v, base = 8});
+                    // } else {
+                    member.value = sprint("%", v);
+                    // }
+                }
+                if is_digit( member.key[0]) {
+                    member.key = sprint("e%", member.key);
+                }
+
+                // This is a stupid loop, MTLPixelFormat somehow
+                // redefine itself in Metal headers, causing the
+                // entries to be duplicated.
+                found := false;
+                for metal_enum.members {
+                    if it.key == member.key {
+                        found = true;
+                        break;
+                    }
+                }
+
+                if !found array_add(*metal_enum.members, member);
+            case;
+                assert(false, "unexpected enum member kind %", kind);
+            }
+
+        }
+
+        return .Continue;
+    }
+
+    // Find or create a new entry in table
+    name := get_cursor_string(cursor);
+    metal_enum := find_or_add(*metal_enum_table, name);
+    metal_enum.name = copy_string(name);
+    enum_type := clang_getEnumDeclIntegerType(cursor);
+    metal_enum.type = to_jai_type(enum_type);
+    // type_name := get_type_string(enum_type);
+    // if type_name == {
+    // // Since the build-in Objective-C from Jai defines these
+    // // two, I don't think it is a good idea to define again.
+    // case "NSInteger";
+    //     ;
+    //     metal_enum.type = "NSInteger";
+    // case "NSUInteger";
+    //     ;
+    //     metal_enum.type = "NSUInteger";
+    // case "uint8_t";
+    //     metal_enum.type = "u8";
+    // case "uint32_t";
+    //     metal_enum.type = "u32";
+    // case;
+    //     assert(false, "unexpected typedef in enum %", type_name);
+    // }
+    clang_visitChildren(cursor, enum_visitor, metal_enum);
+}
+
 to_jai_type :: (type: CXType) -> string {
     jai_type: string;
     if type.kind == {
     case .Void;
         jai_type = "void";
     case .Typedef;
-        jai_type = get_type_string(type);
+        unqualified_type := clang_getUnqualifiedType(type);
+        jai_type = get_type_string(unqualified_type);
 
         if ends_with(jai_type, "_t") && jai_type != "dispatch_data_t" && jai_type != "dispatch_queue_t" {
             ctype := clang_getCanonicalType(type);
@@ -766,12 +813,12 @@ write_instance_method :: (sb: *String_Builder, method: Metal_Method, object_name
         return_type = sprint("*%", object_name);
     }
     print_to_builder(sb, ") -> % {\n", return_type);
-    append(sb, "        func :: #type (obj: *void, selector: *void");
+    append(sb, "        func: #type (obj: *void, selector: *void");
     for param: method.params {
         append(sb, ", ");
         print_to_builder(sb, "%: %", param.name, param.type);
     }
-    print_to_builder(sb, ") -> % #c_call;\n", method.return_type);
+    print_to_builder(sb, ") -> % #c_call;\n", return_type);
     append(sb, "        func = xx objc_msgSend;\n");
 
     print_to_builder(sb, "        return func(self, __sel.%", method.name_underline);
@@ -802,9 +849,9 @@ write_class_method :: (sb: *String_Builder, method: Metal_Method, class_name: st
         append(sb, ", ");
         print_to_builder(sb, "%: %", param.name, param.type);
     }
-    print_to_builder(sb, ") -> % #c_call;\n", method.return_type);
+    print_to_builder(sb, ") -> % #c_call;\n", return_type);
     append(sb, "        func = xx objc_msgSend;\n");
-    print_to_builder(sb, "        return func(objc_getClass(\"%\", __sel.%", class_name, method.name_underline);
+    print_to_builder(sb, "        return func(objc_getClass(\"%\"), __sel.%", class_name, method.name_underline);
     for param: method.params {
         append(sb, ", ");
         append(sb, param.name);
