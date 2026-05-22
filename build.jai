@@ -22,6 +22,11 @@ OUTPUT_EXECUTABLE_NAME := "shapeless";
 
     // This is to subpress the error of linking mismatch library version.
     options.minimum_os_version = .{26, 0};
+
+    import_paths: [..]string;
+    array_add(*import_paths, ..options.import_path);
+    array_add(*import_paths, "modules");
+
     set_build_options(options, w);
 
     loop(w);
