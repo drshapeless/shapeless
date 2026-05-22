@@ -59,6 +59,8 @@ EOF;
 
         opts.generate_library_declarations = false;
         array_add(*opts.libraries, .{filename = "libSDL3"});
+
+        array_add(*opts.source_files, "include/SDL3/SDL_metal.h");
     } else {
         assert(false, "the OS % is currently unsupported. You might be able to add support for it though!", OS);
     }
@@ -71,6 +73,7 @@ EOF;
         array_add(*opts.source_files, "include/SDL3/SDL_vulkan.h");
         opts.footer = sprint("#import \"Vulkan\";\n%", opts.footer);
     }
+
 
     opts.visitor = sdl3_visitor;
     opts.generate_compile_time_struct_checks = false;

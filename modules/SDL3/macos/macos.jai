@@ -43,10 +43,6 @@ SDL_ICONV_E2BIG :: cast,trunc(u64) -2;
 SDL_ICONV_EILSEQ :: cast,trunc(u64) -3;
 SDL_ICONV_EINVAL :: cast,trunc(u64) -4;
 
-SDL_ASSERT_LEVEL :: 2;
-
-SDL_NULL_WHILE_LOOP_CONDITION :: 0;
-
 SDL_LIL_ENDIAN :: 1234;
 
 SDL_BIG_ENDIAN :: 4321;
@@ -55,12 +51,24 @@ SDL_BYTEORDER :: SDL_LIL_ENDIAN;
 
 SDL_FLOATWORDORDER :: SDL_BYTEORDER;
 
+SDL_ALPHA_OPAQUE :: 255;
+
+SDL_ALPHA_OPAQUE_FLOAT :: 1.0;
+
+SDL_ALPHA_TRANSPARENT :: 0;
+
+SDL_ALPHA_TRANSPARENT_FLOAT :: 0.0;
+
 SDL_PROP_NAME_STRING :: "SDL.name";
 
-SDL_PROP_THREAD_CREATE_ENTRY_FUNCTION_POINTER :: "SDL.thread.create.entry_function";
-SDL_PROP_THREAD_CREATE_NAME_STRING :: "SDL.thread.create.name";
-SDL_PROP_THREAD_CREATE_USERDATA_POINTER :: "SDL.thread.create.userdata";
-SDL_PROP_THREAD_CREATE_STACKSIZE_NUMBER :: "SDL.thread.create.stacksize";
+SDL_BLENDMODE_NONE :: 0x00000000;
+SDL_BLENDMODE_BLEND :: 0x00000001;
+SDL_BLENDMODE_BLEND_PREMULTIPLIED :: 0x00000010;
+SDL_BLENDMODE_ADD :: 0x00000002;
+SDL_BLENDMODE_ADD_PREMULTIPLIED :: 0x00000020;
+SDL_BLENDMODE_MOD :: 0x00000004;
+SDL_BLENDMODE_MUL :: 0x00000008;
+SDL_BLENDMODE_INVALID :: 0x7FFFFFFF;
 
 SDL_PROP_IOSTREAM_WINDOWS_HANDLE_POINTER :: "SDL.iostream.windows.handle";
 SDL_PROP_IOSTREAM_STDIO_FILE_POINTER :: "SDL.iostream.stdio.file";
@@ -74,37 +82,6 @@ SDL_PROP_IOSTREAM_MEMORY_FREE_FUNC_POINTER :: "SDL.iostream.memory.free";
 SDL_PROP_IOSTREAM_DYNAMIC_MEMORY_POINTER :: "SDL.iostream.dynamic.memory";
 SDL_PROP_IOSTREAM_DYNAMIC_CHUNKSIZE_NUMBER :: "SDL.iostream.dynamic.chunksize";
 
-SDL_AUDIO_MASK_BITSIZE :: 0xFF;
-
-SDL_AUDIO_MASK_FLOAT :: 1<<8;
-
-SDL_AUDIO_MASK_BIG_ENDIAN :: 1<<12;
-
-SDL_AUDIO_MASK_SIGNED :: 1<<15;
-
-SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK :: cast(SDL_AudioDeviceID) 0xFFFFFFFF;
-
-SDL_AUDIO_DEVICE_DEFAULT_RECORDING :: cast(SDL_AudioDeviceID) 0xFFFFFFFE;
-
-SDL_PROP_AUDIOSTREAM_AUTO_CLEANUP_BOOLEAN :: "SDL.audiostream.auto_cleanup";
-
-SDL_BLENDMODE_NONE :: 0x00000000;
-SDL_BLENDMODE_BLEND :: 0x00000001;
-SDL_BLENDMODE_BLEND_PREMULTIPLIED :: 0x00000010;
-SDL_BLENDMODE_ADD :: 0x00000002;
-SDL_BLENDMODE_ADD_PREMULTIPLIED :: 0x00000020;
-SDL_BLENDMODE_MOD :: 0x00000004;
-SDL_BLENDMODE_MUL :: 0x00000008;
-SDL_BLENDMODE_INVALID :: 0x7FFFFFFF;
-
-SDL_ALPHA_OPAQUE :: 255;
-
-SDL_ALPHA_OPAQUE_FLOAT :: 1.0;
-
-SDL_ALPHA_TRANSPARENT :: 0;
-
-SDL_ALPHA_TRANSPARENT_FLOAT :: 0.0;
-
 SDL_SURFACE_PREALLOCATED :: 0x00000001;
 SDL_SURFACE_LOCK_NEEDED :: 0x00000002;
 SDL_SURFACE_LOCKED :: 0x00000004;
@@ -116,8 +93,6 @@ SDL_PROP_SURFACE_TONEMAP_OPERATOR_STRING :: "SDL.surface.tonemap";
 SDL_PROP_SURFACE_HOTSPOT_X_NUMBER :: "SDL.surface.hotspot.x";
 SDL_PROP_SURFACE_HOTSPOT_Y_NUMBER :: "SDL.surface.hotspot.y";
 SDL_PROP_SURFACE_ROTATION_FLOAT :: "SDL.surface.rotation";
-
-SDL_CACHELINE_SIZE :: 128;
 
 SDL_PROP_GLOBAL_VIDEO_WAYLAND_WL_DISPLAY_POINTER :: "SDL.video.wayland.wl_display";
 
@@ -224,6 +199,31 @@ SDL_PROP_WINDOW_EMSCRIPTEN_KEYBOARD_ELEMENT_STRING :: "SDL.window.emscripten.key
 
 SDL_WINDOW_SURFACE_VSYNC_DISABLED :: 0;
 SDL_WINDOW_SURFACE_VSYNC_ADAPTIVE :: -1;
+
+SDL_ASSERT_LEVEL :: 2;
+
+SDL_NULL_WHILE_LOOP_CONDITION :: 0;
+
+SDL_PROP_THREAD_CREATE_ENTRY_FUNCTION_POINTER :: "SDL.thread.create.entry_function";
+SDL_PROP_THREAD_CREATE_NAME_STRING :: "SDL.thread.create.name";
+SDL_PROP_THREAD_CREATE_USERDATA_POINTER :: "SDL.thread.create.userdata";
+SDL_PROP_THREAD_CREATE_STACKSIZE_NUMBER :: "SDL.thread.create.stacksize";
+
+SDL_AUDIO_MASK_BITSIZE :: 0xFF;
+
+SDL_AUDIO_MASK_FLOAT :: 1<<8;
+
+SDL_AUDIO_MASK_BIG_ENDIAN :: 1<<12;
+
+SDL_AUDIO_MASK_SIGNED :: 1<<15;
+
+SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK :: cast(SDL_AudioDeviceID) 0xFFFFFFFF;
+
+SDL_AUDIO_DEVICE_DEFAULT_RECORDING :: cast(SDL_AudioDeviceID) 0xFFFFFFFE;
+
+SDL_PROP_AUDIOSTREAM_AUTO_CLEANUP_BOOLEAN :: "SDL.audiostream.auto_cleanup";
+
+SDL_CACHELINE_SIZE :: 128;
 
 SDL_PROP_FILE_DIALOG_FILTERS_POINTER :: "SDL.filedialog.filters";
 SDL_PROP_FILE_DIALOG_NFILTERS_NUMBER :: "SDL.filedialog.nfilters";
@@ -5801,1001 +5801,6 @@ SDL_iconv_string :: (tocode: *u8, fromcode: *u8, inbuf: *u8, inbytesleft: u64) -
 SDL_FunctionPointer :: #type () -> void #c_call;
 
 /**
-* Possible outcomes from a triggered assertion.
-*
-* When an enabled assertion triggers, it may call the assertion handler
-* (possibly one provided by the app via SDL_SetAssertionHandler), which will
-* return one of these values, possibly after asking the user.
-*
-* Then SDL will respond based on this outcome (loop around to retry the
-* condition, try to break in a debugger, kill the program, or ignore the
-* problem).
-*
-* \since This enum is available since SDL 3.2.0.
-*/
-SDL_AssertState :: enum u32 {
-    RETRY         :: 0;
-    BREAK         :: 1;
-    ABORT         :: 2;
-    IGNORE        :: 3;
-    ALWAYS_IGNORE :: 4;
-
-    SDL_ASSERTION_RETRY         :: RETRY;
-    SDL_ASSERTION_BREAK         :: BREAK;
-    SDL_ASSERTION_ABORT         :: ABORT;
-    SDL_ASSERTION_IGNORE        :: IGNORE;
-    SDL_ASSERTION_ALWAYS_IGNORE :: ALWAYS_IGNORE;
-}
-
-/**
-* Information about an assertion failure.
-*
-* This structure is filled in with information about a triggered assertion,
-* used by the assertion handler, then added to the assertion report. This is
-* returned as a linked list from SDL_GetAssertionReport().
-*
-* \since This struct is available since SDL 3.2.0.
-*/
-SDL_AssertData :: struct {
-    always_ignore: bool; /**< true if app should always continue when assertion is triggered. */
-    trigger_count: u32; /**< Number of times this assertion has been triggered. */
-    condition:     *u8; /**< A string of this assert's test code. */
-    filename:      *u8; /**< The source file where this assert lives. */
-    linenum:       s32; /**< The line in `filename` where this assert lives. */
-    function:      *u8; /**< The name of the function where this assert lives. */
-    next:          *SDL_AssertData; /**< next item in the linked list. */
-}
-
-/**
-* Never call this directly.
-*
-* Use the SDL_assert macros instead.
-*
-* \param data assert data structure.
-* \param func function name.
-* \param file file name.
-* \param line line number.
-* \returns assert state.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*/
-SDL_ReportAssertion :: (data: *SDL_AssertData, func: *u8, file: *u8, line: s32) -> SDL_AssertState #foreign libsdl3;
-
-/**
-* A callback that fires when an SDL assertion fails.
-*
-* \param data a pointer to the SDL_AssertData structure corresponding to the
-*             current assertion.
-* \param userdata what was passed as `userdata` to SDL_SetAssertionHandler().
-* \returns an SDL_AssertState value indicating how to handle the failure.
-*
-* \threadsafety This callback may be called from any thread that triggers an
-*               assert at any time.
-*
-* \since This datatype is available since SDL 3.2.0.
-*/
-SDL_AssertionHandler :: #type (data: *SDL_AssertData, userdata: *void) -> SDL_AssertState #c_call;
-
-/**
-* Set an application-defined assertion handler.
-*
-* This function allows an application to show its own assertion UI and/or
-* force the response to an assertion failure. If the application doesn't
-* provide this, SDL will try to do the right thing, popping up a
-* system-specific GUI dialog, and probably minimizing any fullscreen windows.
-*
-* This callback may fire from any thread, but it runs wrapped in a mutex, so
-* it will only fire from one thread at a time.
-*
-* This callback is NOT reset to SDL's internal handler upon SDL_Quit()!
-*
-* \param handler the SDL_AssertionHandler function to call when an assertion
-*                fails or NULL for the default handler.
-* \param userdata a pointer that is passed to `handler`.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_GetAssertionHandler
-*/
-SDL_SetAssertionHandler :: (handler: SDL_AssertionHandler, userdata: *void) -> void #foreign libsdl3;
-
-/**
-* Get the default assertion handler.
-*
-* This returns the function pointer that is called by default when an
-* assertion is triggered. This is an internal function provided by SDL, that
-* is used for assertions when SDL_SetAssertionHandler() hasn't been used to
-* provide a different function.
-*
-* \returns the default SDL_AssertionHandler that is called when an assert
-*          triggers.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_GetAssertionHandler
-*/
-SDL_GetDefaultAssertionHandler :: () -> SDL_AssertionHandler #foreign libsdl3;
-
-/**
-* Get the current assertion handler.
-*
-* This returns the function pointer that is called when an assertion is
-* triggered. This is either the value last passed to
-* SDL_SetAssertionHandler(), or if no application-specified function is set,
-* is equivalent to calling SDL_GetDefaultAssertionHandler().
-*
-* The parameter `puserdata` is a pointer to a void*, which will store the
-* "userdata" pointer that was passed to SDL_SetAssertionHandler(). This value
-* will always be NULL for the default handler. If you don't care about this
-* data, it is safe to pass a NULL pointer to this function to ignore it.
-*
-* \param puserdata pointer which is filled with the "userdata" pointer that
-*                  was passed to SDL_SetAssertionHandler().
-* \returns the SDL_AssertionHandler that is called when an assert triggers.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_SetAssertionHandler
-*/
-SDL_GetAssertionHandler :: (puserdata: **void) -> SDL_AssertionHandler #foreign libsdl3;
-
-/**
-* Get a list of all assertion failures.
-*
-* This function gets all assertions triggered since the last call to
-* SDL_ResetAssertionReport(), or the start of the program.
-*
-* The proper way to examine this data looks something like this:
-*
-* ```c
-* const SDL_AssertData *item = SDL_GetAssertionReport();
-* while (item) {
-*    printf("'%s', %s (%s:%d), triggered %u times, always ignore: %s.\\n",
-*           item->condition, item->function, item->filename,
-*           item->linenum, item->trigger_count,
-*           item->always_ignore ? "yes" : "no");
-*    item = item->next;
-* }
-* ```
-*
-* \returns a list of all failed assertions or NULL if the list is empty. This
-*          memory should not be modified or freed by the application. This
-*          pointer remains valid until the next call to SDL_Quit() or
-*          SDL_ResetAssertionReport().
-*
-* \threadsafety This function is not thread safe. Other threads calling
-*               SDL_ResetAssertionReport() simultaneously, may render the
-*               returned pointer invalid.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_ResetAssertionReport
-*/
-SDL_GetAssertionReport :: () -> *SDL_AssertData #foreign libsdl3;
-
-/**
-* Clear the list of all assertion failures.
-*
-* This function will clear the list of all assertions triggered up to that
-* point. Immediately following this call, SDL_GetAssertionReport will return
-* no items. In addition, any previously-triggered assertions will be reset to
-* a trigger_count of zero, and their always_ignore state will be false.
-*
-* \threadsafety This function is not thread safe. Other threads triggering an
-*               assertion, or simultaneously calling this function may cause
-*               memory leaks or crashes.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_GetAssertionReport
-*/
-SDL_ResetAssertionReport :: () -> void #foreign libsdl3;
-
-SDL_AsyncIO :: struct {}
-
-/**
-* Types of asynchronous I/O tasks.
-*
-* \since This enum is available since SDL 3.2.0.
-*/
-SDL_AsyncIOTaskType :: enum u32 {
-    READ  :: 0;
-    WRITE :: 1;
-    CLOSE :: 2;
-
-    SDL_ASYNCIO_TASK_READ  :: READ;
-    SDL_ASYNCIO_TASK_WRITE :: WRITE;
-    SDL_ASYNCIO_TASK_CLOSE :: CLOSE;
-}
-
-/**
-* Possible outcomes of an asynchronous I/O task.
-*
-* \since This enum is available since SDL 3.2.0.
-*/
-SDL_AsyncIOResult :: enum u32 {
-    COMPLETE :: 0;
-    FAILURE  :: 1;
-    CANCELED :: 2;
-
-    SDL_ASYNCIO_COMPLETE :: COMPLETE;
-    SDL_ASYNCIO_FAILURE  :: FAILURE;
-    SDL_ASYNCIO_CANCELED :: CANCELED;
-}
-
-/**
-* Information about a completed asynchronous I/O request.
-*
-* \since This struct is available since SDL 3.2.0.
-*/
-SDL_AsyncIOOutcome :: struct {
-    asyncio:           *SDL_AsyncIO; /**< what generated this task. This pointer will be invalid if it was closed! */
-    type:              SDL_AsyncIOTaskType; /**< What sort of task was this? Read, write, etc? */
-    result:            SDL_AsyncIOResult; /**< the result of the work (success, failure, cancellation). */
-    buffer:            *void; /**< buffer where data was read/written. */
-    offset:            Uint64; /**< offset in the SDL_AsyncIO where data was read/written. */
-    bytes_requested:   Uint64; /**< number of bytes the task was to read/write. */
-    bytes_transferred: Uint64; /**< actual number of bytes that were read/written. */
-    userdata:          *void; /**< pointer provided by the app when starting the task */
-}
-
-SDL_AsyncIOQueue :: struct {}
-
-/**
-* Use this function to create a new SDL_AsyncIO object for reading from
-* and/or writing to a named file.
-*
-* The `mode` string understands the following values:
-*
-* - "r": Open a file for reading only. It must exist.
-* - "w": Open a file for writing only. It will create missing files or
-*   truncate existing ones.
-* - "r+": Open a file for update both reading and writing. The file must
-*   exist.
-* - "w+": Create an empty file for both reading and writing. If a file with
-*   the same name already exists its content is erased and the file is
-*   treated as a new empty file.
-*
-* There is no "b" mode, as there is only "binary" style I/O, and no "a" mode
-* for appending, since you specify the position when starting a task.
-*
-* This function supports Unicode filenames, but they must be encoded in UTF-8
-* format, regardless of the underlying operating system.
-*
-* This call is _not_ asynchronous; it will open the file before returning,
-* under the assumption that doing so is generally a fast operation. Future
-* reads and writes to the opened file will be async, however.
-*
-* \param file a UTF-8 string representing the filename to open.
-* \param mode an ASCII string representing the mode to be used for opening
-*             the file.
-* \returns a pointer to the SDL_AsyncIO structure that is created or NULL on
-*          failure; call SDL_GetError() for more information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_CloseAsyncIO
-* \sa SDL_ReadAsyncIO
-* \sa SDL_WriteAsyncIO
-*/
-SDL_AsyncIOFromFile :: (file: *u8, mode: *u8) -> *SDL_AsyncIO #foreign libsdl3;
-
-/**
-* Use this function to get the size of the data stream in an SDL_AsyncIO.
-*
-* This call is _not_ asynchronous; it assumes that obtaining this info is a
-* non-blocking operation in most reasonable cases.
-*
-* \param asyncio the SDL_AsyncIO to get the size of the data stream from.
-* \returns the size of the data stream in the SDL_IOStream on success or a
-*          negative error code on failure; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*/
-SDL_GetAsyncIOSize :: (asyncio: *SDL_AsyncIO) -> Sint64 #foreign libsdl3;
-
-/**
-* Start an async read.
-*
-* This function reads up to `size` bytes from `offset` position in the data
-* source to the area pointed at by `ptr`. This function may read less bytes
-* than requested.
-*
-* This function returns as quickly as possible; it does not wait for the read
-* to complete. On a successful return, this work will continue in the
-* background. If the work begins, even failure is asynchronous: a failing
-* return value from this function only means the work couldn't start at all.
-*
-* `ptr` must remain available until the work is done, and may be accessed by
-* the system at any time until then. Do not allocate it on the stack, as this
-* might take longer than the life of the calling function to complete!
-*
-* An SDL_AsyncIOQueue must be specified. The newly-created task will be added
-* to it when it completes its work.
-*
-* \param asyncio a pointer to an SDL_AsyncIO structure.
-* \param ptr a pointer to a buffer to read data into.
-* \param offset the position to start reading in the data source.
-* \param size the number of bytes to read from the data source.
-* \param queue a queue to add the new SDL_AsyncIO to.
-* \param userdata an app-defined pointer that will be provided with the task
-*                 results.
-* \returns true on success or false on failure; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_WriteAsyncIO
-* \sa SDL_CreateAsyncIOQueue
-*/
-SDL_ReadAsyncIO :: (asyncio: *SDL_AsyncIO, ptr: *void, offset: Uint64, size: Uint64, queue: *SDL_AsyncIOQueue, userdata: *void) -> bool #foreign libsdl3;
-
-/**
-* Start an async write.
-*
-* This function writes `size` bytes from `offset` position in the data source
-* to the area pointed at by `ptr`.
-*
-* This function returns as quickly as possible; it does not wait for the
-* write to complete. On a successful return, this work will continue in the
-* background. If the work begins, even failure is asynchronous: a failing
-* return value from this function only means the work couldn't start at all.
-*
-* `ptr` must remain available until the work is done, and may be accessed by
-* the system at any time until then. Do not allocate it on the stack, as this
-* might take longer than the life of the calling function to complete!
-*
-* An SDL_AsyncIOQueue must be specified. The newly-created task will be added
-* to it when it completes its work.
-*
-* \param asyncio a pointer to an SDL_AsyncIO structure.
-* \param ptr a pointer to a buffer to write data from.
-* \param offset the position to start writing to the data source.
-* \param size the number of bytes to write to the data source.
-* \param queue a queue to add the new SDL_AsyncIO to.
-* \param userdata an app-defined pointer that will be provided with the task
-*                 results.
-* \returns true on success or false on failure; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_ReadAsyncIO
-* \sa SDL_CreateAsyncIOQueue
-*/
-SDL_WriteAsyncIO :: (asyncio: *SDL_AsyncIO, ptr: *void, offset: Uint64, size: Uint64, queue: *SDL_AsyncIOQueue, userdata: *void) -> bool #foreign libsdl3;
-
-/**
-* Close and free any allocated resources for an async I/O object.
-*
-* Closing a file is _also_ an asynchronous task! If a write failure were to
-* happen during the closing process, for example, the task results will
-* report it as usual.
-*
-* Closing a file that has been written to does not guarantee the data has
-* made it to physical media; it may remain in the operating system's file
-* cache, for later writing to disk. This means that a successfully-closed
-* file can be lost if the system crashes or loses power in this small window.
-* To prevent this, call this function with the `flush` parameter set to true.
-* This will make the operation take longer, and perhaps increase system load
-* in general, but a successful result guarantees that the data has made it to
-* physical storage. Don't use this for temporary files, caches, and
-* unimportant data, and definitely use it for crucial irreplaceable files,
-* like game saves.
-*
-* This function guarantees that the close will happen after any other pending
-* tasks to `asyncio`, so it's safe to open a file, start several operations,
-* close the file immediately, then check for all results later. This function
-* will not block until the tasks have completed.
-*
-* Once this function returns true, `asyncio` is no longer valid, regardless
-* of any future outcomes. Any completed tasks might still contain this
-* pointer in their SDL_AsyncIOOutcome data, in case the app was using this
-* value to track information, but it should not be used again.
-*
-* If this function returns false, the close wasn't started at all, and it's
-* safe to attempt to close again later.
-*
-* An SDL_AsyncIOQueue must be specified. The newly-created task will be added
-* to it when it completes its work.
-*
-* \param asyncio a pointer to an SDL_AsyncIO structure to close.
-* \param flush true if data should sync to disk before the task completes.
-* \param queue a queue to add the new SDL_AsyncIO to.
-* \param userdata an app-defined pointer that will be provided with the task
-*                 results.
-* \returns true on success or false on failure; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety It is safe to call this function from any thread, but two
-*               threads should not attempt to close the same object.
-*
-* \since This function is available since SDL 3.2.0.
-*/
-SDL_CloseAsyncIO :: (asyncio: *SDL_AsyncIO, flush: bool, queue: *SDL_AsyncIOQueue, userdata: *void) -> bool #foreign libsdl3;
-
-/**
-* Create a task queue for tracking multiple I/O operations.
-*
-* Async I/O operations are assigned to a queue when started. The queue can be
-* checked for completed tasks thereafter.
-*
-* \returns a new task queue object or NULL if there was an error; call
-*          SDL_GetError() for more information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_DestroyAsyncIOQueue
-* \sa SDL_GetAsyncIOResult
-* \sa SDL_WaitAsyncIOResult
-*/
-SDL_CreateAsyncIOQueue :: () -> *SDL_AsyncIOQueue #foreign libsdl3;
-
-/**
-* Destroy a previously-created async I/O task queue.
-*
-* If there are still tasks pending for this queue, this call will block until
-* those tasks are finished. All those tasks will be deallocated. Their
-* results will be lost to the app.
-*
-* Any pending reads from SDL_LoadFileAsync() that are still in this queue
-* will have their buffers deallocated by this function, to prevent a memory
-* leak.
-*
-* Once this function is called, the queue is no longer valid and should not
-* be used, including by other threads that might access it while destruction
-* is blocking on pending tasks.
-*
-* Do not destroy a queue that still has threads waiting on it through
-* SDL_WaitAsyncIOResult(). You can call SDL_SignalAsyncIOQueue() first to
-* unblock those threads, and take measures (such as SDL_WaitThread()) to make
-* sure they have finished their wait and won't wait on the queue again.
-*
-* \param queue the task queue to destroy.
-*
-* \threadsafety It is safe to call this function from any thread, so long as
-*               no other thread is waiting on the queue with
-*               SDL_WaitAsyncIOResult.
-*
-* \since This function is available since SDL 3.2.0.
-*/
-SDL_DestroyAsyncIOQueue :: (queue: *SDL_AsyncIOQueue) -> void #foreign libsdl3;
-
-/**
-* Query an async I/O task queue for completed tasks.
-*
-* If a task assigned to this queue has finished, this will return true and
-* fill in `outcome` with the details of the task. If no task in the queue has
-* finished, this function will return false. This function does not block.
-*
-* If a task has completed, this function will free its resources and the task
-* pointer will no longer be valid. The task will be removed from the queue.
-*
-* It is safe for multiple threads to call this function on the same queue at
-* once; a completed task will only go to one of the threads.
-*
-* \param queue the async I/O task queue to query.
-* \param outcome details of a finished task will be written here. May not be
-*                NULL.
-* \returns true if a task has completed, false otherwise.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_WaitAsyncIOResult
-*/
-SDL_GetAsyncIOResult :: (queue: *SDL_AsyncIOQueue, outcome: *SDL_AsyncIOOutcome) -> bool #foreign libsdl3;
-
-/**
-* Block until an async I/O task queue has a completed task.
-*
-* This function puts the calling thread to sleep until there a task assigned
-* to the queue that has finished.
-*
-* If a task assigned to the queue has finished, this will return true and
-* fill in `outcome` with the details of the task. If no task in the queue has
-* finished, this function will return false.
-*
-* If a task has completed, this function will free its resources and the task
-* pointer will no longer be valid. The task will be removed from the queue.
-*
-* It is safe for multiple threads to call this function on the same queue at
-* once; a completed task will only go to one of the threads.
-*
-* Note that by the nature of various platforms, more than one waiting thread
-* may wake to handle a single task, but only one will obtain it, so
-* `timeoutMS` is a _maximum_ wait time, and this function may return false
-* sooner.
-*
-* This function may return false if there was a system error, the OS
-* inadvertently awoke multiple threads, or if SDL_SignalAsyncIOQueue() was
-* called to wake up all waiting threads without a finished task.
-*
-* A timeout can be used to specify a maximum wait time, but rather than
-* polling, it is possible to have a timeout of -1 to wait forever, and use
-* SDL_SignalAsyncIOQueue() to wake up the waiting threads later.
-*
-* \param queue the async I/O task queue to wait on.
-* \param outcome details of a finished task will be written here. May not be
-*                NULL.
-* \param timeoutMS the maximum time to wait, in milliseconds, or -1 to wait
-*                  indefinitely.
-* \returns true if task has completed, false otherwise.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_SignalAsyncIOQueue
-*/
-SDL_WaitAsyncIOResult :: (queue: *SDL_AsyncIOQueue, outcome: *SDL_AsyncIOOutcome, timeoutMS: Sint32) -> bool #foreign libsdl3;
-
-/**
-* Wake up any threads that are blocking in SDL_WaitAsyncIOResult().
-*
-* This will unblock any threads that are sleeping in a call to
-* SDL_WaitAsyncIOResult for the specified queue, and cause them to return
-* from that function.
-*
-* This can be useful when destroying a queue to make sure nothing is touching
-* it indefinitely. In this case, once this call completes, the caller should
-* take measures to make sure any previously-blocked threads have returned
-* from their wait and will not touch the queue again (perhaps by setting a
-* flag to tell the threads to terminate and then using SDL_WaitThread() to
-* make sure they've done so).
-*
-* \param queue the async I/O task queue to signal.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_WaitAsyncIOResult
-*/
-SDL_SignalAsyncIOQueue :: (queue: *SDL_AsyncIOQueue) -> void #foreign libsdl3;
-
-/**
-* Load all the data from a file path, asynchronously.
-*
-* This function returns as quickly as possible; it does not wait for the read
-* to complete. On a successful return, this work will continue in the
-* background. If the work begins, even failure is asynchronous: a failing
-* return value from this function only means the work couldn't start at all.
-*
-* The data is allocated with a zero byte at the end (null terminated) for
-* convenience. This extra byte is not included in SDL_AsyncIOOutcome's
-* bytes_transferred value.
-*
-* This function will allocate the buffer to contain the file. It must be
-* deallocated by calling SDL_free() on SDL_AsyncIOOutcome's buffer field
-* after completion.
-*
-* An SDL_AsyncIOQueue must be specified. The newly-created task will be added
-* to it when it completes its work.
-*
-* \param file the path to read all available data from.
-* \param queue a queue to add the new SDL_AsyncIO to.
-* \param userdata an app-defined pointer that will be provided with the task
-*                 results.
-* \returns true on success or false on failure; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_LoadFile_IO
-*/
-SDL_LoadFileAsync :: (file: *u8, queue: *SDL_AsyncIOQueue, userdata: *void) -> bool #foreign libsdl3;
-
-/**
-* An atomic spinlock.
-*
-* The atomic locks are efficient spinlocks using CPU instructions, but are
-* vulnerable to starvation and can spin forever if a thread holding a lock
-* has been terminated. For this reason you should minimize the code executed
-* inside an atomic lock and never do expensive things like API or system
-* calls while holding them.
-*
-* They are also vulnerable to starvation if the thread holding the lock is
-* lower priority than other threads and doesn't get scheduled. In general you
-* should use mutexes instead, since they have better performance and
-* contention behavior.
-*
-* The atomic locks are not safe to lock recursively.
-*
-* Porting Note: The spin lock functions and type are required and can not be
-* emulated because they are used in the atomic emulation code.
-*/
-SDL_SpinLock :: s32;
-
-/**
-* Try to lock a spin lock by setting it to a non-zero value.
-*
-* ***Please note that spinlocks are dangerous if you don't know what you're
-* doing. Please be careful using any sort of spinlock!***
-*
-* \param lock a pointer to a lock variable.
-* \returns true if the lock succeeded, false if the lock is already held.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_LockSpinlock
-* \sa SDL_UnlockSpinlock
-*/
-SDL_TryLockSpinlock :: (lock: *SDL_SpinLock) -> bool #foreign libsdl3;
-
-/**
-* Lock a spin lock by setting it to a non-zero value.
-*
-* ***Please note that spinlocks are dangerous if you don't know what you're
-* doing. Please be careful using any sort of spinlock!***
-*
-* \param lock a pointer to a lock variable.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_TryLockSpinlock
-* \sa SDL_UnlockSpinlock
-*/
-SDL_LockSpinlock :: (lock: *SDL_SpinLock) -> void #foreign libsdl3;
-
-/**
-* Unlock a spin lock by setting it to 0.
-*
-* Always returns immediately.
-*
-* ***Please note that spinlocks are dangerous if you don't know what you're
-* doing. Please be careful using any sort of spinlock!***
-*
-* \param lock a pointer to a lock variable.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_LockSpinlock
-* \sa SDL_TryLockSpinlock
-*/
-SDL_UnlockSpinlock :: (lock: *SDL_SpinLock) -> void #foreign libsdl3;
-
-/**
-* Insert a memory release barrier (function version).
-*
-* Please refer to SDL_MemoryBarrierRelease for details. This is a function
-* version, which might be useful if you need to use this functionality from a
-* scripting language, etc. Also, some of the macro versions call this
-* function behind the scenes, where more heavy lifting can happen inside of
-* SDL. Generally, though, an app written in C/C++/etc should use the macro
-* version, as it will be more efficient.
-*
-* \threadsafety Obviously this function is safe to use from any thread at any
-*               time, but if you find yourself needing this, you are probably
-*               dealing with some very sensitive code; be careful!
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_MemoryBarrierRelease
-*/
-SDL_MemoryBarrierReleaseFunction :: () -> void #foreign libsdl3;
-
-/**
-* Insert a memory acquire barrier (function version).
-*
-* Please refer to SDL_MemoryBarrierRelease for details. This is a function
-* version, which might be useful if you need to use this functionality from a
-* scripting language, etc. Also, some of the macro versions call this
-* function behind the scenes, where more heavy lifting can happen inside of
-* SDL. Generally, though, an app written in C/C++/etc should use the macro
-* version, as it will be more efficient.
-*
-* \threadsafety Obviously this function is safe to use from any thread at any
-*               time, but if you find yourself needing this, you are probably
-*               dealing with some very sensitive code; be careful!
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_MemoryBarrierAcquire
-*/
-SDL_MemoryBarrierAcquireFunction :: () -> void #foreign libsdl3;
-
-/**
-* A type representing an atomic integer value.
-*
-* This can be used to manage a value that is synchronized across multiple
-* CPUs without a race condition; when an app sets a value with
-* SDL_SetAtomicInt all other threads, regardless of the CPU it is running on,
-* will see that value when retrieved with SDL_GetAtomicInt, regardless of CPU
-* caches, etc.
-*
-* This is also useful for atomic compare-and-swap operations: a thread can
-* change the value as long as its current value matches expectations. When
-* done in a loop, one can guarantee data consistency across threads without a
-* lock (but the usual warnings apply: if you don't know what you're doing, or
-* you don't do it carefully, you can confidently cause any number of
-* disasters with this, so in most cases, you _should_ use a mutex instead of
-* this!).
-*
-* This is a struct so people don't accidentally use numeric operations on it
-* directly. You have to use SDL atomic functions.
-*
-* \since This struct is available since SDL 3.2.0.
-*
-* \sa SDL_CompareAndSwapAtomicInt
-* \sa SDL_GetAtomicInt
-* \sa SDL_SetAtomicInt
-* \sa SDL_AddAtomicInt
-*/
-SDL_AtomicInt :: struct {
-    value: s32;
-}
-
-/**
-* Set an atomic variable to a new value if it is currently an old value.
-*
-* ***Note: If you don't know what this function is for, you shouldn't use
-* it!***
-*
-* \param a a pointer to an SDL_AtomicInt variable to be modified.
-* \param oldval the old value.
-* \param newval the new value.
-* \returns true if the atomic variable was set, false otherwise.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_GetAtomicInt
-* \sa SDL_SetAtomicInt
-*/
-SDL_CompareAndSwapAtomicInt :: (a: *SDL_AtomicInt, oldval: s32, newval: s32) -> bool #foreign libsdl3;
-
-/**
-* Set an atomic variable to a value.
-*
-* This function also acts as a full memory barrier.
-*
-* ***Note: If you don't know what this function is for, you shouldn't use
-* it!***
-*
-* \param a a pointer to an SDL_AtomicInt variable to be modified.
-* \param v the desired value.
-* \returns the previous value of the atomic variable.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_GetAtomicInt
-*/
-SDL_SetAtomicInt :: (a: *SDL_AtomicInt, v: s32) -> s32 #foreign libsdl3;
-
-/**
-* Get the value of an atomic variable.
-*
-* ***Note: If you don't know what this function is for, you shouldn't use
-* it!***
-*
-* \param a a pointer to an SDL_AtomicInt variable.
-* \returns the current value of an atomic variable.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_SetAtomicInt
-*/
-SDL_GetAtomicInt :: (a: *SDL_AtomicInt) -> s32 #foreign libsdl3;
-
-/**
-* Add to an atomic variable.
-*
-* This function also acts as a full memory barrier.
-*
-* ***Note: If you don't know what this function is for, you shouldn't use
-* it!***
-*
-* \param a a pointer to an SDL_AtomicInt variable to be modified.
-* \param v the desired value to add.
-* \returns the previous value of the atomic variable.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_AtomicDecRef
-* \sa SDL_AtomicIncRef
-*/
-SDL_AddAtomicInt :: (a: *SDL_AtomicInt, v: s32) -> s32 #foreign libsdl3;
-
-/**
-* A type representing an atomic unsigned 32-bit value.
-*
-* This can be used to manage a value that is synchronized across multiple
-* CPUs without a race condition; when an app sets a value with
-* SDL_SetAtomicU32 all other threads, regardless of the CPU it is running on,
-* will see that value when retrieved with SDL_GetAtomicU32, regardless of CPU
-* caches, etc.
-*
-* This is also useful for atomic compare-and-swap operations: a thread can
-* change the value as long as its current value matches expectations. When
-* done in a loop, one can guarantee data consistency across threads without a
-* lock (but the usual warnings apply: if you don't know what you're doing, or
-* you don't do it carefully, you can confidently cause any number of
-* disasters with this, so in most cases, you _should_ use a mutex instead of
-* this!).
-*
-* This is a struct so people don't accidentally use numeric operations on it
-* directly. You have to use SDL atomic functions.
-*
-* \since This struct is available since SDL 3.2.0.
-*
-* \sa SDL_CompareAndSwapAtomicU32
-* \sa SDL_GetAtomicU32
-* \sa SDL_SetAtomicU32
-*/
-SDL_AtomicU32 :: struct {
-    value: Uint32;
-}
-
-/**
-* Set an atomic variable to a new value if it is currently an old value.
-*
-* ***Note: If you don't know what this function is for, you shouldn't use
-* it!***
-*
-* \param a a pointer to an SDL_AtomicU32 variable to be modified.
-* \param oldval the old value.
-* \param newval the new value.
-* \returns true if the atomic variable was set, false otherwise.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_GetAtomicU32
-* \sa SDL_SetAtomicU32
-*/
-SDL_CompareAndSwapAtomicU32 :: (a: *SDL_AtomicU32, oldval: Uint32, newval: Uint32) -> bool #foreign libsdl3;
-
-/**
-* Set an atomic variable to a value.
-*
-* This function also acts as a full memory barrier.
-*
-* ***Note: If you don't know what this function is for, you shouldn't use
-* it!***
-*
-* \param a a pointer to an SDL_AtomicU32 variable to be modified.
-* \param v the desired value.
-* \returns the previous value of the atomic variable.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_GetAtomicU32
-*/
-SDL_SetAtomicU32 :: (a: *SDL_AtomicU32, v: Uint32) -> Uint32 #foreign libsdl3;
-
-/**
-* Get the value of an atomic variable.
-*
-* ***Note: If you don't know what this function is for, you shouldn't use
-* it!***
-*
-* \param a a pointer to an SDL_AtomicU32 variable.
-* \returns the current value of an atomic variable.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_SetAtomicU32
-*/
-SDL_GetAtomicU32 :: (a: *SDL_AtomicU32) -> Uint32 #foreign libsdl3;
-
-/**
-* Add to an atomic variable.
-*
-* This function also acts as a full memory barrier.
-*
-* ***Note: If you don't know what this function is for, you shouldn't use
-* it!***
-*
-* \param a a pointer to an SDL_AtomicU32 variable to be modified.
-* \param v the desired value to add or subtract.
-* \returns the previous value of the atomic variable.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.4.0.
-*/
-SDL_AddAtomicU32 :: (a: *SDL_AtomicU32, v: s32) -> Uint32 #foreign libsdl3;
-
-/**
-* Set a pointer to a new value if it is currently an old value.
-*
-* ***Note: If you don't know what this function is for, you shouldn't use
-* it!***
-*
-* \param a a pointer to a pointer.
-* \param oldval the old pointer value.
-* \param newval the new pointer value.
-* \returns true if the pointer was set, false otherwise.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_CompareAndSwapAtomicInt
-* \sa SDL_GetAtomicPointer
-* \sa SDL_SetAtomicPointer
-*/
-SDL_CompareAndSwapAtomicPointer :: (a: **void, oldval: *void, newval: *void) -> bool #foreign libsdl3;
-
-/**
-* Set a pointer to a value atomically.
-*
-* ***Note: If you don't know what this function is for, you shouldn't use
-* it!***
-*
-* \param a a pointer to a pointer.
-* \param v the desired pointer value.
-* \returns the previous value of the pointer.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_CompareAndSwapAtomicPointer
-* \sa SDL_GetAtomicPointer
-*/
-SDL_SetAtomicPointer :: (a: **void, v: *void) -> *void #foreign libsdl3;
-
-/**
-* Get the value of a pointer atomically.
-*
-* ***Note: If you don't know what this function is for, you shouldn't use
-* it!***
-*
-* \param a a pointer to a pointer.
-* \returns the current value of a pointer.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_CompareAndSwapAtomicPointer
-* \sa SDL_SetAtomicPointer
-*/
-SDL_GetAtomicPointer :: (a: **void) -> *void #foreign libsdl3;
-
-/**
 * Set the SDL error message for the current thread.
 *
 * Calling this function will replace any previous error message that was set.
@@ -6895,6 +5900,1021 @@ SDL_GetError :: () -> *u8 #foreign libsdl3;
 * \sa SDL_SetError
 */
 SDL_ClearError :: () -> bool #foreign libsdl3;
+
+/**
+* Pixel type.
+*
+* \since This enum is available since SDL 3.2.0.
+*/
+SDL_PixelType :: enum u32 {
+    UNKNOWN  :: 0;
+    INDEX1   :: 1;
+    INDEX4   :: 2;
+    INDEX8   :: 3;
+    PACKED8  :: 4;
+    PACKED16 :: 5;
+    PACKED32 :: 6;
+    ARRAYU8  :: 7;
+    ARRAYU16 :: 8;
+    ARRAYU32 :: 9;
+    ARRAYF16 :: 10;
+    ARRAYF32 :: 11;
+
+    INDEX2   :: 12;
+
+    SDL_PIXELTYPE_UNKNOWN  :: UNKNOWN;
+    SDL_PIXELTYPE_INDEX1   :: INDEX1;
+    SDL_PIXELTYPE_INDEX4   :: INDEX4;
+    SDL_PIXELTYPE_INDEX8   :: INDEX8;
+    SDL_PIXELTYPE_PACKED8  :: PACKED8;
+    SDL_PIXELTYPE_PACKED16 :: PACKED16;
+    SDL_PIXELTYPE_PACKED32 :: PACKED32;
+    SDL_PIXELTYPE_ARRAYU8  :: ARRAYU8;
+    SDL_PIXELTYPE_ARRAYU16 :: ARRAYU16;
+    SDL_PIXELTYPE_ARRAYU32 :: ARRAYU32;
+    SDL_PIXELTYPE_ARRAYF16 :: ARRAYF16;
+    SDL_PIXELTYPE_ARRAYF32 :: ARRAYF32;
+
+    SDL_PIXELTYPE_INDEX2   :: INDEX2;
+}
+
+/**
+* Bitmap pixel order, high bit -> low bit.
+*
+* \since This enum is available since SDL 3.2.0.
+*/
+SDL_BitmapOrder :: enum u32 {
+    NONE  :: 0;
+    _4321 :: 1;
+    _1234 :: 2;
+
+    SDL_BITMAPORDER_NONE :: NONE;
+    SDL_BITMAPORDER_4321 :: _4321;
+    SDL_BITMAPORDER_1234 :: _1234;
+}
+
+/**
+* Packed component order, high bit -> low bit.
+*
+* \since This enum is available since SDL 3.2.0.
+*/
+SDL_PackedOrder :: enum u32 {
+    NONE :: 0;
+    XRGB :: 1;
+    RGBX :: 2;
+    ARGB :: 3;
+    RGBA :: 4;
+    XBGR :: 5;
+    BGRX :: 6;
+    ABGR :: 7;
+    BGRA :: 8;
+
+    SDL_PACKEDORDER_NONE :: NONE;
+    SDL_PACKEDORDER_XRGB :: XRGB;
+    SDL_PACKEDORDER_RGBX :: RGBX;
+    SDL_PACKEDORDER_ARGB :: ARGB;
+    SDL_PACKEDORDER_RGBA :: RGBA;
+    SDL_PACKEDORDER_XBGR :: XBGR;
+    SDL_PACKEDORDER_BGRX :: BGRX;
+    SDL_PACKEDORDER_ABGR :: ABGR;
+    SDL_PACKEDORDER_BGRA :: BGRA;
+}
+
+/**
+* Array component order, low byte -> high byte.
+*
+* \since This enum is available since SDL 3.2.0.
+*/
+SDL_ArrayOrder :: enum u32 {
+    NONE :: 0;
+    RGB  :: 1;
+    RGBA :: 2;
+    ARGB :: 3;
+    BGR  :: 4;
+    BGRA :: 5;
+    ABGR :: 6;
+
+    SDL_ARRAYORDER_NONE :: NONE;
+    SDL_ARRAYORDER_RGB  :: RGB;
+    SDL_ARRAYORDER_RGBA :: RGBA;
+    SDL_ARRAYORDER_ARGB :: ARGB;
+    SDL_ARRAYORDER_BGR  :: BGR;
+    SDL_ARRAYORDER_BGRA :: BGRA;
+    SDL_ARRAYORDER_ABGR :: ABGR;
+}
+
+/**
+* Packed component layout.
+*
+* \since This enum is available since SDL 3.2.0.
+*/
+SDL_PackedLayout :: enum u32 {
+    NONE     :: 0;
+    _332     :: 1;
+    _4444    :: 2;
+    _1555    :: 3;
+    _5551    :: 4;
+    _565     :: 5;
+    _8888    :: 6;
+    _2101010 :: 7;
+    _1010102 :: 8;
+
+    SDL_PACKEDLAYOUT_NONE    :: NONE;
+    SDL_PACKEDLAYOUT_332     :: _332;
+    SDL_PACKEDLAYOUT_4444    :: _4444;
+    SDL_PACKEDLAYOUT_1555    :: _1555;
+    SDL_PACKEDLAYOUT_5551    :: _5551;
+    SDL_PACKEDLAYOUT_565     :: _565;
+    SDL_PACKEDLAYOUT_8888    :: _8888;
+    SDL_PACKEDLAYOUT_2101010 :: _2101010;
+    SDL_PACKEDLAYOUT_1010102 :: _1010102;
+}
+
+/**
+* Pixel format.
+*
+* SDL's pixel formats have the following naming convention:
+*
+* - Names with a list of components and a single bit count, such as RGB24 and
+*   ABGR32, define a platform-independent encoding into bytes in the order
+*   specified. For example, in RGB24 data, each pixel is encoded in 3 bytes
+*   (red, green, blue) in that order, and in ABGR32 data, each pixel is
+*   encoded in 4 bytes (alpha, blue, green, red) in that order. Use these
+*   names if the property of a format that is important to you is the order
+*   of the bytes in memory or on disk.
+* - Names with a bit count per component, such as ARGB8888 and XRGB1555, are
+*   "packed" into an appropriately-sized integer in the platform's native
+*   endianness. For example, ARGB8888 is a sequence of 32-bit integers; in
+*   each integer, the most significant bits are alpha, and the least
+*   significant bits are blue. On a little-endian CPU such as x86, the least
+*   significant bits of each integer are arranged first in memory, but on a
+*   big-endian CPU such as s390x, the most significant bits are arranged
+*   first. Use these names if the property of a format that is important to
+*   you is the meaning of each bit position within a native-endianness
+*   integer.
+* - In indexed formats such as INDEX4LSB, each pixel is represented by
+*   encoding an index into the palette into the indicated number of bits,
+*   with multiple pixels packed into each byte if appropriate. In LSB
+*   formats, the first (leftmost) pixel is stored in the least-significant
+*   bits of the byte; in MSB formats, it's stored in the most-significant
+*   bits. INDEX8 does not need LSB/MSB variants, because each pixel exactly
+*   fills one byte.
+*
+* The 32-bit byte-array encodings such as RGBA32 are aliases for the
+* appropriate 8888 encoding for the current platform. For example, RGBA32 is
+* an alias for ABGR8888 on little-endian CPUs like x86, or an alias for
+* RGBA8888 on big-endian CPUs.
+*
+* \since This enum is available since SDL 3.2.0.
+*/
+SDL_PixelFormat :: enum u32 {
+    UNKNOWN       :: 0;
+    INDEX1LSB     :: 286261504;
+
+    INDEX1MSB     :: 287310080;
+
+    INDEX2LSB     :: 470811136;
+
+    INDEX2MSB     :: 471859712;
+
+    INDEX4LSB     :: 303039488;
+
+    INDEX4MSB     :: 304088064;
+
+    INDEX8        :: 318769153;
+
+    RGB332        :: 336660481;
+
+    XRGB4444      :: 353504258;
+
+    XBGR4444      :: 357698562;
+
+    XRGB1555      :: 353570562;
+
+    XBGR1555      :: 357764866;
+
+    ARGB4444      :: 355602434;
+
+    RGBA4444      :: 356651010;
+
+    ABGR4444      :: 359796738;
+
+    BGRA4444      :: 360845314;
+
+    ARGB1555      :: 355667970;
+
+    RGBA5551      :: 356782082;
+
+    ABGR1555      :: 359862274;
+
+    BGRA5551      :: 360976386;
+
+    RGB565        :: 353701890;
+
+    BGR565        :: 357896194;
+
+    RGB24         :: 386930691;
+
+    BGR24         :: 390076419;
+
+    XRGB8888      :: 370546692;
+
+    RGBX8888      :: 371595268;
+
+    XBGR8888      :: 374740996;
+
+    BGRX8888      :: 375789572;
+
+    ARGB8888      :: 372645892;
+
+    RGBA8888      :: 373694468;
+
+    ABGR8888      :: 376840196;
+
+    BGRA8888      :: 377888772;
+
+    XRGB2101010   :: 370614276;
+
+    XBGR2101010   :: 374808580;
+
+    ARGB2101010   :: 372711428;
+
+    ABGR2101010   :: 376905732;
+
+    RGB48         :: 403714054;
+
+    BGR48         :: 406859782;
+
+    RGBA64        :: 404766728;
+
+    ARGB64        :: 405815304;
+
+    BGRA64        :: 407912456;
+
+    ABGR64        :: 408961032;
+
+    RGB48_FLOAT   :: 437268486;
+
+    BGR48_FLOAT   :: 440414214;
+
+    RGBA64_FLOAT  :: 438321160;
+
+    ARGB64_FLOAT  :: 439369736;
+
+    BGRA64_FLOAT  :: 441466888;
+
+    ABGR64_FLOAT  :: 442515464;
+
+    RGB96_FLOAT   :: 454057996;
+
+    BGR96_FLOAT   :: 457203724;
+
+    RGBA128_FLOAT :: 455114768;
+
+    ARGB128_FLOAT :: 456163344;
+
+    BGRA128_FLOAT :: 458260496;
+
+    ABGR128_FLOAT :: 459309072;
+
+    YV12          :: 842094169;
+
+    IYUV          :: 1448433993;
+
+    YUY2          :: 844715353;
+
+    UYVY          :: 1498831189;
+
+    YVYU          :: 1431918169;
+
+    NV12          :: 842094158;
+
+    NV21          :: 825382478;
+
+    P010          :: 808530000;
+
+    EXTERNAL_OES  :: 542328143;
+
+    MJPG          :: 1196444237;
+
+    RGBA32        :: 376840196;
+    ARGB32        :: 377888772;
+    BGRA32        :: 372645892;
+    ABGR32        :: 373694468;
+    RGBX32        :: 374740996;
+    XRGB32        :: 375789572;
+    BGRX32        :: 370546692;
+    XBGR32        :: 371595268;
+
+    SDL_PIXELFORMAT_UNKNOWN       :: UNKNOWN;
+    SDL_PIXELFORMAT_INDEX1LSB     :: INDEX1LSB;
+
+    SDL_PIXELFORMAT_INDEX1MSB     :: INDEX1MSB;
+
+    SDL_PIXELFORMAT_INDEX2LSB     :: INDEX2LSB;
+
+    SDL_PIXELFORMAT_INDEX2MSB     :: INDEX2MSB;
+
+    SDL_PIXELFORMAT_INDEX4LSB     :: INDEX4LSB;
+
+    SDL_PIXELFORMAT_INDEX4MSB     :: INDEX4MSB;
+
+    SDL_PIXELFORMAT_INDEX8        :: INDEX8;
+
+    SDL_PIXELFORMAT_RGB332        :: RGB332;
+
+    SDL_PIXELFORMAT_XRGB4444      :: XRGB4444;
+
+    SDL_PIXELFORMAT_XBGR4444      :: XBGR4444;
+
+    SDL_PIXELFORMAT_XRGB1555      :: XRGB1555;
+
+    SDL_PIXELFORMAT_XBGR1555      :: XBGR1555;
+
+    SDL_PIXELFORMAT_ARGB4444      :: ARGB4444;
+
+    SDL_PIXELFORMAT_RGBA4444      :: RGBA4444;
+
+    SDL_PIXELFORMAT_ABGR4444      :: ABGR4444;
+
+    SDL_PIXELFORMAT_BGRA4444      :: BGRA4444;
+
+    SDL_PIXELFORMAT_ARGB1555      :: ARGB1555;
+
+    SDL_PIXELFORMAT_RGBA5551      :: RGBA5551;
+
+    SDL_PIXELFORMAT_ABGR1555      :: ABGR1555;
+
+    SDL_PIXELFORMAT_BGRA5551      :: BGRA5551;
+
+    SDL_PIXELFORMAT_RGB565        :: RGB565;
+
+    SDL_PIXELFORMAT_BGR565        :: BGR565;
+
+    SDL_PIXELFORMAT_RGB24         :: RGB24;
+
+    SDL_PIXELFORMAT_BGR24         :: BGR24;
+
+    SDL_PIXELFORMAT_XRGB8888      :: XRGB8888;
+
+    SDL_PIXELFORMAT_RGBX8888      :: RGBX8888;
+
+    SDL_PIXELFORMAT_XBGR8888      :: XBGR8888;
+
+    SDL_PIXELFORMAT_BGRX8888      :: BGRX8888;
+
+    SDL_PIXELFORMAT_ARGB8888      :: ARGB8888;
+
+    SDL_PIXELFORMAT_RGBA8888      :: RGBA8888;
+
+    SDL_PIXELFORMAT_ABGR8888      :: ABGR8888;
+
+    SDL_PIXELFORMAT_BGRA8888      :: BGRA8888;
+
+    SDL_PIXELFORMAT_XRGB2101010   :: XRGB2101010;
+
+    SDL_PIXELFORMAT_XBGR2101010   :: XBGR2101010;
+
+    SDL_PIXELFORMAT_ARGB2101010   :: ARGB2101010;
+
+    SDL_PIXELFORMAT_ABGR2101010   :: ABGR2101010;
+
+    SDL_PIXELFORMAT_RGB48         :: RGB48;
+
+    SDL_PIXELFORMAT_BGR48         :: BGR48;
+
+    SDL_PIXELFORMAT_RGBA64        :: RGBA64;
+
+    SDL_PIXELFORMAT_ARGB64        :: ARGB64;
+
+    SDL_PIXELFORMAT_BGRA64        :: BGRA64;
+
+    SDL_PIXELFORMAT_ABGR64        :: ABGR64;
+
+    SDL_PIXELFORMAT_RGB48_FLOAT   :: RGB48_FLOAT;
+
+    SDL_PIXELFORMAT_BGR48_FLOAT   :: BGR48_FLOAT;
+
+    SDL_PIXELFORMAT_RGBA64_FLOAT  :: RGBA64_FLOAT;
+
+    SDL_PIXELFORMAT_ARGB64_FLOAT  :: ARGB64_FLOAT;
+
+    SDL_PIXELFORMAT_BGRA64_FLOAT  :: BGRA64_FLOAT;
+
+    SDL_PIXELFORMAT_ABGR64_FLOAT  :: ABGR64_FLOAT;
+
+    SDL_PIXELFORMAT_RGB96_FLOAT   :: RGB96_FLOAT;
+
+    SDL_PIXELFORMAT_BGR96_FLOAT   :: BGR96_FLOAT;
+
+    SDL_PIXELFORMAT_RGBA128_FLOAT :: RGBA128_FLOAT;
+
+    SDL_PIXELFORMAT_ARGB128_FLOAT :: ARGB128_FLOAT;
+
+    SDL_PIXELFORMAT_BGRA128_FLOAT :: BGRA128_FLOAT;
+
+    SDL_PIXELFORMAT_ABGR128_FLOAT :: ABGR128_FLOAT;
+
+    SDL_PIXELFORMAT_YV12          :: YV12;
+
+    SDL_PIXELFORMAT_IYUV          :: IYUV;
+
+    SDL_PIXELFORMAT_YUY2          :: YUY2;
+
+    SDL_PIXELFORMAT_UYVY          :: UYVY;
+
+    SDL_PIXELFORMAT_YVYU          :: YVYU;
+
+    SDL_PIXELFORMAT_NV12          :: NV12;
+
+    SDL_PIXELFORMAT_NV21          :: NV21;
+
+    SDL_PIXELFORMAT_P010          :: P010;
+
+    SDL_PIXELFORMAT_EXTERNAL_OES  :: EXTERNAL_OES;
+
+    SDL_PIXELFORMAT_MJPG          :: MJPG;
+
+    SDL_PIXELFORMAT_RGBA32        :: RGBA32;
+    SDL_PIXELFORMAT_ARGB32        :: ARGB32;
+    SDL_PIXELFORMAT_BGRA32        :: BGRA32;
+    SDL_PIXELFORMAT_ABGR32        :: ABGR32;
+    SDL_PIXELFORMAT_RGBX32        :: RGBX32;
+    SDL_PIXELFORMAT_XRGB32        :: XRGB32;
+    SDL_PIXELFORMAT_BGRX32        :: BGRX32;
+    SDL_PIXELFORMAT_XBGR32        :: XBGR32;
+}
+
+/**
+* Colorspace color type.
+*
+* \since This enum is available since SDL 3.2.0.
+*/
+SDL_ColorType :: enum u32 {
+    UNKNOWN :: 0;
+    RGB     :: 1;
+    YCBCR   :: 2;
+
+    SDL_COLOR_TYPE_UNKNOWN :: UNKNOWN;
+    SDL_COLOR_TYPE_RGB     :: RGB;
+    SDL_COLOR_TYPE_YCBCR   :: YCBCR;
+}
+
+/**
+* Colorspace color range, as described by
+* https://www.itu.int/rec/R-REC-BT.2100-2-201807-I/en
+*
+* \since This enum is available since SDL 3.2.0.
+*/
+SDL_ColorRange :: enum u32 {
+    UNKNOWN :: 0;
+    LIMITED :: 1;
+    FULL    :: 2;
+
+    SDL_COLOR_RANGE_UNKNOWN :: UNKNOWN;
+    SDL_COLOR_RANGE_LIMITED :: LIMITED;
+    SDL_COLOR_RANGE_FULL    :: FULL;
+}
+
+/**
+* Colorspace color primaries, as described by
+* https://www.itu.int/rec/T-REC-H.273-201612-S/en
+*
+* \since This enum is available since SDL 3.2.0.
+*/
+SDL_ColorPrimaries :: enum u32 {
+    UNKNOWN      :: 0;
+    BT709        :: 1;
+    UNSPECIFIED  :: 2;
+    BT470M       :: 4;
+    BT470BG      :: 5;
+    BT601        :: 6;
+    SMPTE240     :: 7;
+    GENERIC_FILM :: 8;
+    BT2020       :: 9;
+    XYZ          :: 10;
+    SMPTE431     :: 11;
+    SMPTE432     :: 12;
+    EBU3213      :: 22;
+    CUSTOM       :: 31;
+
+    SDL_COLOR_PRIMARIES_UNKNOWN      :: UNKNOWN;
+    SDL_COLOR_PRIMARIES_BT709        :: BT709;
+    SDL_COLOR_PRIMARIES_UNSPECIFIED  :: UNSPECIFIED;
+    SDL_COLOR_PRIMARIES_BT470M       :: BT470M;
+    SDL_COLOR_PRIMARIES_BT470BG      :: BT470BG;
+    SDL_COLOR_PRIMARIES_BT601        :: BT601;
+    SDL_COLOR_PRIMARIES_SMPTE240     :: SMPTE240;
+    SDL_COLOR_PRIMARIES_GENERIC_FILM :: GENERIC_FILM;
+    SDL_COLOR_PRIMARIES_BT2020       :: BT2020;
+    SDL_COLOR_PRIMARIES_XYZ          :: XYZ;
+    SDL_COLOR_PRIMARIES_SMPTE431     :: SMPTE431;
+    SDL_COLOR_PRIMARIES_SMPTE432     :: SMPTE432;
+    SDL_COLOR_PRIMARIES_EBU3213      :: EBU3213;
+    SDL_COLOR_PRIMARIES_CUSTOM       :: CUSTOM;
+}
+
+/**
+* Colorspace transfer characteristics.
+*
+* These are as described by https://www.itu.int/rec/T-REC-H.273-201612-S/en
+*
+* \since This enum is available since SDL 3.2.0.
+*/
+SDL_TransferCharacteristics :: enum u32 {
+    UNKNOWN       :: 0;
+    BT709         :: 1;
+    UNSPECIFIED   :: 2;
+    GAMMA22       :: 4;
+    GAMMA28       :: 5;
+    BT601         :: 6;
+    SMPTE240      :: 7;
+    LINEAR        :: 8;
+    LOG100        :: 9;
+    LOG100_SQRT10 :: 10;
+    IEC61966      :: 11;
+    BT1361        :: 12;
+    SRGB          :: 13;
+    BT2020_10BIT  :: 14;
+    BT2020_12BIT  :: 15;
+    PQ            :: 16;
+    SMPTE428      :: 17;
+    HLG           :: 18;
+    CUSTOM        :: 31;
+
+    SDL_TRANSFER_CHARACTERISTICS_UNKNOWN       :: UNKNOWN;
+    SDL_TRANSFER_CHARACTERISTICS_BT709         :: BT709;
+    SDL_TRANSFER_CHARACTERISTICS_UNSPECIFIED   :: UNSPECIFIED;
+    SDL_TRANSFER_CHARACTERISTICS_GAMMA22       :: GAMMA22;
+    SDL_TRANSFER_CHARACTERISTICS_GAMMA28       :: GAMMA28;
+    SDL_TRANSFER_CHARACTERISTICS_BT601         :: BT601;
+    SDL_TRANSFER_CHARACTERISTICS_SMPTE240      :: SMPTE240;
+    SDL_TRANSFER_CHARACTERISTICS_LINEAR        :: LINEAR;
+    SDL_TRANSFER_CHARACTERISTICS_LOG100        :: LOG100;
+    SDL_TRANSFER_CHARACTERISTICS_LOG100_SQRT10 :: LOG100_SQRT10;
+    SDL_TRANSFER_CHARACTERISTICS_IEC61966      :: IEC61966;
+    SDL_TRANSFER_CHARACTERISTICS_BT1361        :: BT1361;
+    SDL_TRANSFER_CHARACTERISTICS_SRGB          :: SRGB;
+    SDL_TRANSFER_CHARACTERISTICS_BT2020_10BIT  :: BT2020_10BIT;
+    SDL_TRANSFER_CHARACTERISTICS_BT2020_12BIT  :: BT2020_12BIT;
+    SDL_TRANSFER_CHARACTERISTICS_PQ            :: PQ;
+    SDL_TRANSFER_CHARACTERISTICS_SMPTE428      :: SMPTE428;
+    SDL_TRANSFER_CHARACTERISTICS_HLG           :: HLG;
+    SDL_TRANSFER_CHARACTERISTICS_CUSTOM        :: CUSTOM;
+}
+
+/**
+* Colorspace matrix coefficients.
+*
+* These are as described by https://www.itu.int/rec/T-REC-H.273-201612-S/en
+*
+* \since This enum is available since SDL 3.2.0.
+*/
+SDL_MatrixCoefficients :: enum u32 {
+    IDENTITY           :: 0;
+    BT709              :: 1;
+    UNSPECIFIED        :: 2;
+    FCC                :: 4;
+    BT470BG            :: 5;
+    BT601              :: 6;
+    SMPTE240           :: 7;
+    YCGCO              :: 8;
+    BT2020_NCL         :: 9;
+    BT2020_CL          :: 10;
+    SMPTE2085          :: 11;
+    CHROMA_DERIVED_NCL :: 12;
+    CHROMA_DERIVED_CL  :: 13;
+    ICTCP              :: 14;
+    CUSTOM             :: 31;
+
+    SDL_MATRIX_COEFFICIENTS_IDENTITY           :: IDENTITY;
+    SDL_MATRIX_COEFFICIENTS_BT709              :: BT709;
+    SDL_MATRIX_COEFFICIENTS_UNSPECIFIED        :: UNSPECIFIED;
+    SDL_MATRIX_COEFFICIENTS_FCC                :: FCC;
+    SDL_MATRIX_COEFFICIENTS_BT470BG            :: BT470BG;
+    SDL_MATRIX_COEFFICIENTS_BT601              :: BT601;
+    SDL_MATRIX_COEFFICIENTS_SMPTE240           :: SMPTE240;
+    SDL_MATRIX_COEFFICIENTS_YCGCO              :: YCGCO;
+    SDL_MATRIX_COEFFICIENTS_BT2020_NCL         :: BT2020_NCL;
+    SDL_MATRIX_COEFFICIENTS_BT2020_CL          :: BT2020_CL;
+    SDL_MATRIX_COEFFICIENTS_SMPTE2085          :: SMPTE2085;
+    SDL_MATRIX_COEFFICIENTS_CHROMA_DERIVED_NCL :: CHROMA_DERIVED_NCL;
+    SDL_MATRIX_COEFFICIENTS_CHROMA_DERIVED_CL  :: CHROMA_DERIVED_CL;
+    SDL_MATRIX_COEFFICIENTS_ICTCP              :: ICTCP;
+    SDL_MATRIX_COEFFICIENTS_CUSTOM             :: CUSTOM;
+}
+
+/**
+* Colorspace chroma sample location.
+*
+* \since This enum is available since SDL 3.2.0.
+*/
+SDL_ChromaLocation :: enum u32 {
+    NONE    :: 0;
+    LEFT    :: 1;
+    CENTER  :: 2;
+    TOPLEFT :: 3;
+
+    SDL_CHROMA_LOCATION_NONE    :: NONE;
+    SDL_CHROMA_LOCATION_LEFT    :: LEFT;
+    SDL_CHROMA_LOCATION_CENTER  :: CENTER;
+    SDL_CHROMA_LOCATION_TOPLEFT :: TOPLEFT;
+}
+
+/**
+* Colorspace definitions.
+*
+* Since similar colorspaces may vary in their details (matrix, transfer
+* function, etc.), this is not an exhaustive list, but rather a
+* representative sample of the kinds of colorspaces supported in SDL.
+*
+* \since This enum is available since SDL 3.2.0.
+*
+* \sa SDL_ColorPrimaries
+* \sa SDL_ColorRange
+* \sa SDL_ColorType
+* \sa SDL_MatrixCoefficients
+* \sa SDL_TransferCharacteristics
+*/
+SDL_Colorspace :: enum u32 {
+    UNKNOWN        :: 0;
+
+    SRGB           :: 301991328;
+
+    SRGB_LINEAR    :: 301991168;
+
+    HDR10          :: 301999616;
+
+    JPEG           :: 570426566;
+
+    BT601_LIMITED  :: 554703046;
+
+    BT601_FULL     :: 571480262;
+
+    BT709_LIMITED  :: 554697761;
+
+    BT709_FULL     :: 571474977;
+
+    BT2020_LIMITED :: 554706441;
+
+    BT2020_FULL    :: 571483657;
+
+    RGB_DEFAULT    :: 301991328;
+    YUV_DEFAULT    :: 554703046;
+
+    SDL_COLORSPACE_UNKNOWN        :: UNKNOWN;
+
+    SDL_COLORSPACE_SRGB           :: SRGB;
+
+    SDL_COLORSPACE_SRGB_LINEAR    :: SRGB_LINEAR;
+
+    SDL_COLORSPACE_HDR10          :: HDR10;
+
+    SDL_COLORSPACE_JPEG           :: JPEG;
+
+    SDL_COLORSPACE_BT601_LIMITED  :: BT601_LIMITED;
+
+    SDL_COLORSPACE_BT601_FULL     :: BT601_FULL;
+
+    SDL_COLORSPACE_BT709_LIMITED  :: BT709_LIMITED;
+
+    SDL_COLORSPACE_BT709_FULL     :: BT709_FULL;
+
+    SDL_COLORSPACE_BT2020_LIMITED :: BT2020_LIMITED;
+
+    SDL_COLORSPACE_BT2020_FULL    :: BT2020_FULL;
+
+    SDL_COLORSPACE_RGB_DEFAULT    :: RGB_DEFAULT;
+    SDL_COLORSPACE_YUV_DEFAULT    :: YUV_DEFAULT;
+}
+
+/**
+* A structure that represents a color as RGBA components.
+*
+* The bits of this structure can be directly reinterpreted as an
+* integer-packed color which uses the SDL_PIXELFORMAT_RGBA32 format
+* (SDL_PIXELFORMAT_ABGR8888 on little-endian systems and
+* SDL_PIXELFORMAT_RGBA8888 on big-endian systems).
+*
+* \since This struct is available since SDL 3.2.0.
+*/
+SDL_Color :: struct {
+    r: Uint8;
+    g: Uint8;
+    b: Uint8;
+    a: Uint8;
+}
+
+/**
+* The bits of this structure can be directly reinterpreted as a float-packed
+* color which uses the SDL_PIXELFORMAT_RGBA128_FLOAT format
+*
+* \since This struct is available since SDL 3.2.0.
+*/
+SDL_FColor :: struct {
+    r: float;
+    g: float;
+    b: float;
+    a: float;
+}
+
+/**
+* A set of indexed colors representing a palette.
+*
+* \since This struct is available since SDL 3.2.0.
+*
+* \sa SDL_SetPaletteColors
+*/
+SDL_Palette :: struct {
+    ncolors:  s32; /**< number of elements in `colors`. */
+    colors:   *SDL_Color; /**< an array of colors, `ncolors` long. */
+    version:  Uint32; /**< internal use only, do not touch. */
+    refcount: s32; /**< internal use only, do not touch. */
+}
+
+/**
+* Details about the format of a pixel.
+*
+* \since This struct is available since SDL 3.2.0.
+*/
+SDL_PixelFormatDetails :: struct {
+    format:          SDL_PixelFormat;
+    bits_per_pixel:  Uint8;
+    bytes_per_pixel: Uint8;
+    padding:         [2] Uint8;
+    Rmask:           Uint32;
+    Gmask:           Uint32;
+    Bmask:           Uint32;
+    Amask:           Uint32;
+    Rbits:           Uint8;
+    Gbits:           Uint8;
+    Bbits:           Uint8;
+    Abits:           Uint8;
+    Rshift:          Uint8;
+    Gshift:          Uint8;
+    Bshift:          Uint8;
+    Ashift:          Uint8;
+}
+
+/**
+* Get the human readable name of a pixel format.
+*
+* \param format the pixel format to query.
+* \returns the human readable name of the specified pixel format or
+*          "SDL_PIXELFORMAT_UNKNOWN" if the format isn't recognized.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*/
+SDL_GetPixelFormatName :: (format: SDL_PixelFormat) -> *u8 #foreign libsdl3;
+
+/**
+* Convert one of the enumerated pixel formats to a bpp value and RGBA masks.
+*
+* \param format one of the SDL_PixelFormat values.
+* \param bpp a bits per pixel value; usually 15, 16, or 32.
+* \param Rmask a pointer filled in with the red mask for the format.
+* \param Gmask a pointer filled in with the green mask for the format.
+* \param Bmask a pointer filled in with the blue mask for the format.
+* \param Amask a pointer filled in with the alpha mask for the format.
+* \returns true on success or false on failure; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_GetPixelFormatForMasks
+*/
+SDL_GetMasksForPixelFormat :: (format: SDL_PixelFormat, bpp: *s32, Rmask: *Uint32, Gmask: *Uint32, Bmask: *Uint32, Amask: *Uint32) -> bool #foreign libsdl3;
+
+/**
+* Convert a bpp value and RGBA masks to an enumerated pixel format.
+*
+* This will return `SDL_PIXELFORMAT_UNKNOWN` if the conversion wasn't
+* possible.
+*
+* \param bpp a bits per pixel value; usually 15, 16, or 32.
+* \param Rmask the red mask for the format.
+* \param Gmask the green mask for the format.
+* \param Bmask the blue mask for the format.
+* \param Amask the alpha mask for the format.
+* \returns the SDL_PixelFormat value corresponding to the format masks, or
+*          SDL_PIXELFORMAT_UNKNOWN if there isn't a match.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_GetMasksForPixelFormat
+*/
+SDL_GetPixelFormatForMasks :: (bpp: s32, Rmask: Uint32, Gmask: Uint32, Bmask: Uint32, Amask: Uint32) -> SDL_PixelFormat #foreign libsdl3;
+
+/**
+* Create an SDL_PixelFormatDetails structure corresponding to a pixel format.
+*
+* Returned structure may come from a shared global cache (i.e. not newly
+* allocated), and hence should not be modified, especially the palette. Weird
+* errors such as `Blit combination not supported` may occur.
+*
+* \param format one of the SDL_PixelFormat values.
+* \returns a pointer to a SDL_PixelFormatDetails structure or NULL on
+*          failure; call SDL_GetError() for more information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*/
+SDL_GetPixelFormatDetails :: (format: SDL_PixelFormat) -> *SDL_PixelFormatDetails #foreign libsdl3;
+
+/**
+* Create a palette structure with the specified number of color entries.
+*
+* The palette entries are initialized to white.
+*
+* \param ncolors represents the number of color entries in the color palette.
+* \returns a new SDL_Palette structure on success or NULL on failure (e.g. if
+*          there wasn't enough memory); call SDL_GetError() for more
+*          information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_DestroyPalette
+* \sa SDL_SetPaletteColors
+* \sa SDL_SetSurfacePalette
+*/
+SDL_CreatePalette :: (ncolors: s32) -> *SDL_Palette #foreign libsdl3;
+
+/**
+* Set a range of colors in a palette.
+*
+* \param palette the SDL_Palette structure to modify.
+* \param colors an array of SDL_Color structures to copy into the palette.
+* \param firstcolor the index of the first palette entry to modify.
+* \param ncolors the number of entries to modify.
+* \returns true on success or false on failure; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety It is safe to call this function from any thread, as long as
+*               the palette is not modified or destroyed in another thread.
+*
+* \since This function is available since SDL 3.2.0.
+*/
+SDL_SetPaletteColors :: (palette: *SDL_Palette, colors: *SDL_Color, firstcolor: s32, ncolors: s32) -> bool #foreign libsdl3;
+
+/**
+* Free a palette created with SDL_CreatePalette().
+*
+* \param palette the SDL_Palette structure to be freed.
+*
+* \threadsafety It is safe to call this function from any thread, as long as
+*               the palette is not modified or destroyed in another thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_CreatePalette
+*/
+SDL_DestroyPalette :: (palette: *SDL_Palette) -> void #foreign libsdl3;
+
+/**
+* Map an RGB triple to an opaque pixel value for a given pixel format.
+*
+* This function maps the RGB color value to the specified pixel format and
+* returns the pixel value best approximating the given RGB color value for
+* the given pixel format.
+*
+* If the format has a palette (8-bit) the index of the closest matching color
+* in the palette will be returned.
+*
+* If the specified pixel format has an alpha component it will be returned as
+* all 1 bits (fully opaque).
+*
+* If the pixel format bpp (color depth) is less than 32-bpp then the unused
+* upper bits of the return value can safely be ignored (e.g., with a 16-bpp
+* format the return value can be assigned to a Uint16, and similarly a Uint8
+* for an 8-bpp format).
+*
+* \param format a pointer to SDL_PixelFormatDetails describing the pixel
+*               format.
+* \param palette an optional palette for indexed formats, may be NULL.
+* \param r the red component of the pixel in the range 0-255.
+* \param g the green component of the pixel in the range 0-255.
+* \param b the blue component of the pixel in the range 0-255.
+* \returns a pixel value.
+*
+* \threadsafety It is safe to call this function from any thread, as long as
+*               the palette is not modified.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_GetPixelFormatDetails
+* \sa SDL_GetRGB
+* \sa SDL_MapRGBA
+* \sa SDL_MapSurfaceRGB
+*/
+SDL_MapRGB :: (format: *SDL_PixelFormatDetails, palette: *SDL_Palette, r: Uint8, g: Uint8, b: Uint8) -> Uint32 #foreign libsdl3;
+
+/**
+* Map an RGBA quadruple to a pixel value for a given pixel format.
+*
+* This function maps the RGBA color value to the specified pixel format and
+* returns the pixel value best approximating the given RGBA color value for
+* the given pixel format.
+*
+* If the specified pixel format has no alpha component the alpha value will
+* be ignored (as it will be in formats with a palette).
+*
+* If the format has a palette (8-bit) the index of the closest matching color
+* in the palette will be returned.
+*
+* If the pixel format bpp (color depth) is less than 32-bpp then the unused
+* upper bits of the return value can safely be ignored (e.g., with a 16-bpp
+* format the return value can be assigned to a Uint16, and similarly a Uint8
+* for an 8-bpp format).
+*
+* \param format a pointer to SDL_PixelFormatDetails describing the pixel
+*               format.
+* \param palette an optional palette for indexed formats, may be NULL.
+* \param r the red component of the pixel in the range 0-255.
+* \param g the green component of the pixel in the range 0-255.
+* \param b the blue component of the pixel in the range 0-255.
+* \param a the alpha component of the pixel in the range 0-255.
+* \returns a pixel value.
+*
+* \threadsafety It is safe to call this function from any thread, as long as
+*               the palette is not modified.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_GetPixelFormatDetails
+* \sa SDL_GetRGBA
+* \sa SDL_MapRGB
+* \sa SDL_MapSurfaceRGBA
+*/
+SDL_MapRGBA :: (format: *SDL_PixelFormatDetails, palette: *SDL_Palette, r: Uint8, g: Uint8, b: Uint8, a: Uint8) -> Uint32 #foreign libsdl3;
+
+/**
+* Get RGB values from a pixel in the specified format.
+*
+* This function uses the entire 8-bit [0..255] range when converting color
+* components from pixel formats with less than 8-bits per RGB component
+* (e.g., a completely white pixel in 16-bit RGB565 format would return [0xff,
+* 0xff, 0xff] not [0xf8, 0xfc, 0xf8]).
+*
+* \param pixelvalue a pixel value.
+* \param format a pointer to SDL_PixelFormatDetails describing the pixel
+*               format.
+* \param palette an optional palette for indexed formats, may be NULL.
+* \param r a pointer filled in with the red component, may be NULL.
+* \param g a pointer filled in with the green component, may be NULL.
+* \param b a pointer filled in with the blue component, may be NULL.
+*
+* \threadsafety It is safe to call this function from any thread, as long as
+*               the palette is not modified.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_GetPixelFormatDetails
+* \sa SDL_GetRGBA
+* \sa SDL_MapRGB
+* \sa SDL_MapRGBA
+*/
+SDL_GetRGB :: (pixelvalue: Uint32, format: *SDL_PixelFormatDetails, palette: *SDL_Palette, r: *Uint8, g: *Uint8, b: *Uint8) -> void #foreign libsdl3;
+
+/**
+* Get RGBA values from a pixel in the specified format.
+*
+* This function uses the entire 8-bit [0..255] range when converting color
+* components from pixel formats with less than 8-bits per RGB component
+* (e.g., a completely white pixel in 16-bit RGB565 format would return [0xff,
+* 0xff, 0xff] not [0xf8, 0xfc, 0xf8]).
+*
+* If the surface has no alpha component, the alpha will be returned as 0xff
+* (100% opaque).
+*
+* \param pixelvalue a pixel value.
+* \param format a pointer to SDL_PixelFormatDetails describing the pixel
+*               format.
+* \param palette an optional palette for indexed formats, may be NULL.
+* \param r a pointer filled in with the red component, may be NULL.
+* \param g a pointer filled in with the green component, may be NULL.
+* \param b a pointer filled in with the blue component, may be NULL.
+* \param a a pointer filled in with the alpha component, may be NULL.
+*
+* \threadsafety It is safe to call this function from any thread, as long as
+*               the palette is not modified.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_GetPixelFormatDetails
+* \sa SDL_GetRGB
+* \sa SDL_MapRGB
+* \sa SDL_MapRGBA
+*/
+SDL_GetRGBA :: (pixelvalue: Uint32, format: *SDL_PixelFormatDetails, palette: *SDL_Palette, r: *Uint8, g: *Uint8, b: *Uint8, a: *Uint8) -> void #foreign libsdl3;
 
 /**
 * An ID that represents a properties set.
@@ -7382,1091 +7402,425 @@ SDL_EnumerateProperties :: (props: SDL_PropertiesID, callback: SDL_EnumerateProp
 */
 SDL_DestroyProperties :: (props: SDL_PropertiesID) -> void #foreign libsdl3;
 
-SDL_Thread :: struct {}
-
 /**
-* A unique numeric ID that identifies a thread.
-*
-* These are different from SDL_Thread objects, which are generally what an
-* application will operate on, but having a way to uniquely identify a thread
-* can be useful at times.
-*
-* \since This datatype is available since SDL 3.2.0.
-*
-* \sa SDL_GetThreadID
-* \sa SDL_GetCurrentThreadID
-*/
-SDL_ThreadID :: Uint64;
-
-/**
-* Thread local storage ID.
-*
-* 0 is the invalid ID. An app can create these and then set data for these
-* IDs that is unique to each thread.
-*
-* \since This datatype is available since SDL 3.2.0.
-*
-* \sa SDL_GetTLS
-* \sa SDL_SetTLS
-*/
-SDL_TLSID :: SDL_AtomicInt;
-
-/**
-* The SDL thread priority.
-*
-* SDL will make system changes as necessary in order to apply the thread
-* priority. Code which attempts to control thread state related to priority
-* should be aware that calling SDL_SetCurrentThreadPriority may alter such
-* state. SDL_HINT_THREAD_PRIORITY_POLICY can be used to control aspects of
-* this behavior.
-*
-* \since This enum is available since SDL 3.2.0.
-*/
-SDL_ThreadPriority :: enum u32 {
-    LOW           :: 0;
-    NORMAL        :: 1;
-    HIGH          :: 2;
-    TIME_CRITICAL :: 3;
-
-    SDL_THREAD_PRIORITY_LOW           :: LOW;
-    SDL_THREAD_PRIORITY_NORMAL        :: NORMAL;
-    SDL_THREAD_PRIORITY_HIGH          :: HIGH;
-    SDL_THREAD_PRIORITY_TIME_CRITICAL :: TIME_CRITICAL;
-}
-
-/**
-* The SDL thread state.
-*
-* The current state of a thread can be checked by calling SDL_GetThreadState.
-*
-* \since This enum is available since SDL 3.2.0.
-*
-* \sa SDL_GetThreadState
-*/
-SDL_ThreadState :: enum u32 {
-    UNKNOWN  :: 0;
-    ALIVE    :: 1;
-    DETACHED :: 2;
-    COMPLETE :: 3;
-
-    SDL_THREAD_UNKNOWN  :: UNKNOWN;
-    SDL_THREAD_ALIVE    :: ALIVE;
-    SDL_THREAD_DETACHED :: DETACHED;
-    SDL_THREAD_COMPLETE :: COMPLETE;
-}
-
-/**
-* The function passed to SDL_CreateThread() as the new thread's entry point.
-*
-* \param data what was passed as `data` to SDL_CreateThread().
-* \returns a value that can be reported through SDL_WaitThread().
-*
-* \since This datatype is available since SDL 3.2.0.
-*/
-SDL_ThreadFunction :: #type (data: *void) -> s32 #c_call;
-
-/* These are the actual functions exported from SDL! Don't use them directly! Use the SDL_CreateThread and SDL_CreateThreadWithProperties macros! */
-/**
-* The actual entry point for SDL_CreateThread.
-*
-* \param fn the SDL_ThreadFunction function to call in the new thread
-* \param name the name of the thread
-* \param data a pointer that is passed to `fn`
-* \param pfnBeginThread the C runtime's _beginthreadex (or whatnot). Can be NULL.
-* \param pfnEndThread the C runtime's _endthreadex (or whatnot). Can be NULL.
-* \returns an opaque pointer to the new thread object on success, NULL if the
-*          new thread could not be created; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*/
-SDL_CreateThreadRuntime :: (fn: SDL_ThreadFunction, name: *u8, data: *void, pfnBeginThread: SDL_FunctionPointer, pfnEndThread: SDL_FunctionPointer) -> *SDL_Thread #foreign libsdl3;
-
-/**
-* The actual entry point for SDL_CreateThreadWithProperties.
-*
-* \param props the properties to use
-* \param pfnBeginThread the C runtime's _beginthreadex (or whatnot). Can be NULL.
-* \param pfnEndThread the C runtime's _endthreadex (or whatnot). Can be NULL.
-* \returns an opaque pointer to the new thread object on success, NULL if the
-*          new thread could not be created; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*/
-SDL_CreateThreadWithPropertiesRuntime :: (props: SDL_PropertiesID, pfnBeginThread: SDL_FunctionPointer, pfnEndThread: SDL_FunctionPointer) -> *SDL_Thread #foreign libsdl3;
-
-/**
-* Get the thread name as it was specified in SDL_CreateThread().
-*
-* \param thread the thread to query.
-* \returns a pointer to a UTF-8 string that names the specified thread, or
-*          NULL if it doesn't have a name.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*/
-SDL_GetThreadName :: (thread: *SDL_Thread) -> *u8 #foreign libsdl3;
-
-/**
-* Get the thread identifier for the current thread.
-*
-* This thread identifier is as reported by the underlying operating system.
-* If SDL is running on a platform that does not support threads the return
-* value will always be zero.
-*
-* This function also returns a valid thread ID when called from the main
-* thread.
-*
-* \returns the ID of the current thread.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_GetThreadID
-*/
-SDL_GetCurrentThreadID :: () -> SDL_ThreadID #foreign libsdl3;
-
-/**
-* Get the thread identifier for the specified thread.
-*
-* This thread identifier is as reported by the underlying operating system.
-* If SDL is running on a platform that does not support threads the return
-* value will always be zero.
-*
-* \param thread the thread to query.
-* \returns the ID of the specified thread, or the ID of the current thread if
-*          `thread` is NULL.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_GetCurrentThreadID
-*/
-SDL_GetThreadID :: (thread: *SDL_Thread) -> SDL_ThreadID #foreign libsdl3;
-
-/**
-* Set the priority for the current thread.
-*
-* Note that some platforms will not let you alter the priority (or at least,
-* promote the thread to a higher priority) at all, and some require you to be
-* an administrator account. Be prepared for this to fail.
-*
-* \param priority the SDL_ThreadPriority to set.
-* \returns true on success or false on failure; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*/
-SDL_SetCurrentThreadPriority :: (priority: SDL_ThreadPriority) -> bool #foreign libsdl3;
-
-/**
-* Wait for a thread to finish.
-*
-* Threads that haven't been detached will remain until this function cleans
-* them up. Not doing so is a resource leak.
-*
-* Once a thread has been cleaned up through this function, the SDL_Thread
-* that references it becomes invalid and should not be referenced again. As
-* such, only one thread may call SDL_WaitThread() on another.
-*
-* The return code from the thread function is placed in the area pointed to
-* by `status`, if `status` is not NULL.
-*
-* You may not wait on a thread that has been used in a call to
-* SDL_DetachThread(). Use either that function or this one, but not both, or
-* behavior is undefined.
-*
-* It is safe to pass a NULL thread to this function; it is a no-op.
-*
-* Note that the thread pointer is freed by this function and is not valid
-* afterward.
-*
-* \param thread the SDL_Thread pointer that was returned from the
-*               SDL_CreateThread() call that started this thread.
-* \param status a pointer filled in with the value returned from the thread
-*               function by its 'return', or -1 if the thread has been
-*               detached or isn't valid, may be NULL.
-*
-* \threadsafety It is safe to call this function from any thread, but only a
-*               single thread can wait any specific thread to finish.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_CreateThread
-* \sa SDL_DetachThread
-*/
-SDL_WaitThread :: (thread: *SDL_Thread, status: *s32) -> void #foreign libsdl3;
-
-/**
-* Get the current state of a thread.
-*
-* \param thread the thread to query.
-* \returns the current state of a thread, or SDL_THREAD_UNKNOWN if the thread
-*          isn't valid.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_ThreadState
-*/
-SDL_GetThreadState :: (thread: *SDL_Thread) -> SDL_ThreadState #foreign libsdl3;
-
-/**
-* Let a thread clean up on exit without intervention.
-*
-* A thread may be "detached" to signify that it should not remain until
-* another thread has called SDL_WaitThread() on it. Detaching a thread is
-* useful for long-running threads that nothing needs to synchronize with or
-* further manage. When a detached thread is done, it simply goes away.
-*
-* There is no way to recover the return code of a detached thread. If you
-* need this, don't detach the thread and instead use SDL_WaitThread().
-*
-* Once a thread is detached, you should usually assume the SDL_Thread isn't
-* safe to reference again, as it will become invalid immediately upon the
-* detached thread's exit, instead of remaining until someone has called
-* SDL_WaitThread() to finally clean it up. As such, don't detach the same
-* thread more than once.
-*
-* If a thread has already exited when passed to SDL_DetachThread(), it will
-* stop waiting for a call to SDL_WaitThread() and clean up immediately. It is
-* not safe to detach a thread that might be used with SDL_WaitThread().
-*
-* You may not call SDL_WaitThread() on a thread that has been detached. Use
-* either that function or this one, but not both, or behavior is undefined.
-*
-* It is safe to pass NULL to this function; it is a no-op.
-*
-* \param thread the SDL_Thread pointer that was returned from the
-*               SDL_CreateThread() call that started this thread.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_CreateThread
-* \sa SDL_WaitThread
-*/
-SDL_DetachThread :: (thread: *SDL_Thread) -> void #foreign libsdl3;
-
-/**
-* Get the current thread's value associated with a thread local storage ID.
-*
-* \param id a pointer to the thread local storage ID, may not be NULL.
-* \returns the value associated with the ID for the current thread or NULL if
-*          no value has been set; call SDL_GetError() for more information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_SetTLS
-*/
-SDL_GetTLS :: (id: *SDL_TLSID) -> *void #foreign libsdl3;
-
-/**
-* The callback used to cleanup data passed to SDL_SetTLS.
-*
-* This is called when a thread exits, to allow an app to free any resources.
-*
-* \param value a pointer previously handed to SDL_SetTLS.
-*
-* \since This datatype is available since SDL 3.2.0.
-*
-* \sa SDL_SetTLS
-*/
-SDL_TLSDestructorCallback :: #type (value: *void) -> void #c_call;
-
-/**
-* Set the current thread's value associated with a thread local storage ID.
-*
-* If the thread local storage ID is not initialized (the value is 0), a new
-* ID will be created in a thread-safe way, so all calls using a pointer to
-* the same ID will refer to the same local storage.
-*
-* Note that replacing a value from a previous call to this function on the
-* same thread does _not_ call the previous value's destructor!
-*
-* `destructor` can be NULL; it is assumed that `value` does not need to be
-* cleaned up if so.
-*
-* \param id a pointer to the thread local storage ID, may not be NULL.
-* \param value the value to associate with the ID for the current thread.
-* \param destructor a function called when the thread exits, to free the
-*                   value, may be NULL.
-* \returns true on success or false on failure; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_GetTLS
-*/
-SDL_SetTLS :: (id: *SDL_TLSID, value: *void, destructor: SDL_TLSDestructorCallback) -> bool #foreign libsdl3;
-
-/**
-* Cleanup all TLS data for this thread.
-*
-* If you are creating your threads outside of SDL and then calling SDL
-* functions, you should call this function before your thread exits, to
-* properly clean up SDL memory.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*/
-SDL_CleanupTLS :: () -> void #foreign libsdl3;
-
-SDL_Mutex :: struct {}
-
-/**
-* Create a new mutex.
-*
-* All newly-created mutexes begin in the _unlocked_ state.
-*
-* Calls to SDL_LockMutex() will not return while the mutex is locked by
-* another thread. See SDL_TryLockMutex() to attempt to lock without blocking.
-*
-* SDL mutexes are reentrant.
-*
-* \returns the initialized and unlocked mutex or NULL on failure; call
-*          SDL_GetError() for more information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_DestroyMutex
-* \sa SDL_LockMutex
-* \sa SDL_TryLockMutex
-* \sa SDL_UnlockMutex
-*/
-SDL_CreateMutex :: () -> *SDL_Mutex #foreign libsdl3;
-
-/**
-* Lock the mutex.
-*
-* This will block until the mutex is available, which is to say it is in the
-* unlocked state and the OS has chosen the caller as the next thread to lock
-* it. Of all threads waiting to lock the mutex, only one may do so at a time.
-*
-* It is legal for the owning thread to lock an already-locked mutex. It must
-* unlock it the same number of times before it is actually made available for
-* other threads in the system (this is known as a "recursive mutex").
-*
-* This function does not fail; if mutex is NULL, it will return immediately
-* having locked nothing. If the mutex is valid, this function will always
-* block until it can lock the mutex, and return with it locked.
-*
-* \param mutex the mutex to lock.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_TryLockMutex
-* \sa SDL_UnlockMutex
-*/
-SDL_LockMutex :: (mutex: *SDL_Mutex) -> void #foreign libsdl3;
-
-/**
-* Try to lock a mutex without blocking.
-*
-* This works just like SDL_LockMutex(), but if the mutex is not available,
-* this function returns false immediately.
-*
-* This technique is useful if you need exclusive access to a resource but
-* don't want to wait for it, and will return to it to try again later.
-*
-* This function returns true if passed a NULL mutex.
-*
-* \param mutex the mutex to try to lock.
-* \returns true on success, false if the mutex would block.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_LockMutex
-* \sa SDL_UnlockMutex
-*/
-SDL_TryLockMutex :: (mutex: *SDL_Mutex) -> bool #foreign libsdl3;
-
-/**
-* Unlock the mutex.
-*
-* It is legal for the owning thread to lock an already-locked mutex. It must
-* unlock it the same number of times before it is actually made available for
-* other threads in the system (this is known as a "recursive mutex").
-*
-* It is illegal to unlock a mutex that has not been locked by the current
-* thread, and doing so results in undefined behavior.
-*
-* \param mutex the mutex to unlock.
-*
-* \threadsafety This call must be paired with a previous locking call on the
-*               same thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_LockMutex
-* \sa SDL_TryLockMutex
-*/
-SDL_UnlockMutex :: (mutex: *SDL_Mutex) -> void #foreign libsdl3;
-
-/**
-* Destroy a mutex created with SDL_CreateMutex().
-*
-* This function must be called on any mutex that is no longer needed. Failure
-* to destroy a mutex will result in a system memory or resource leak. While
-* it is safe to destroy a mutex that is _unlocked_, it is not safe to attempt
-* to destroy a locked mutex, and may result in undefined behavior depending
-* on the platform.
-*
-* \param mutex the mutex to destroy.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_CreateMutex
-*/
-SDL_DestroyMutex :: (mutex: *SDL_Mutex) -> void #foreign libsdl3;
-
-SDL_RWLock :: struct {}
-
-/**
-* Create a new read/write lock.
-*
-* A read/write lock is useful for situations where you have multiple threads
-* trying to access a resource that is rarely updated. All threads requesting
-* a read-only lock will be allowed to run in parallel; if a thread requests a
-* write lock, it will be provided exclusive access. This makes it safe for
-* multiple threads to use a resource at the same time if they promise not to
-* change it, and when it has to be changed, the rwlock will serve as a
-* gateway to make sure those changes can be made safely.
-*
-* In the right situation, a rwlock can be more efficient than a mutex, which
-* only lets a single thread proceed at a time, even if it won't be modifying
-* the data.
-*
-* All newly-created read/write locks begin in the _unlocked_ state.
-*
-* Calls to SDL_LockRWLockForReading() and SDL_LockRWLockForWriting will not
-* return while the rwlock is locked _for writing_ by another thread. See
-* SDL_TryLockRWLockForReading() and SDL_TryLockRWLockForWriting() to attempt
-* to lock without blocking.
-*
-* SDL read/write locks are only recursive for read-only locks! They are not
-* guaranteed to be fair, or provide access in a FIFO manner! They are not
-* guaranteed to favor writers. You may not lock a rwlock for both read-only
-* and write access at the same time from the same thread (so you can't
-* promote your read-only lock to a write lock without unlocking first).
-*
-* \returns the initialized and unlocked read/write lock or NULL on failure;
-*          call SDL_GetError() for more information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_DestroyRWLock
-* \sa SDL_LockRWLockForReading
-* \sa SDL_LockRWLockForWriting
-* \sa SDL_TryLockRWLockForReading
-* \sa SDL_TryLockRWLockForWriting
-* \sa SDL_UnlockRWLock
-*/
-SDL_CreateRWLock :: () -> *SDL_RWLock #foreign libsdl3;
-
-/**
-* Lock the read/write lock for _read only_ operations.
-*
-* This will block until the rwlock is available, which is to say it is not
-* locked for writing by any other thread. Of all threads waiting to lock the
-* rwlock, all may do so at the same time as long as they are requesting
-* read-only access; if a thread wants to lock for writing, only one may do so
-* at a time, and no other threads, read-only or not, may hold the lock at the
-* same time.
-*
-* It is legal for the owning thread to lock an already-locked rwlock for
-* reading. It must unlock it the same number of times before it is actually
-* made available for other threads in the system (this is known as a
-* "recursive rwlock").
-*
-* Note that locking for writing is not recursive (this is only available to
-* read-only locks).
-*
-* It is illegal to request a read-only lock from a thread that already holds
-* the write lock. Doing so results in undefined behavior. Unlock the write
-* lock before requesting a read-only lock. (But, of course, if you have the
-* write lock, you don't need further locks to read in any case.)
-*
-* This function does not fail; if rwlock is NULL, it will return immediately
-* having locked nothing. If the rwlock is valid, this function will always
-* block until it can lock the mutex, and return with it locked.
-*
-* \param rwlock the read/write lock to lock.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_LockRWLockForWriting
-* \sa SDL_TryLockRWLockForReading
-* \sa SDL_UnlockRWLock
-*/
-SDL_LockRWLockForReading :: (rwlock: *SDL_RWLock) -> void #foreign libsdl3;
-
-/**
-* Lock the read/write lock for _write_ operations.
-*
-* This will block until the rwlock is available, which is to say it is not
-* locked for reading or writing by any other thread. Only one thread may hold
-* the lock when it requests write access; all other threads, whether they
-* also want to write or only want read-only access, must wait until the
-* writer thread has released the lock.
-*
-* It is illegal for the owning thread to lock an already-locked rwlock for
-* writing (read-only may be locked recursively, writing can not). Doing so
-* results in undefined behavior.
-*
-* It is illegal to request a write lock from a thread that already holds a
-* read-only lock. Doing so results in undefined behavior. Unlock the
-* read-only lock before requesting a write lock.
-*
-* This function does not fail; if rwlock is NULL, it will return immediately
-* having locked nothing. If the rwlock is valid, this function will always
-* block until it can lock the mutex, and return with it locked.
-*
-* \param rwlock the read/write lock to lock.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_LockRWLockForReading
-* \sa SDL_TryLockRWLockForWriting
-* \sa SDL_UnlockRWLock
-*/
-SDL_LockRWLockForWriting :: (rwlock: *SDL_RWLock) -> void #foreign libsdl3;
-
-/**
-* Try to lock a read/write lock _for reading_ without blocking.
-*
-* This works just like SDL_LockRWLockForReading(), but if the rwlock is not
-* available, then this function returns false immediately.
-*
-* This technique is useful if you need access to a resource but don't want to
-* wait for it, and will return to it to try again later.
-*
-* Trying to lock for read-only access can succeed if other threads are
-* holding read-only locks, as this won't prevent access.
-*
-* This function returns true if passed a NULL rwlock.
-*
-* \param rwlock the rwlock to try to lock.
-* \returns true on success, false if the lock would block.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_LockRWLockForReading
-* \sa SDL_TryLockRWLockForWriting
-* \sa SDL_UnlockRWLock
-*/
-SDL_TryLockRWLockForReading :: (rwlock: *SDL_RWLock) -> bool #foreign libsdl3;
-
-/**
-* Try to lock a read/write lock _for writing_ without blocking.
-*
-* This works just like SDL_LockRWLockForWriting(), but if the rwlock is not
-* available, then this function returns false immediately.
-*
-* This technique is useful if you need exclusive access to a resource but
-* don't want to wait for it, and will return to it to try again later.
-*
-* It is illegal for the owning thread to lock an already-locked rwlock for
-* writing (read-only may be locked recursively, writing can not). Doing so
-* results in undefined behavior.
-*
-* It is illegal to request a write lock from a thread that already holds a
-* read-only lock. Doing so results in undefined behavior. Unlock the
-* read-only lock before requesting a write lock.
-*
-* This function returns true if passed a NULL rwlock.
-*
-* \param rwlock the rwlock to try to lock.
-* \returns true on success, false if the lock would block.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_LockRWLockForWriting
-* \sa SDL_TryLockRWLockForReading
-* \sa SDL_UnlockRWLock
-*/
-SDL_TryLockRWLockForWriting :: (rwlock: *SDL_RWLock) -> bool #foreign libsdl3;
-
-/**
-* Unlock the read/write lock.
-*
-* Use this function to unlock the rwlock, whether it was locked for read-only
-* or write operations.
-*
-* It is legal for the owning thread to lock an already-locked read-only lock.
-* It must unlock it the same number of times before it is actually made
-* available for other threads in the system (this is known as a "recursive
-* rwlock").
-*
-* It is illegal to unlock a rwlock that has not been locked by the current
-* thread, and doing so results in undefined behavior.
-*
-* \param rwlock the rwlock to unlock.
-*
-* \threadsafety This call must be paired with a previous locking call on the
-*               same thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_LockRWLockForReading
-* \sa SDL_LockRWLockForWriting
-* \sa SDL_TryLockRWLockForReading
-* \sa SDL_TryLockRWLockForWriting
-*/
-SDL_UnlockRWLock :: (rwlock: *SDL_RWLock) -> void #foreign libsdl3;
-
-/**
-* Destroy a read/write lock created with SDL_CreateRWLock().
-*
-* This function must be called on any read/write lock that is no longer
-* needed. Failure to destroy a rwlock will result in a system memory or
-* resource leak. While it is safe to destroy a rwlock that is _unlocked_, it
-* is not safe to attempt to destroy a locked rwlock, and may result in
-* undefined behavior depending on the platform.
-*
-* \param rwlock the rwlock to destroy.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_CreateRWLock
-*/
-SDL_DestroyRWLock :: (rwlock: *SDL_RWLock) -> void #foreign libsdl3;
-
-SDL_Semaphore :: struct {}
-
-/**
-* Create a semaphore.
-*
-* This function creates a new semaphore and initializes it with the value
-* `initial_value`. Each wait operation on the semaphore will atomically
-* decrement the semaphore value and potentially block if the semaphore value
-* is 0. Each post operation will atomically increment the semaphore value and
-* wake waiting threads and allow them to retry the wait operation.
-*
-* \param initial_value the starting value of the semaphore.
-* \returns a new semaphore or NULL on failure; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_DestroySemaphore
-* \sa SDL_SignalSemaphore
-* \sa SDL_TryWaitSemaphore
-* \sa SDL_GetSemaphoreValue
-* \sa SDL_WaitSemaphore
-* \sa SDL_WaitSemaphoreTimeout
-*/
-SDL_CreateSemaphore :: (initial_value: Uint32) -> *SDL_Semaphore #foreign libsdl3;
-
-/**
-* Destroy a semaphore.
-*
-* It is not safe to destroy a semaphore if there are threads currently
-* waiting on it.
-*
-* \param sem the semaphore to destroy.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_CreateSemaphore
-*/
-SDL_DestroySemaphore :: (sem: *SDL_Semaphore) -> void #foreign libsdl3;
-
-/**
-* Wait until a semaphore has a positive value and then decrements it.
-*
-* This function suspends the calling thread until the semaphore pointed to by
-* `sem` has a positive value, and then atomically decrement the semaphore
-* value.
-*
-* This function is the equivalent of calling SDL_WaitSemaphoreTimeout() with
-* a time length of -1.
-*
-* \param sem the semaphore wait on.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_SignalSemaphore
-* \sa SDL_TryWaitSemaphore
-* \sa SDL_WaitSemaphoreTimeout
-*/
-SDL_WaitSemaphore :: (sem: *SDL_Semaphore) -> void #foreign libsdl3;
-
-/**
-* See if a semaphore has a positive value and decrement it if it does.
-*
-* This function checks to see if the semaphore pointed to by `sem` has a
-* positive value and atomically decrements the semaphore value if it does. If
-* the semaphore doesn't have a positive value, the function immediately
-* returns false.
-*
-* \param sem the semaphore to wait on.
-* \returns true if the wait succeeds, false if the wait would block.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_SignalSemaphore
-* \sa SDL_WaitSemaphore
-* \sa SDL_WaitSemaphoreTimeout
-*/
-SDL_TryWaitSemaphore :: (sem: *SDL_Semaphore) -> bool #foreign libsdl3;
-
-/**
-* Wait until a semaphore has a positive value and then decrements it.
-*
-* This function suspends the calling thread until either the semaphore
-* pointed to by `sem` has a positive value or the specified time has elapsed.
-* If the call is successful it will atomically decrement the semaphore value.
-*
-* \param sem the semaphore to wait on.
-* \param timeoutMS the length of the timeout, in milliseconds, or -1 to wait
-*                  indefinitely.
-* \returns true if the wait succeeds or false if the wait times out.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_SignalSemaphore
-* \sa SDL_TryWaitSemaphore
-* \sa SDL_WaitSemaphore
-*/
-SDL_WaitSemaphoreTimeout :: (sem: *SDL_Semaphore, timeoutMS: Sint32) -> bool #foreign libsdl3;
-
-/**
-* Atomically increment a semaphore's value and wake waiting threads.
-*
-* \param sem the semaphore to increment.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_TryWaitSemaphore
-* \sa SDL_WaitSemaphore
-* \sa SDL_WaitSemaphoreTimeout
-*/
-SDL_SignalSemaphore :: (sem: *SDL_Semaphore) -> void #foreign libsdl3;
-
-/**
-* Get the current value of a semaphore.
-*
-* \param sem the semaphore to query.
-* \returns the current value of the semaphore.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*/
-SDL_GetSemaphoreValue :: (sem: *SDL_Semaphore) -> Uint32 #foreign libsdl3;
-
-SDL_Condition :: struct {}
-
-/**
-* Create a condition variable.
-*
-* \returns a new condition variable or NULL on failure; call SDL_GetError()
-*          for more information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_BroadcastCondition
-* \sa SDL_SignalCondition
-* \sa SDL_WaitCondition
-* \sa SDL_WaitConditionTimeout
-* \sa SDL_DestroyCondition
-*/
-SDL_CreateCondition :: () -> *SDL_Condition #foreign libsdl3;
-
-/**
-* Destroy a condition variable.
-*
-* \param cond the condition variable to destroy.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_CreateCondition
-*/
-SDL_DestroyCondition :: (cond: *SDL_Condition) -> void #foreign libsdl3;
-
-/**
-* Restart one of the threads that are waiting on the condition variable.
-*
-* \param cond the condition variable to signal.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_BroadcastCondition
-* \sa SDL_WaitCondition
-* \sa SDL_WaitConditionTimeout
-*/
-SDL_SignalCondition :: (cond: *SDL_Condition) -> void #foreign libsdl3;
-
-/**
-* Restart all threads that are waiting on the condition variable.
-*
-* \param cond the condition variable to signal.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_SignalCondition
-* \sa SDL_WaitCondition
-* \sa SDL_WaitConditionTimeout
-*/
-SDL_BroadcastCondition :: (cond: *SDL_Condition) -> void #foreign libsdl3;
-
-/**
-* Wait until a condition variable is signaled.
-*
-* This function unlocks the specified `mutex` and waits for another thread to
-* call SDL_SignalCondition() or SDL_BroadcastCondition() on the condition
-* variable `cond`. Once the condition variable is signaled, the mutex is
-* re-locked and the function returns.
-*
-* The mutex must be locked before calling this function. Locking the mutex
-* recursively (more than once) is not supported and leads to undefined
-* behavior.
-*
-* This function is the equivalent of calling SDL_WaitConditionTimeout() with
-* a time length of -1.
-*
-* \param cond the condition variable to wait on.
-* \param mutex the mutex used to coordinate thread access.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_BroadcastCondition
-* \sa SDL_SignalCondition
-* \sa SDL_WaitConditionTimeout
-*/
-SDL_WaitCondition :: (cond: *SDL_Condition, mutex: *SDL_Mutex) -> void #foreign libsdl3;
-
-/**
-* Wait until a condition variable is signaled or a certain time has passed.
-*
-* This function unlocks the specified `mutex` and waits for another thread to
-* call SDL_SignalCondition() or SDL_BroadcastCondition() on the condition
-* variable `cond`, or for the specified time to elapse. Once the condition
-* variable is signaled or the time elapsed, the mutex is re-locked and the
-* function returns.
-*
-* The mutex must be locked before calling this function. Locking the mutex
-* recursively (more than once) is not supported and leads to undefined
-* behavior.
-*
-* \param cond the condition variable to wait on.
-* \param mutex the mutex used to coordinate thread access.
-* \param timeoutMS the maximum time to wait, in milliseconds, or -1 to wait
-*                  indefinitely.
-* \returns true if the condition variable is signaled, false if the condition
-*          is not signaled in the allotted time.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_BroadcastCondition
-* \sa SDL_SignalCondition
-* \sa SDL_WaitCondition
-*/
-SDL_WaitConditionTimeout :: (cond: *SDL_Condition, mutex: *SDL_Mutex, timeoutMS: Sint32) -> bool #foreign libsdl3;
-
-/**
-* The current status of an SDL_InitState structure.
-*
-* \since This enum is available since SDL 3.2.0.
-*/
-SDL_InitStatus :: enum u32 {
-    UNINITIALIZED  :: 0;
-    INITIALIZING   :: 1;
-    INITIALIZED    :: 2;
-    UNINITIALIZING :: 3;
-
-    SDL_INIT_STATUS_UNINITIALIZED  :: UNINITIALIZED;
-    SDL_INIT_STATUS_INITIALIZING   :: INITIALIZING;
-    SDL_INIT_STATUS_INITIALIZED    :: INITIALIZED;
-    SDL_INIT_STATUS_UNINITIALIZING :: UNINITIALIZING;
-}
-
-/**
-* A structure used for thread-safe initialization and shutdown.
-*
-* Here is an example of using this:
-*
-* ```c
-*    static SDL_InitState init;
-*
-*    bool InitSystem(void)
-*    {
-*        if (!SDL_ShouldInit(&init)) {
-*            // The system is initialized
-*            return true;
-*        }
-*
-*        // At this point, you should not leave this function without calling SDL_SetInitialized()
-*
-*        bool initialized = DoInitTasks();
-*        SDL_SetInitialized(&init, initialized);
-*        return initialized;
-*    }
-*
-*    bool UseSubsystem(void)
-*    {
-*        if (SDL_ShouldInit(&init)) {
-*            // Error, the subsystem isn't initialized
-*            SDL_SetInitialized(&init, false);
-*            return false;
-*        }
-*
-*        // Do work using the initialized subsystem
-*
-*        return true;
-*    }
-*
-*    void QuitSystem(void)
-*    {
-*        if (!SDL_ShouldQuit(&init)) {
-*            // The system is not initialized
-*            return;
-*        }
-*
-*        // At this point, you should not leave this function without calling SDL_SetInitialized()
-*
-*        DoQuitTasks();
-*        SDL_SetInitialized(&init, false);
-*    }
-* ```
-*
-* Note that this doesn't protect any resources created during initialization,
-* or guarantee that nobody is using those resources during cleanup. You
-* should use other mechanisms to protect those, if that's a concern for your
-* code.
+* The structure that defines a point (using integers).
 *
 * \since This struct is available since SDL 3.2.0.
+*
+* \sa SDL_GetRectEnclosingPoints
+* \sa SDL_PointInRect
 */
-SDL_InitState :: struct {
-    status:   SDL_AtomicInt;
-    thread:   SDL_ThreadID;
-    reserved: *void;
+SDL_Point :: struct {
+    x: s32;
+    y: s32;
 }
 
 /**
-* Return whether initialization should be done.
+* The structure that defines a point (using floating point values).
 *
-* This function checks the passed in state and if initialization should be
-* done, sets the status to `SDL_INIT_STATUS_INITIALIZING` and returns true.
-* If another thread is already modifying this state, it will wait until
-* that's done before returning.
+* \since This struct is available since SDL 3.2.0.
 *
-* If this function returns true, the calling code must call
-* SDL_SetInitialized() to complete the initialization.
-*
-* \param state the initialization state to check.
-* \returns true if initialization needs to be done, false otherwise.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_SetInitialized
-* \sa SDL_ShouldQuit
+* \sa SDL_GetRectEnclosingPointsFloat
+* \sa SDL_PointInRectFloat
 */
-SDL_ShouldInit :: (state: *SDL_InitState) -> bool #foreign libsdl3;
+SDL_FPoint :: struct {
+    x: float;
+    y: float;
+}
 
 /**
-* Return whether cleanup should be done.
+* A rectangle, with the origin at the upper left (using integers).
 *
-* This function checks the passed in state and if cleanup should be done,
-* sets the status to `SDL_INIT_STATUS_UNINITIALIZING` and returns true.
+* \since This struct is available since SDL 3.2.0.
 *
-* If this function returns true, the calling code must call
-* SDL_SetInitialized() to complete the cleanup.
-*
-* \param state the initialization state to check.
-* \returns true if cleanup needs to be done, false otherwise.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_SetInitialized
-* \sa SDL_ShouldInit
+* \sa SDL_RectEmpty
+* \sa SDL_RectsEqual
+* \sa SDL_HasRectIntersection
+* \sa SDL_GetRectIntersection
+* \sa SDL_GetRectAndLineIntersection
+* \sa SDL_GetRectUnion
+* \sa SDL_GetRectEnclosingPoints
 */
-SDL_ShouldQuit :: (state: *SDL_InitState) -> bool #foreign libsdl3;
+SDL_Rect :: struct {
+    x: s32;
+    y: s32;
+    w: s32;
+    h: s32;
+}
 
 /**
-* Finish an initialization state transition.
+* A rectangle stored using floating point values.
 *
-* This function sets the status of the passed in state to
-* `SDL_INIT_STATUS_INITIALIZED` or `SDL_INIT_STATUS_UNINITIALIZED` and allows
-* any threads waiting for the status to proceed.
+* The origin of the coordinate space is in the top-left, with increasing
+* values moving down and right. The properties `x` and `y` represent the
+* coordinates of the top-left corner of the rectangle.
 *
-* \param state the initialization state to check.
-* \param initialized the new initialization state.
+* \since This struct is available since SDL 3.2.0.
+*
+* \sa SDL_RectEmptyFloat
+* \sa SDL_RectsEqualFloat
+* \sa SDL_RectsEqualEpsilon
+* \sa SDL_HasRectIntersectionFloat
+* \sa SDL_GetRectIntersectionFloat
+* \sa SDL_GetRectAndLineIntersectionFloat
+* \sa SDL_GetRectUnionFloat
+* \sa SDL_GetRectEnclosingPointsFloat
+* \sa SDL_PointInRectFloat
+*/
+SDL_FRect :: struct {
+    x: float;
+    y: float;
+    w: float;
+    h: float;
+}
+
+/**
+* Determine whether two rectangles intersect.
+*
+* If either pointer is NULL the function will return false.
+*
+* \param A an SDL_Rect structure representing the first rectangle.
+* \param B an SDL_Rect structure representing the second rectangle.
+* \returns true if there is an intersection, false otherwise.
 *
 * \threadsafety It is safe to call this function from any thread.
 *
 * \since This function is available since SDL 3.2.0.
 *
-* \sa SDL_ShouldInit
-* \sa SDL_ShouldQuit
+* \sa SDL_GetRectIntersection
 */
-SDL_SetInitialized :: (state: *SDL_InitState, initialized: bool) -> void #foreign libsdl3;
+SDL_HasRectIntersection :: (A: *SDL_Rect, B: *SDL_Rect) -> bool #foreign libsdl3;
+
+/**
+* Calculate the intersection of two rectangles.
+*
+* If `result` is NULL then this function will return false.
+*
+* \param A an SDL_Rect structure representing the first rectangle.
+* \param B an SDL_Rect structure representing the second rectangle.
+* \param result an SDL_Rect structure filled in with the intersection of
+*               rectangles `A` and `B`.
+* \returns true if there is an intersection, false otherwise.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_HasRectIntersection
+*/
+SDL_GetRectIntersection :: (A: *SDL_Rect, B: *SDL_Rect, result: *SDL_Rect) -> bool #foreign libsdl3;
+
+/**
+* Calculate the union of two rectangles.
+*
+* \param A an SDL_Rect structure representing the first rectangle.
+* \param B an SDL_Rect structure representing the second rectangle.
+* \param result an SDL_Rect structure filled in with the union of rectangles
+*               `A` and `B`.
+* \returns true on success or false on failure; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*/
+SDL_GetRectUnion :: (A: *SDL_Rect, B: *SDL_Rect, result: *SDL_Rect) -> bool #foreign libsdl3;
+
+/**
+* Calculate a minimal rectangle enclosing a set of points.
+*
+* If `clip` is not NULL then only points inside of the clipping rectangle are
+* considered.
+*
+* \param points an array of SDL_Point structures representing points to be
+*               enclosed.
+* \param count the number of structures in the `points` array.
+* \param clip an SDL_Rect used for clipping or NULL to enclose all points.
+* \param result an SDL_Rect structure filled in with the minimal enclosing
+*               rectangle.
+* \returns true if any points were enclosed or false if all the points were
+*          outside of the clipping rectangle.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*/
+SDL_GetRectEnclosingPoints :: (points: *SDL_Point, count: s32, clip: *SDL_Rect, result: *SDL_Rect) -> bool #foreign libsdl3;
+
+/**
+* Calculate the intersection of a rectangle and line segment.
+*
+* This function is used to clip a line segment to a rectangle. A line segment
+* contained entirely within the rectangle or that does not intersect will
+* remain unchanged. A line segment that crosses the rectangle at either or
+* both ends will be clipped to the boundary of the rectangle and the new
+* coordinates saved in `X1`, `Y1`, `X2`, and/or `Y2` as necessary.
+*
+* \param rect an SDL_Rect structure representing the rectangle to intersect.
+* \param X1 a pointer to the starting X-coordinate of the line.
+* \param Y1 a pointer to the starting Y-coordinate of the line.
+* \param X2 a pointer to the ending X-coordinate of the line.
+* \param Y2 a pointer to the ending Y-coordinate of the line.
+* \returns true if there is an intersection, false otherwise.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*/
+SDL_GetRectAndLineIntersection :: (rect: *SDL_Rect, X1: *s32, Y1: *s32, X2: *s32, Y2: *s32) -> bool #foreign libsdl3;
+
+/**
+* Determine whether two rectangles intersect with float precision.
+*
+* If either pointer is NULL the function will return false.
+*
+* \param A an SDL_FRect structure representing the first rectangle.
+* \param B an SDL_FRect structure representing the second rectangle.
+* \returns true if there is an intersection, false otherwise.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_GetRectIntersectionFloat
+*/
+SDL_HasRectIntersectionFloat :: (A: *SDL_FRect, B: *SDL_FRect) -> bool #foreign libsdl3;
+
+/**
+* Calculate the intersection of two rectangles with float precision.
+*
+* If `result` is NULL then this function will return false.
+*
+* \param A an SDL_FRect structure representing the first rectangle.
+* \param B an SDL_FRect structure representing the second rectangle.
+* \param result an SDL_FRect structure filled in with the intersection of
+*               rectangles `A` and `B`.
+* \returns true if there is an intersection, false otherwise.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_HasRectIntersectionFloat
+*/
+SDL_GetRectIntersectionFloat :: (A: *SDL_FRect, B: *SDL_FRect, result: *SDL_FRect) -> bool #foreign libsdl3;
+
+/**
+* Calculate the union of two rectangles with float precision.
+*
+* \param A an SDL_FRect structure representing the first rectangle.
+* \param B an SDL_FRect structure representing the second rectangle.
+* \param result an SDL_FRect structure filled in with the union of rectangles
+*               `A` and `B`.
+* \returns true on success or false on failure; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*/
+SDL_GetRectUnionFloat :: (A: *SDL_FRect, B: *SDL_FRect, result: *SDL_FRect) -> bool #foreign libsdl3;
+
+/**
+* Calculate a minimal rectangle enclosing a set of points with float
+* precision.
+*
+* If `clip` is not NULL then only points inside of the clipping rectangle are
+* considered.
+*
+* \param points an array of SDL_FPoint structures representing points to be
+*               enclosed.
+* \param count the number of structures in the `points` array.
+* \param clip an SDL_FRect used for clipping or NULL to enclose all points.
+* \param result an SDL_FRect structure filled in with the minimal enclosing
+*               rectangle.
+* \returns true if any points were enclosed or false if all the points were
+*          outside of the clipping rectangle.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*/
+SDL_GetRectEnclosingPointsFloat :: (points: *SDL_FPoint, count: s32, clip: *SDL_FRect, result: *SDL_FRect) -> bool #foreign libsdl3;
+
+/**
+* Calculate the intersection of a rectangle and line segment with float
+* precision.
+*
+* This function is used to clip a line segment to a rectangle. A line segment
+* contained entirely within the rectangle or that does not intersect will
+* remain unchanged. A line segment that crosses the rectangle at either or
+* both ends will be clipped to the boundary of the rectangle and the new
+* coordinates saved in `X1`, `Y1`, `X2`, and/or `Y2` as necessary.
+*
+* \param rect an SDL_FRect structure representing the rectangle to intersect.
+* \param X1 a pointer to the starting X-coordinate of the line.
+* \param Y1 a pointer to the starting Y-coordinate of the line.
+* \param X2 a pointer to the ending X-coordinate of the line.
+* \param Y2 a pointer to the ending Y-coordinate of the line.
+* \returns true if there is an intersection, false otherwise.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*/
+SDL_GetRectAndLineIntersectionFloat :: (rect: *SDL_FRect, X1: *float, Y1: *float, X2: *float, Y2: *float) -> bool #foreign libsdl3;
+
+/**
+* A set of blend modes used in drawing operations.
+*
+* These predefined blend modes are supported everywhere.
+*
+* Additional values may be obtained from SDL_ComposeCustomBlendMode.
+*
+* \since This datatype is available since SDL 3.2.0.
+*
+* \sa SDL_ComposeCustomBlendMode
+*/
+SDL_BlendMode :: Uint32;
+
+/**
+* The blend operation used when combining source and destination pixel
+* components.
+*
+* \since This enum is available since SDL 3.2.0.
+*/
+SDL_BlendOperation :: enum u32 {
+    ADD          :: 1;
+    SUBTRACT     :: 2;
+    REV_SUBTRACT :: 3;
+    MINIMUM      :: 4;
+    MAXIMUM      :: 5;
+
+    SDL_BLENDOPERATION_ADD          :: ADD;
+    SDL_BLENDOPERATION_SUBTRACT     :: SUBTRACT;
+    SDL_BLENDOPERATION_REV_SUBTRACT :: REV_SUBTRACT;
+    SDL_BLENDOPERATION_MINIMUM      :: MINIMUM;
+    SDL_BLENDOPERATION_MAXIMUM      :: MAXIMUM;
+}
+
+/**
+* The normalized factor used to multiply pixel components.
+*
+* The blend factors are multiplied with the pixels from a drawing operation
+* (src) and the pixels from the render target (dst) before the blend
+* operation. The comma-separated factors listed above are always applied in
+* the component order red, green, blue, and alpha.
+*
+* \since This enum is available since SDL 3.2.0.
+*/
+SDL_BlendFactor :: enum u32 {
+    ZERO                :: 1;
+    ONE                 :: 2;
+    SRC_COLOR           :: 3;
+    ONE_MINUS_SRC_COLOR :: 4;
+    SRC_ALPHA           :: 5;
+    ONE_MINUS_SRC_ALPHA :: 6;
+    DST_COLOR           :: 7;
+    ONE_MINUS_DST_COLOR :: 8;
+    DST_ALPHA           :: 9;
+    ONE_MINUS_DST_ALPHA :: 10;
+
+    SDL_BLENDFACTOR_ZERO                :: ZERO;
+    SDL_BLENDFACTOR_ONE                 :: ONE;
+    SDL_BLENDFACTOR_SRC_COLOR           :: SRC_COLOR;
+    SDL_BLENDFACTOR_ONE_MINUS_SRC_COLOR :: ONE_MINUS_SRC_COLOR;
+    SDL_BLENDFACTOR_SRC_ALPHA           :: SRC_ALPHA;
+    SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA :: ONE_MINUS_SRC_ALPHA;
+    SDL_BLENDFACTOR_DST_COLOR           :: DST_COLOR;
+    SDL_BLENDFACTOR_ONE_MINUS_DST_COLOR :: ONE_MINUS_DST_COLOR;
+    SDL_BLENDFACTOR_DST_ALPHA           :: DST_ALPHA;
+    SDL_BLENDFACTOR_ONE_MINUS_DST_ALPHA :: ONE_MINUS_DST_ALPHA;
+}
+
+/**
+* Compose a custom blend mode for renderers.
+*
+* The functions SDL_SetRenderDrawBlendMode and SDL_SetTextureBlendMode accept
+* the SDL_BlendMode returned by this function if the renderer supports it.
+*
+* A blend mode controls how the pixels from a drawing operation (source) get
+* combined with the pixels from the render target (destination). First, the
+* components of the source and destination pixels get multiplied with their
+* blend factors. Then, the blend operation takes the two products and
+* calculates the result that will get stored in the render target.
+*
+* Expressed in pseudocode, it would look like this:
+*
+* ```c
+* dstRGB = colorOperation(srcRGB * srcColorFactor, dstRGB * dstColorFactor);
+* dstA = alphaOperation(srcA * srcAlphaFactor, dstA * dstAlphaFactor);
+* ```
+*
+* Where the functions `colorOperation(src, dst)` and `alphaOperation(src,
+* dst)` can return one of the following:
+*
+* - `src + dst`
+* - `src - dst`
+* - `dst - src`
+* - `min(src, dst)`
+* - `max(src, dst)`
+*
+* The red, green, and blue components are always multiplied with the first,
+* second, and third components of the SDL_BlendFactor, respectively. The
+* fourth component is not used.
+*
+* The alpha component is always multiplied with the fourth component of the
+* SDL_BlendFactor. The other components are not used in the alpha
+* calculation.
+*
+* Support for these blend modes varies for each renderer. To check if a
+* specific SDL_BlendMode is supported, create a renderer and pass it to
+* either SDL_SetRenderDrawBlendMode or SDL_SetTextureBlendMode. They will
+* return with an error if the blend mode is not supported.
+*
+* This list describes the support of custom blend modes for each renderer.
+* All renderers support the four blend modes listed in the SDL_BlendMode
+* enumeration.
+*
+* - **direct3d**: Supports all operations with all factors. However, some
+*   factors produce unexpected results with `SDL_BLENDOPERATION_MINIMUM` and
+*   `SDL_BLENDOPERATION_MAXIMUM`.
+* - **direct3d11**: Same as Direct3D 9.
+* - **opengl**: Supports the `SDL_BLENDOPERATION_ADD` operation with all
+*   factors. OpenGL versions 1.1, 1.2, and 1.3 do not work correctly here.
+* - **opengles2**: Supports the `SDL_BLENDOPERATION_ADD`,
+*   `SDL_BLENDOPERATION_SUBTRACT`, `SDL_BLENDOPERATION_REV_SUBTRACT`
+*   operations with all factors.
+* - **psp**: No custom blend mode support.
+* - **software**: No custom blend mode support.
+*
+* Some renderers do not provide an alpha component for the default render
+* target. The `SDL_BLENDFACTOR_DST_ALPHA` and
+* `SDL_BLENDFACTOR_ONE_MINUS_DST_ALPHA` factors do not have an effect in this
+* case.
+*
+* \param srcColorFactor the SDL_BlendFactor applied to the red, green, and
+*                       blue components of the source pixels.
+* \param dstColorFactor the SDL_BlendFactor applied to the red, green, and
+*                       blue components of the destination pixels.
+* \param colorOperation the SDL_BlendOperation used to combine the red,
+*                       green, and blue components of the source and
+*                       destination pixels.
+* \param srcAlphaFactor the SDL_BlendFactor applied to the alpha component of
+*                       the source pixels.
+* \param dstAlphaFactor the SDL_BlendFactor applied to the alpha component of
+*                       the destination pixels.
+* \param alphaOperation the SDL_BlendOperation used to combine the alpha
+*                       component of the source and destination pixels.
+* \returns an SDL_BlendMode that represents the chosen factors and
+*          operations.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_SetRenderDrawBlendMode
+* \sa SDL_GetRenderDrawBlendMode
+* \sa SDL_SetTextureBlendMode
+* \sa SDL_GetTextureBlendMode
+*/
+SDL_ComposeCustomBlendMode :: (srcColorFactor: SDL_BlendFactor, dstColorFactor: SDL_BlendFactor, colorOperation: SDL_BlendOperation, srcAlphaFactor: SDL_BlendFactor, dstAlphaFactor: SDL_BlendFactor, alphaOperation: SDL_BlendOperation) -> SDL_BlendMode #foreign libsdl3;
 
 /**
 * SDL_IOStream status, set by a read or write operation.
@@ -9727,3407 +9081,6 @@ SDL_WriteU64BE :: (dst: *SDL_IOStream, value: Uint64) -> bool #foreign libsdl3;
 * \since This function is available since SDL 3.2.0.
 */
 SDL_WriteS64BE :: (dst: *SDL_IOStream, value: Sint64) -> bool #foreign libsdl3;
-
-/**
-* Audio format.
-*
-* \since This enum is available since SDL 3.2.0.
-*
-* \sa SDL_AUDIO_BITSIZE
-* \sa SDL_AUDIO_BYTESIZE
-* \sa SDL_AUDIO_ISINT
-* \sa SDL_AUDIO_ISFLOAT
-* \sa SDL_AUDIO_ISBIGENDIAN
-* \sa SDL_AUDIO_ISLITTLEENDIAN
-* \sa SDL_AUDIO_ISSIGNED
-* \sa SDL_AUDIO_ISUNSIGNED
-*/
-SDL_AudioFormat :: enum u32 {
-    UNKNOWN :: 0;
-    U8      :: 8;
-
-    S8      :: 32776;
-
-    S16LE   :: 32784;
-
-    S16BE   :: 36880;
-
-    S32LE   :: 32800;
-
-    S32BE   :: 36896;
-
-    F32LE   :: 33056;
-
-    F32BE   :: 37152;
-
-    S16     :: 32784;
-    S32     :: 32800;
-    F32     :: 33056;
-
-    SDL_AUDIO_UNKNOWN :: UNKNOWN;
-    SDL_AUDIO_U8      :: U8;
-
-    SDL_AUDIO_S8      :: S8;
-
-    SDL_AUDIO_S16LE   :: S16LE;
-
-    SDL_AUDIO_S16BE   :: S16BE;
-
-    SDL_AUDIO_S32LE   :: S32LE;
-
-    SDL_AUDIO_S32BE   :: S32BE;
-
-    SDL_AUDIO_F32LE   :: F32LE;
-
-    SDL_AUDIO_F32BE   :: F32BE;
-
-    SDL_AUDIO_S16     :: S16;
-    SDL_AUDIO_S32     :: S32;
-    SDL_AUDIO_F32     :: F32;
-}
-
-/**
-* SDL Audio Device instance IDs.
-*
-* Zero is used to signify an invalid/null device.
-*
-* \since This datatype is available since SDL 3.2.0.
-*/
-SDL_AudioDeviceID :: Uint32;
-
-/**
-* Format specifier for audio data.
-*
-* \since This struct is available since SDL 3.2.0.
-*
-* \sa SDL_AudioFormat
-*/
-SDL_AudioSpec :: struct {
-    format:   SDL_AudioFormat; /**< Audio data format */
-    channels: s32; /**< Number of channels: 1 mono, 2 stereo, etc */
-    freq:     s32; /**< sample rate: sample frames per second */
-}
-
-SDL_AudioStream :: struct {}
-
-/**
-* Use this function to get the number of built-in audio drivers.
-*
-* This function returns a hardcoded number. This never returns a negative
-* value; if there are no drivers compiled into this build of SDL, this
-* function returns zero. The presence of a driver in this list does not mean
-* it will function, it just means SDL is capable of interacting with that
-* interface. For example, a build of SDL might have esound support, but if
-* there's no esound server available, SDL's esound driver would fail if used.
-*
-* By default, SDL tries all drivers, in its preferred order, until one is
-* found to be usable.
-*
-* \returns the number of built-in audio drivers.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_GetAudioDriver
-*/
-SDL_GetNumAudioDrivers :: () -> s32 #foreign libsdl3;
-
-/**
-* Use this function to get the name of a built in audio driver.
-*
-* The list of audio drivers is given in the order that they are normally
-* initialized by default; the drivers that seem more reasonable to choose
-* first (as far as the SDL developers believe) are earlier in the list.
-*
-* The names of drivers are all simple, low-ASCII identifiers, like "alsa",
-* "coreaudio" or "wasapi". These never have Unicode characters, and are not
-* meant to be proper names.
-*
-* \param index the index of the audio driver; the value ranges from 0 to
-*              SDL_GetNumAudioDrivers() - 1.
-* \returns the name of the audio driver at the requested index, or NULL if an
-*          invalid index was specified.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_GetNumAudioDrivers
-*/
-SDL_GetAudioDriver :: (index: s32) -> *u8 #foreign libsdl3;
-
-/**
-* Get the name of the current audio driver.
-*
-* The names of drivers are all simple, low-ASCII identifiers, like "alsa",
-* "coreaudio" or "wasapi". These never have Unicode characters, and are not
-* meant to be proper names.
-*
-* \returns the name of the current audio driver or NULL if no driver has been
-*          initialized.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*/
-SDL_GetCurrentAudioDriver :: () -> *u8 #foreign libsdl3;
-
-/**
-* Get a list of currently-connected audio playback devices.
-*
-* This returns of list of available devices that play sound, perhaps to
-* speakers or headphones ("playback" devices). If you want devices that
-* record audio, like a microphone ("recording" devices), use
-* SDL_GetAudioRecordingDevices() instead.
-*
-* This only returns a list of physical devices; it will not have any device
-* IDs returned by SDL_OpenAudioDevice().
-*
-* If this function returns NULL, to signify an error, `*count` will be set to
-* zero.
-*
-* \param count a pointer filled in with the number of devices returned, may
-*              be NULL.
-* \returns a 0 terminated array of device instance IDs or NULL on error; call
-*          SDL_GetError() for more information. This should be freed with
-*          SDL_free() when it is no longer needed.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_OpenAudioDevice
-* \sa SDL_GetAudioRecordingDevices
-*/
-SDL_GetAudioPlaybackDevices :: (count: *s32) -> *SDL_AudioDeviceID #foreign libsdl3;
-
-/**
-* Get a list of currently-connected audio recording devices.
-*
-* This returns of list of available devices that record audio, like a
-* microphone ("recording" devices). If you want devices that play sound,
-* perhaps to speakers or headphones ("playback" devices), use
-* SDL_GetAudioPlaybackDevices() instead.
-*
-* This only returns a list of physical devices; it will not have any device
-* IDs returned by SDL_OpenAudioDevice().
-*
-* If this function returns NULL, to signify an error, `*count` will be set to
-* zero.
-*
-* \param count a pointer filled in with the number of devices returned, may
-*              be NULL.
-* \returns a 0 terminated array of device instance IDs, or NULL on failure;
-*          call SDL_GetError() for more information. This should be freed
-*          with SDL_free() when it is no longer needed.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_OpenAudioDevice
-* \sa SDL_GetAudioPlaybackDevices
-*/
-SDL_GetAudioRecordingDevices :: (count: *s32) -> *SDL_AudioDeviceID #foreign libsdl3;
-
-/**
-* Get the human-readable name of a specific audio device.
-*
-* **WARNING**: this function will work with SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK
-* and SDL_AUDIO_DEVICE_DEFAULT_RECORDING, returning the current default
-* physical devices' names. However, as the default device may change at any
-* time, it is likely better to show a generic name to the user, like "System
-* default audio device" or perhaps "default [currently %s]". Do not store
-* this name to disk to reidentify the device in a later run of the program,
-* as the default might change in general, and the string will be the name of
-* a specific device and not the abstract system default.
-*
-* \param devid the instance ID of the device to query.
-* \returns the name of the audio device, or NULL on failure; call
-*          SDL_GetError() for more information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_GetAudioPlaybackDevices
-* \sa SDL_GetAudioRecordingDevices
-*/
-SDL_GetAudioDeviceName :: (devid: SDL_AudioDeviceID) -> *u8 #foreign libsdl3;
-
-/**
-* Get the current audio format of a specific audio device.
-*
-* For an opened device, this will report the format the device is currently
-* using. If the device isn't yet opened, this will report the device's
-* preferred format (or a reasonable default if this can't be determined).
-*
-* You may also specify SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK or
-* SDL_AUDIO_DEVICE_DEFAULT_RECORDING here, which is useful for getting a
-* reasonable recommendation before opening the system-recommended default
-* device.
-*
-* You can also use this to request the current device buffer size. This is
-* specified in sample frames and represents the amount of data SDL will feed
-* to the physical hardware in each chunk. This can be converted to
-* milliseconds of audio with the following equation:
-*
-* `ms = (int) ((((Sint64) frames) * 1000) / spec.freq);`
-*
-* Buffer size is only important if you need low-level control over the audio
-* playback timing. Most apps do not need this.
-*
-* \param devid the instance ID of the device to query.
-* \param spec on return, will be filled with device details.
-* \param sample_frames pointer to store device buffer size, in sample frames.
-*                      Can be NULL.
-* \returns true on success or false on failure; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*/
-SDL_GetAudioDeviceFormat :: (devid: SDL_AudioDeviceID, spec: *SDL_AudioSpec, sample_frames: *s32) -> bool #foreign libsdl3;
-
-/**
-* Get the current channel map of an audio device.
-*
-* Channel maps are optional; most things do not need them, instead passing
-* data in the [order that SDL expects](CategoryAudio#channel-layouts).
-*
-* Audio devices usually have no remapping applied. This is represented by
-* returning NULL, and does not signify an error.
-*
-* \param devid the instance ID of the device to query.
-* \param count On output, set to number of channels in the map. Can be NULL.
-* \returns an array of the current channel mapping, with as many elements as
-*          the current output spec's channels, or NULL if default. This
-*          should be freed with SDL_free() when it is no longer needed.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_SetAudioStreamInputChannelMap
-*/
-SDL_GetAudioDeviceChannelMap :: (devid: SDL_AudioDeviceID, count: *s32) -> *s32 #foreign libsdl3;
-
-/**
-* Open a specific audio device.
-*
-* You can open both playback and recording devices through this function.
-* Playback devices will take data from bound audio streams, mix it, and send
-* it to the hardware. Recording devices will feed any bound audio streams
-* with a copy of any incoming data.
-*
-* An opened audio device starts out with no audio streams bound. To start
-* audio playing, bind a stream and supply audio data to it. Unlike SDL2,
-* there is no audio callback; you only bind audio streams and make sure they
-* have data flowing into them (however, you can simulate SDL2's semantics
-* fairly closely by using SDL_OpenAudioDeviceStream instead of this
-* function).
-*
-* If you don't care about opening a specific device, pass a `devid` of either
-* `SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK` or
-* `SDL_AUDIO_DEVICE_DEFAULT_RECORDING`. In this case, SDL will try to pick
-* the most reasonable default, and may also switch between physical devices
-* seamlessly later, if the most reasonable default changes during the
-* lifetime of this opened device (user changed the default in the OS's system
-* preferences, the default got unplugged so the system jumped to a new
-* default, the user plugged in headphones on a mobile device, etc). Unless
-* you have a good reason to choose a specific device, this is probably what
-* you want.
-*
-* You may request a specific format for the audio device, but there is no
-* promise the device will honor that request for several reasons. As such,
-* it's only meant to be a hint as to what data your app will provide. Audio
-* streams will accept data in whatever format you specify and manage
-* conversion for you as appropriate. SDL_GetAudioDeviceFormat can tell you
-* the preferred format for the device before opening and the actual format
-* the device is using after opening.
-*
-* It's legal to open the same device ID more than once; each successful open
-* will generate a new logical SDL_AudioDeviceID that is managed separately
-* from others on the same physical device. This allows libraries to open a
-* device separately from the main app and bind its own streams without
-* conflicting.
-*
-* It is also legal to open a device ID returned by a previous call to this
-* function; doing so just creates another logical device on the same physical
-* device. This may be useful for making logical groupings of audio streams.
-*
-* This function returns the opened device ID on success. This is a new,
-* unique SDL_AudioDeviceID that represents a logical device.
-*
-* Some backends might offer arbitrary devices (for example, a networked audio
-* protocol that can connect to an arbitrary server). For these, as a change
-* from SDL2, you should open a default device ID and use an SDL hint to
-* specify the target if you care, or otherwise let the backend figure out a
-* reasonable default. Most backends don't offer anything like this, and often
-* this would be an end user setting an environment variable for their custom
-* need, and not something an application should specifically manage.
-*
-* When done with an audio device, possibly at the end of the app's life, one
-* should call SDL_CloseAudioDevice() on the returned device id.
-*
-* \param devid the device instance id to open, or
-*              SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK or
-*              SDL_AUDIO_DEVICE_DEFAULT_RECORDING for the most reasonable
-*              default device.
-* \param spec the requested device configuration. Can be NULL to use
-*             reasonable defaults.
-* \returns the device ID on success or 0 on failure; call SDL_GetError() for
-*          more information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_CloseAudioDevice
-* \sa SDL_GetAudioDeviceFormat
-*/
-SDL_OpenAudioDevice :: (devid: SDL_AudioDeviceID, spec: *SDL_AudioSpec) -> SDL_AudioDeviceID #foreign libsdl3;
-
-/**
-* Determine if an audio device is physical (instead of logical).
-*
-* An SDL_AudioDeviceID that represents physical hardware is a physical
-* device; there is one for each piece of hardware that SDL can see. Logical
-* devices are created by calling SDL_OpenAudioDevice or
-* SDL_OpenAudioDeviceStream, and while each is associated with a physical
-* device, there can be any number of logical devices on one physical device.
-*
-* For the most part, logical and physical IDs are interchangeable--if you try
-* to open a logical device, SDL understands to assign that effort to the
-* underlying physical device, etc. However, it might be useful to know if an
-* arbitrary device ID is physical or logical. This function reports which.
-*
-* This function may return either true or false for invalid device IDs.
-*
-* \param devid the device ID to query.
-* \returns true if devid is a physical device, false if it is logical.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*/
-SDL_IsAudioDevicePhysical :: (devid: SDL_AudioDeviceID) -> bool #foreign libsdl3;
-
-/**
-* Determine if an audio device is a playback device (instead of recording).
-*
-* This function may return either true or false for invalid device IDs.
-*
-* \param devid the device ID to query.
-* \returns true if devid is a playback device, false if it is recording.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*/
-SDL_IsAudioDevicePlayback :: (devid: SDL_AudioDeviceID) -> bool #foreign libsdl3;
-
-/**
-* Use this function to pause audio playback on a specified device.
-*
-* This function pauses audio processing for a given device. Any bound audio
-* streams will not progress, and no audio will be generated. Pausing one
-* device does not prevent other unpaused devices from running.
-*
-* Unlike in SDL2, audio devices start in an _unpaused_ state, since an app
-* has to bind a stream before any audio will flow. Pausing a paused device is
-* a legal no-op.
-*
-* Pausing a device can be useful to halt all audio without unbinding all the
-* audio streams. This might be useful while a game is paused, or a level is
-* loading, etc.
-*
-* Physical devices can not be paused or unpaused, only logical devices
-* created through SDL_OpenAudioDevice() can be.
-*
-* \param devid a device opened by SDL_OpenAudioDevice().
-* \returns true on success or false on failure; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_ResumeAudioDevice
-* \sa SDL_AudioDevicePaused
-*/
-SDL_PauseAudioDevice :: (devid: SDL_AudioDeviceID) -> bool #foreign libsdl3;
-
-/**
-* Use this function to unpause audio playback on a specified device.
-*
-* This function unpauses audio processing for a given device that has
-* previously been paused with SDL_PauseAudioDevice(). Once unpaused, any
-* bound audio streams will begin to progress again, and audio can be
-* generated.
-*
-* Unlike in SDL2, audio devices start in an _unpaused_ state, since an app
-* has to bind a stream before any audio will flow. Unpausing an unpaused
-* device is a legal no-op.
-*
-* Physical devices can not be paused or unpaused, only logical devices
-* created through SDL_OpenAudioDevice() can be.
-*
-* \param devid a device opened by SDL_OpenAudioDevice().
-* \returns true on success or false on failure; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_AudioDevicePaused
-* \sa SDL_PauseAudioDevice
-*/
-SDL_ResumeAudioDevice :: (devid: SDL_AudioDeviceID) -> bool #foreign libsdl3;
-
-/**
-* Use this function to query if an audio device is paused.
-*
-* Unlike in SDL2, audio devices start in an _unpaused_ state, since an app
-* has to bind a stream before any audio will flow.
-*
-* Physical devices can not be paused or unpaused, only logical devices
-* created through SDL_OpenAudioDevice() can be. Physical and invalid device
-* IDs will report themselves as unpaused here.
-*
-* \param devid a device opened by SDL_OpenAudioDevice().
-* \returns true if device is valid and paused, false otherwise.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_PauseAudioDevice
-* \sa SDL_ResumeAudioDevice
-*/
-SDL_AudioDevicePaused :: (devid: SDL_AudioDeviceID) -> bool #foreign libsdl3;
-
-/**
-* Get the gain of an audio device.
-*
-* The gain of a device is its volume; a larger gain means a louder output,
-* with a gain of zero being silence.
-*
-* Audio devices default to a gain of 1.0f (no change in output).
-*
-* Physical devices may not have their gain changed, only logical devices, and
-* this function will always return -1.0f when used on physical devices.
-*
-* \param devid the audio device to query.
-* \returns the gain of the device or -1.0f on failure; call SDL_GetError()
-*          for more information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_SetAudioDeviceGain
-*/
-SDL_GetAudioDeviceGain :: (devid: SDL_AudioDeviceID) -> float #foreign libsdl3;
-
-/**
-* Change the gain of an audio device.
-*
-* The gain of a device is its volume; a larger gain means a louder output,
-* with a gain of zero being silence.
-*
-* Audio devices default to a gain of 1.0f (no change in output).
-*
-* Physical devices may not have their gain changed, only logical devices, and
-* this function will always return false when used on physical devices. While
-* it might seem attractive to adjust several logical devices at once in this
-* way, it would allow an app or library to interfere with another portion of
-* the program's otherwise-isolated devices.
-*
-* This is applied, along with any per-audiostream gain, during playback to
-* the hardware, and can be continuously changed to create various effects. On
-* recording devices, this will adjust the gain before passing the data into
-* an audiostream; that recording audiostream can then adjust its gain further
-* when outputting the data elsewhere, if it likes, but that second gain is
-* not applied until the data leaves the audiostream again.
-*
-* \param devid the audio device on which to change gain.
-* \param gain the gain. 1.0f is no change, 0.0f is silence.
-* \returns true on success or false on failure; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety It is safe to call this function from any thread, as it holds
-*               a stream-specific mutex while running.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_GetAudioDeviceGain
-*/
-SDL_SetAudioDeviceGain :: (devid: SDL_AudioDeviceID, gain: float) -> bool #foreign libsdl3;
-
-/**
-* Close a previously-opened audio device.
-*
-* The application should close open audio devices once they are no longer
-* needed.
-*
-* This function may block briefly while pending audio data is played by the
-* hardware, so that applications don't drop the last buffer of data they
-* supplied if terminating immediately afterwards.
-*
-* \param devid an audio device id previously returned by
-*              SDL_OpenAudioDevice().
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_OpenAudioDevice
-*/
-SDL_CloseAudioDevice :: (devid: SDL_AudioDeviceID) -> void #foreign libsdl3;
-
-/**
-* Bind a list of audio streams to an audio device.
-*
-* Audio data will flow through any bound streams. For a playback device, data
-* for all bound streams will be mixed together and fed to the device. For a
-* recording device, a copy of recorded data will be provided to each bound
-* stream.
-*
-* Audio streams can only be bound to an open device. This operation is
-* atomic--all streams bound in the same call will start processing at the
-* same time, so they can stay in sync. Also: either all streams will be bound
-* or none of them will be.
-*
-* It is an error to bind an already-bound stream; it must be explicitly
-* unbound first.
-*
-* Binding a stream to a device will set its output format for playback
-* devices, and its input format for recording devices, so they match the
-* device's settings. The caller is welcome to change the other end of the
-* stream's format at any time with SDL_SetAudioStreamFormat(). If the other
-* end of the stream's format has never been set (the audio stream was created
-* with a NULL audio spec), this function will set it to match the device
-* end's format.
-*
-* \param devid an audio device to bind a stream to.
-* \param streams an array of audio streams to bind.
-* \param num_streams number streams listed in the `streams` array.
-* \returns true on success or false on failure; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_BindAudioStreams
-* \sa SDL_UnbindAudioStream
-* \sa SDL_GetAudioStreamDevice
-*/
-SDL_BindAudioStreams :: (devid: SDL_AudioDeviceID, streams: **SDL_AudioStream, num_streams: s32) -> bool #foreign libsdl3;
-
-/**
-* Bind a single audio stream to an audio device.
-*
-* This is a convenience function, equivalent to calling
-* `SDL_BindAudioStreams(devid, &stream, 1)`.
-*
-* \param devid an audio device to bind a stream to.
-* \param stream an audio stream to bind to a device.
-* \returns true on success or false on failure; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_BindAudioStreams
-* \sa SDL_UnbindAudioStream
-* \sa SDL_GetAudioStreamDevice
-*/
-SDL_BindAudioStream :: (devid: SDL_AudioDeviceID, stream: *SDL_AudioStream) -> bool #foreign libsdl3;
-
-/**
-* Unbind a list of audio streams from their audio devices.
-*
-* The streams being unbound do not all have to be on the same device. All
-* streams on the same device will be unbound atomically (data will stop
-* flowing through all unbound streams on the same device at the same time).
-*
-* Unbinding a stream that isn't bound to a device is a legal no-op.
-*
-* \param streams an array of audio streams to unbind. Can be NULL or contain
-*                NULL.
-* \param num_streams number streams listed in the `streams` array.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_BindAudioStreams
-*/
-SDL_UnbindAudioStreams :: (streams: **SDL_AudioStream, num_streams: s32) -> void #foreign libsdl3;
-
-/**
-* Unbind a single audio stream from its audio device.
-*
-* This is a convenience function, equivalent to calling
-* `SDL_UnbindAudioStreams(&stream, 1)`.
-*
-* \param stream an audio stream to unbind from a device. Can be NULL.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_BindAudioStream
-*/
-SDL_UnbindAudioStream :: (stream: *SDL_AudioStream) -> void #foreign libsdl3;
-
-/**
-* Query an audio stream for its currently-bound device.
-*
-* This reports the logical audio device that an audio stream is currently
-* bound to.
-*
-* If not bound, or invalid, this returns zero, which is not a valid device
-* ID.
-*
-* \param stream the audio stream to query.
-* \returns the bound audio device, or 0 if not bound or invalid.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_BindAudioStream
-* \sa SDL_BindAudioStreams
-*/
-SDL_GetAudioStreamDevice :: (stream: *SDL_AudioStream) -> SDL_AudioDeviceID #foreign libsdl3;
-
-/**
-* Create a new audio stream.
-*
-* \param src_spec the format details of the input audio.
-* \param dst_spec the format details of the output audio.
-* \returns a new audio stream on success or NULL on failure; call
-*          SDL_GetError() for more information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_PutAudioStreamData
-* \sa SDL_GetAudioStreamData
-* \sa SDL_GetAudioStreamAvailable
-* \sa SDL_FlushAudioStream
-* \sa SDL_ClearAudioStream
-* \sa SDL_SetAudioStreamFormat
-* \sa SDL_DestroyAudioStream
-*/
-SDL_CreateAudioStream :: (src_spec: *SDL_AudioSpec, dst_spec: *SDL_AudioSpec) -> *SDL_AudioStream #foreign libsdl3;
-
-/**
-* Get the properties associated with an audio stream.
-*
-* The application can hang any data it wants here, but the following
-* properties are understood by SDL:
-*
-* - `SDL_PROP_AUDIOSTREAM_AUTO_CLEANUP_BOOLEAN`: if true (the default), the
-*   stream be automatically cleaned up when the audio subsystem quits. If set
-*   to false, the streams will persist beyond that. This property is ignored
-*   for streams created through SDL_OpenAudioDeviceStream(), and will always
-*   be cleaned up. Streams that are not cleaned up will still be unbound from
-*   devices when the audio subsystem quits. This property was added in SDL
-*   3.4.0.
-*
-* \param stream the SDL_AudioStream to query.
-* \returns a valid property ID on success or 0 on failure; call
-*          SDL_GetError() for more information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*/
-SDL_GetAudioStreamProperties :: (stream: *SDL_AudioStream) -> SDL_PropertiesID #foreign libsdl3;
-
-/**
-* Query the current format of an audio stream.
-*
-* \param stream the SDL_AudioStream to query.
-* \param src_spec where to store the input audio format; ignored if NULL.
-* \param dst_spec where to store the output audio format; ignored if NULL.
-* \returns true on success or false on failure; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety It is safe to call this function from any thread, as it holds
-*               a stream-specific mutex while running.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_SetAudioStreamFormat
-*/
-SDL_GetAudioStreamFormat :: (stream: *SDL_AudioStream, src_spec: *SDL_AudioSpec, dst_spec: *SDL_AudioSpec) -> bool #foreign libsdl3;
-
-/**
-* Change the input and output formats of an audio stream.
-*
-* Future calls to and SDL_GetAudioStreamAvailable and SDL_GetAudioStreamData
-* will reflect the new format, and future calls to SDL_PutAudioStreamData
-* must provide data in the new input formats.
-*
-* Data that was previously queued in the stream will still be operated on in
-* the format that was current when it was added, which is to say you can put
-* the end of a sound file in one format to a stream, change formats for the
-* next sound file, and start putting that new data while the previous sound
-* file is still queued, and everything will still play back correctly.
-*
-* If a stream is bound to a device, then the format of the side of the stream
-* bound to a device cannot be changed (src_spec for recording devices,
-* dst_spec for playback devices). Attempts to make a change to this side will
-* be ignored, but this will not report an error. The other side's format can
-* be changed.
-*
-* \param stream the stream the format is being changed.
-* \param src_spec the new format of the audio input; if NULL, it is not
-*                 changed.
-* \param dst_spec the new format of the audio output; if NULL, it is not
-*                 changed.
-* \returns true on success or false on failure; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety It is safe to call this function from any thread, as it holds
-*               a stream-specific mutex while running.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_GetAudioStreamFormat
-* \sa SDL_SetAudioStreamFrequencyRatio
-*/
-SDL_SetAudioStreamFormat :: (stream: *SDL_AudioStream, src_spec: *SDL_AudioSpec, dst_spec: *SDL_AudioSpec) -> bool #foreign libsdl3;
-
-/**
-* Get the frequency ratio of an audio stream.
-*
-* \param stream the SDL_AudioStream to query.
-* \returns the frequency ratio of the stream or 0.0 on failure; call
-*          SDL_GetError() for more information.
-*
-* \threadsafety It is safe to call this function from any thread, as it holds
-*               a stream-specific mutex while running.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_SetAudioStreamFrequencyRatio
-*/
-SDL_GetAudioStreamFrequencyRatio :: (stream: *SDL_AudioStream) -> float #foreign libsdl3;
-
-/**
-* Change the frequency ratio of an audio stream.
-*
-* The frequency ratio is used to adjust the rate at which input data is
-* consumed. Changing this effectively modifies the speed and pitch of the
-* audio. A value greater than 1.0f will play the audio faster, and at a
-* higher pitch. A value less than 1.0f will play the audio slower, and at a
-* lower pitch. 1.0f means play at normal speed.
-*
-* This is applied during SDL_GetAudioStreamData, and can be continuously
-* changed to create various effects.
-*
-* \param stream the stream on which the frequency ratio is being changed.
-* \param ratio the frequency ratio. 1.0 is normal speed. Must be between 0.01
-*              and 100.
-* \returns true on success or false on failure; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety It is safe to call this function from any thread, as it holds
-*               a stream-specific mutex while running.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_GetAudioStreamFrequencyRatio
-* \sa SDL_SetAudioStreamFormat
-*/
-SDL_SetAudioStreamFrequencyRatio :: (stream: *SDL_AudioStream, ratio: float) -> bool #foreign libsdl3;
-
-/**
-* Get the gain of an audio stream.
-*
-* The gain of a stream is its volume; a larger gain means a louder output,
-* with a gain of zero being silence.
-*
-* Audio streams default to a gain of 1.0f (no change in output).
-*
-* \param stream the SDL_AudioStream to query.
-* \returns the gain of the stream or -1.0f on failure; call SDL_GetError()
-*          for more information.
-*
-* \threadsafety It is safe to call this function from any thread, as it holds
-*               a stream-specific mutex while running.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_SetAudioStreamGain
-*/
-SDL_GetAudioStreamGain :: (stream: *SDL_AudioStream) -> float #foreign libsdl3;
-
-/**
-* Change the gain of an audio stream.
-*
-* The gain of a stream is its volume; a larger gain means a louder output,
-* with a gain of zero being silence.
-*
-* Audio streams default to a gain of 1.0f (no change in output).
-*
-* This is applied during SDL_GetAudioStreamData, and can be continuously
-* changed to create various effects.
-*
-* \param stream the stream on which the gain is being changed.
-* \param gain the gain. 1.0f is no change, 0.0f is silence.
-* \returns true on success or false on failure; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety It is safe to call this function from any thread, as it holds
-*               a stream-specific mutex while running.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_GetAudioStreamGain
-*/
-SDL_SetAudioStreamGain :: (stream: *SDL_AudioStream, gain: float) -> bool #foreign libsdl3;
-
-/**
-* Get the current input channel map of an audio stream.
-*
-* Channel maps are optional; most things do not need them, instead passing
-* data in the [order that SDL expects](CategoryAudio#channel-layouts).
-*
-* Audio streams default to no remapping applied. This is represented by
-* returning NULL, and does not signify an error.
-*
-* \param stream the SDL_AudioStream to query.
-* \param count On output, set to number of channels in the map. Can be NULL.
-* \returns an array of the current channel mapping, with as many elements as
-*          the current output spec's channels, or NULL if default. This
-*          should be freed with SDL_free() when it is no longer needed.
-*
-* \threadsafety It is safe to call this function from any thread, as it holds
-*               a stream-specific mutex while running.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_SetAudioStreamInputChannelMap
-*/
-SDL_GetAudioStreamInputChannelMap :: (stream: *SDL_AudioStream, count: *s32) -> *s32 #foreign libsdl3;
-
-/**
-* Get the current output channel map of an audio stream.
-*
-* Channel maps are optional; most things do not need them, instead passing
-* data in the [order that SDL expects](CategoryAudio#channel-layouts).
-*
-* Audio streams default to no remapping applied. This is represented by
-* returning NULL, and does not signify an error.
-*
-* \param stream the SDL_AudioStream to query.
-* \param count On output, set to number of channels in the map. Can be NULL.
-* \returns an array of the current channel mapping, with as many elements as
-*          the current output spec's channels, or NULL if default. This
-*          should be freed with SDL_free() when it is no longer needed.
-*
-* \threadsafety It is safe to call this function from any thread, as it holds
-*               a stream-specific mutex while running.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_SetAudioStreamInputChannelMap
-*/
-SDL_GetAudioStreamOutputChannelMap :: (stream: *SDL_AudioStream, count: *s32) -> *s32 #foreign libsdl3;
-
-/**
-* Set the current input channel map of an audio stream.
-*
-* Channel maps are optional; most things do not need them, instead passing
-* data in the [order that SDL expects](CategoryAudio#channel-layouts).
-*
-* The input channel map reorders data that is added to a stream via
-* SDL_PutAudioStreamData. Future calls to SDL_PutAudioStreamData must provide
-* data in the new channel order.
-*
-* Each item in the array represents an input channel, and its value is the
-* channel that it should be remapped to. To reverse a stereo signal's left
-* and right values, you'd have an array of `{ 1, 0 }`. It is legal to remap
-* multiple channels to the same thing, so `{ 1, 1 }` would duplicate the
-* right channel to both channels of a stereo signal. An element in the
-* channel map set to -1 instead of a valid channel will mute that channel,
-* setting it to a silence value.
-*
-* You cannot change the number of channels through a channel map, just
-* reorder/mute them.
-*
-* Data that was previously queued in the stream will still be operated on in
-* the order that was current when it was added, which is to say you can put
-* the end of a sound file in one order to a stream, change orders for the
-* next sound file, and start putting that new data while the previous sound
-* file is still queued, and everything will still play back correctly.
-*
-* Audio streams default to no remapping applied. Passing a NULL channel map
-* is legal, and turns off remapping.
-*
-* SDL will copy the channel map; the caller does not have to save this array
-* after this call.
-*
-* If `count` is not equal to the current number of channels in the audio
-* stream's format, this will fail. This is a safety measure to make sure a
-* race condition hasn't changed the format while this call is setting the
-* channel map.
-*
-* Unlike attempting to change the stream's format, the input channel map on a
-* stream bound to a recording device is permitted to change at any time; any
-* data added to the stream from the device after this call will have the new
-* mapping, but previously-added data will still have the prior mapping.
-*
-* \param stream the SDL_AudioStream to change.
-* \param chmap the new channel map, NULL to reset to default.
-* \param count The number of channels in the map.
-* \returns true on success or false on failure; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety It is safe to call this function from any thread, as it holds
-*               a stream-specific mutex while running. Don't change the
-*               stream's format to have a different number of channels from a
-*               different thread at the same time, though!
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_SetAudioStreamOutputChannelMap
-*/
-SDL_SetAudioStreamInputChannelMap :: (stream: *SDL_AudioStream, chmap: *s32, count: s32) -> bool #foreign libsdl3;
-
-/**
-* Set the current output channel map of an audio stream.
-*
-* Channel maps are optional; most things do not need them, instead passing
-* data in the [order that SDL expects](CategoryAudio#channel-layouts).
-*
-* The output channel map reorders data that is leaving a stream via
-* SDL_GetAudioStreamData.
-*
-* Each item in the array represents an input channel, and its value is the
-* channel that it should be remapped to. To reverse a stereo signal's left
-* and right values, you'd have an array of `{ 1, 0 }`. It is legal to remap
-* multiple channels to the same thing, so `{ 1, 1 }` would duplicate the
-* right channel to both channels of a stereo signal. An element in the
-* channel map set to -1 instead of a valid channel will mute that channel,
-* setting it to a silence value.
-*
-* You cannot change the number of channels through a channel map, just
-* reorder/mute them.
-*
-* The output channel map can be changed at any time, as output remapping is
-* applied during SDL_GetAudioStreamData.
-*
-* Audio streams default to no remapping applied. Passing a NULL channel map
-* is legal, and turns off remapping.
-*
-* SDL will copy the channel map; the caller does not have to save this array
-* after this call.
-*
-* If `count` is not equal to the current number of channels in the audio
-* stream's format, this will fail. This is a safety measure to make sure a
-* race condition hasn't changed the format while this call is setting the
-* channel map.
-*
-* Unlike attempting to change the stream's format, the output channel map on
-* a stream bound to a recording device is permitted to change at any time;
-* any data added to the stream after this call will have the new mapping, but
-* previously-added data will still have the prior mapping. When the channel
-* map doesn't match the hardware's channel layout, SDL will convert the data
-* before feeding it to the device for playback.
-*
-* \param stream the SDL_AudioStream to change.
-* \param chmap the new channel map, NULL to reset to default.
-* \param count The number of channels in the map.
-* \returns true on success or false on failure; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety It is safe to call this function from any thread, as it holds
-*               a stream-specific mutex while running. Don't change the
-*               stream's format to have a different number of channels from a
-*               a different thread at the same time, though!
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_SetAudioStreamInputChannelMap
-*/
-SDL_SetAudioStreamOutputChannelMap :: (stream: *SDL_AudioStream, chmap: *s32, count: s32) -> bool #foreign libsdl3;
-
-/**
-* Add data to the stream.
-*
-* This data must match the format/channels/samplerate specified in the latest
-* call to SDL_SetAudioStreamFormat, or the format specified when creating the
-* stream if it hasn't been changed.
-*
-* Note that this call simply copies the unconverted data for later. This is
-* different than SDL2, where data was converted during the Put call and the
-* Get call would just dequeue the previously-converted data.
-*
-* \param stream the stream the audio data is being added to.
-* \param buf a pointer to the audio data to add.
-* \param len the number of bytes to write to the stream.
-* \returns true on success or false on failure; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety It is safe to call this function from any thread, but if the
-*               stream has a callback set, the caller might need to manage
-*               extra locking.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_ClearAudioStream
-* \sa SDL_FlushAudioStream
-* \sa SDL_GetAudioStreamData
-* \sa SDL_GetAudioStreamQueued
-*/
-SDL_PutAudioStreamData :: (stream: *SDL_AudioStream, buf: *void, len: s32) -> bool #foreign libsdl3;
-
-/**
-* A callback that fires for completed SDL_PutAudioStreamDataNoCopy() data.
-*
-* When using SDL_PutAudioStreamDataNoCopy() to provide data to an
-* SDL_AudioStream, it's not safe to dispose of the data until the stream has
-* completely consumed it. Often times it's difficult to know exactly when
-* this has happened.
-*
-* This callback fires once when the stream no longer needs the buffer,
-* allowing the app to easily free or reuse it.
-*
-* \param userdata an opaque pointer provided by the app for their personal
-*                 use.
-* \param buf the pointer provided to SDL_PutAudioStreamDataNoCopy().
-* \param buflen the size of buffer, in bytes, provided to
-*               SDL_PutAudioStreamDataNoCopy().
-*
-* \threadsafety This callbacks may run from any thread, so if you need to
-*               protect shared data, you should use SDL_LockAudioStream to
-*               serialize access; this lock will be held before your callback
-*               is called, so your callback does not need to manage the lock
-*               explicitly.
-*
-* \since This datatype is available since SDL 3.4.0.
-*
-* \sa SDL_SetAudioStreamGetCallback
-* \sa SDL_SetAudioStreamPutCallback
-*/
-SDL_AudioStreamDataCompleteCallback :: #type (userdata: *void, buf: *void, buflen: s32) -> void #c_call;
-
-/**
-* Add external data to an audio stream without copying it.
-*
-* Unlike SDL_PutAudioStreamData(), this function does not make a copy of the
-* provided data, instead storing the provided pointer. This means that the
-* put operation does not need to allocate and copy the data, but the original
-* data must remain available until the stream is done with it, either by
-* being read from the stream in its entirety, or a call to
-* SDL_ClearAudioStream() or SDL_DestroyAudioStream().
-*
-* The data must match the format/channels/samplerate specified in the latest
-* call to SDL_SetAudioStreamFormat, or the format specified when creating the
-* stream if it hasn't been changed.
-*
-* An optional callback may be provided, which is called when the stream no
-* longer needs the data. Once this callback fires, the stream will not access
-* the data again. This callback will fire for any reason the data is no
-* longer needed, including clearing or destroying the stream.
-*
-* Note that there is still an allocation to store tracking information, so
-* this function is more efficient for larger blocks of data. If you're
-* planning to put a few samples at a time, it will be more efficient to use
-* SDL_PutAudioStreamData(), which allocates and buffers in blocks.
-*
-* \param stream the stream the audio data is being added to.
-* \param buf a pointer to the audio data to add.
-* \param len the number of bytes to add to the stream.
-* \param callback the callback function to call when the data is no longer
-*                 needed by the stream. May be NULL.
-* \param userdata an opaque pointer provided to the callback for its own
-*                 personal use.
-* \returns true on success or false on failure; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety It is safe to call this function from any thread, but if the
-*               stream has a callback set, the caller might need to manage
-*               extra locking.
-*
-* \since This function is available since SDL 3.4.0.
-*
-* \sa SDL_ClearAudioStream
-* \sa SDL_FlushAudioStream
-* \sa SDL_GetAudioStreamData
-* \sa SDL_GetAudioStreamQueued
-*/
-SDL_PutAudioStreamDataNoCopy :: (stream: *SDL_AudioStream, buf: *void, len: s32, callback: SDL_AudioStreamDataCompleteCallback, userdata: *void) -> bool #foreign libsdl3;
-
-/**
-* Add data to the stream with each channel in a separate array.
-*
-* This data must match the format/channels/samplerate specified in the latest
-* call to SDL_SetAudioStreamFormat, or the format specified when creating the
-* stream if it hasn't been changed.
-*
-* The data will be interleaved and queued. Note that SDL_AudioStream only
-* operates on interleaved data, so this is simply a convenience function for
-* easily queueing data from sources that provide separate arrays. There is no
-* equivalent function to retrieve planar data.
-*
-* The arrays in `channel_buffers` are ordered as they are to be interleaved;
-* the first array will be the first sample in the interleaved data. Any
-* individual array may be NULL; in this case, silence will be interleaved for
-* that channel.
-*
-* `num_channels` specifies how many arrays are in `channel_buffers`. This can
-* be used as a safety to prevent overflow, in case the stream format has
-* changed elsewhere. If more channels are specified than the current input
-* spec, they are ignored. If less channels are specified, the missing arrays
-* are treated as if they are NULL (silence is written to those channels). If
-* the count is -1, SDL will assume the array count matches the current input
-* spec.
-*
-* Note that `num_samples` is the number of _samples per array_. This can also
-* be thought of as the number of _sample frames_ to be queued. A value of 1
-* with stereo arrays will queue two samples to the stream. This is different
-* than SDL_PutAudioStreamData, which wants the size of a single array in
-* bytes.
-*
-* \param stream the stream the audio data is being added to.
-* \param channel_buffers a pointer to an array of arrays, one array per
-*                        channel.
-* \param num_channels the number of arrays in `channel_buffers` or -1.
-* \param num_samples the number of _samples_ per array to write to the
-*                    stream.
-* \returns true on success or false on failure; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety It is safe to call this function from any thread, but if the
-*               stream has a callback set, the caller might need to manage
-*               extra locking.
-*
-* \since This function is available since SDL 3.4.0.
-*
-* \sa SDL_ClearAudioStream
-* \sa SDL_FlushAudioStream
-* \sa SDL_GetAudioStreamData
-* \sa SDL_GetAudioStreamQueued
-*/
-SDL_PutAudioStreamPlanarData :: (stream: *SDL_AudioStream, channel_buffers: **void, num_channels: s32, num_samples: s32) -> bool #foreign libsdl3;
-
-/**
-* Get converted/resampled data from the stream.
-*
-* The input/output data format/channels/samplerate is specified when creating
-* the stream, and can be changed after creation by calling
-* SDL_SetAudioStreamFormat.
-*
-* Note that any conversion and resampling necessary is done during this call,
-* and SDL_PutAudioStreamData simply queues unconverted data for later. This
-* is different than SDL2, where that work was done while inputting new data
-* to the stream and requesting the output just copied the converted data.
-*
-* \param stream the stream the audio is being requested from.
-* \param buf a buffer to fill with audio data.
-* \param len the maximum number of bytes to fill.
-* \returns the number of bytes read from the stream or -1 on failure; call
-*          SDL_GetError() for more information.
-*
-* \threadsafety It is safe to call this function from any thread, but if the
-*               stream has a callback set, the caller might need to manage
-*               extra locking.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_ClearAudioStream
-* \sa SDL_GetAudioStreamAvailable
-* \sa SDL_PutAudioStreamData
-*/
-SDL_GetAudioStreamData :: (stream: *SDL_AudioStream, buf: *void, len: s32) -> s32 #foreign libsdl3;
-
-/**
-* Get the number of converted/resampled bytes available.
-*
-* The stream may be buffering data behind the scenes until it has enough to
-* resample correctly, so this number might be lower than what you expect, or
-* even be zero. Add more data or flush the stream if you need the data now.
-*
-* If the stream has so much data that it would overflow an int, the return
-* value is clamped to a maximum value, but no queued data is lost; if there
-* are gigabytes of data queued, the app might need to read some of it with
-* SDL_GetAudioStreamData before this function's return value is no longer
-* clamped.
-*
-* \param stream the audio stream to query.
-* \returns the number of converted/resampled bytes available or -1 on
-*          failure; call SDL_GetError() for more information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_GetAudioStreamData
-* \sa SDL_PutAudioStreamData
-*/
-SDL_GetAudioStreamAvailable :: (stream: *SDL_AudioStream) -> s32 #foreign libsdl3;
-
-/**
-* Get the number of bytes currently queued.
-*
-* This is the number of bytes put into a stream as input, not the number that
-* can be retrieved as output. Because of several details, it's not possible
-* to calculate one number directly from the other. If you need to know how
-* much usable data can be retrieved right now, you should use
-* SDL_GetAudioStreamAvailable() and not this function.
-*
-* Note that audio streams can change their input format at any time, even if
-* there is still data queued in a different format, so the returned byte
-* count will not necessarily match the number of _sample frames_ available.
-* Users of this API should be aware of format changes they make when feeding
-* a stream and plan accordingly.
-*
-* Queued data is not converted until it is consumed by
-* SDL_GetAudioStreamData, so this value should be representative of the exact
-* data that was put into the stream.
-*
-* If the stream has so much data that it would overflow an int, the return
-* value is clamped to a maximum value, but no queued data is lost; if there
-* are gigabytes of data queued, the app might need to read some of it with
-* SDL_GetAudioStreamData before this function's return value is no longer
-* clamped.
-*
-* \param stream the audio stream to query.
-* \returns the number of bytes queued or -1 on failure; call SDL_GetError()
-*          for more information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_PutAudioStreamData
-* \sa SDL_ClearAudioStream
-*/
-SDL_GetAudioStreamQueued :: (stream: *SDL_AudioStream) -> s32 #foreign libsdl3;
-
-/**
-* Tell the stream that you're done sending data, and anything being buffered
-* should be converted/resampled and made available immediately.
-*
-* It is legal to add more data to a stream after flushing, but there may be
-* audio gaps in the output. Generally this is intended to signal the end of
-* input, so the complete output becomes available.
-*
-* \param stream the audio stream to flush.
-* \returns true on success or false on failure; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_PutAudioStreamData
-*/
-SDL_FlushAudioStream :: (stream: *SDL_AudioStream) -> bool #foreign libsdl3;
-
-/**
-* Clear any pending data in the stream.
-*
-* This drops any queued data, so there will be nothing to read from the
-* stream until more is added.
-*
-* \param stream the audio stream to clear.
-* \returns true on success or false on failure; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_GetAudioStreamAvailable
-* \sa SDL_GetAudioStreamData
-* \sa SDL_GetAudioStreamQueued
-* \sa SDL_PutAudioStreamData
-*/
-SDL_ClearAudioStream :: (stream: *SDL_AudioStream) -> bool #foreign libsdl3;
-
-/**
-* Use this function to pause audio playback on the audio device associated
-* with an audio stream.
-*
-* This function pauses audio processing for a given device. Any bound audio
-* streams will not progress, and no audio will be generated. Pausing one
-* device does not prevent other unpaused devices from running.
-*
-* Pausing a device can be useful to halt all audio without unbinding all the
-* audio streams. This might be useful while a game is paused, or a level is
-* loading, etc.
-*
-* \param stream the audio stream associated with the audio device to pause.
-* \returns true on success or false on failure; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_ResumeAudioStreamDevice
-*/
-SDL_PauseAudioStreamDevice :: (stream: *SDL_AudioStream) -> bool #foreign libsdl3;
-
-/**
-* Use this function to unpause audio playback on the audio device associated
-* with an audio stream.
-*
-* This function unpauses audio processing for a given device that has
-* previously been paused. Once unpaused, any bound audio streams will begin
-* to progress again, and audio can be generated.
-*
-* SDL_OpenAudioDeviceStream opens audio devices in a paused state, so this
-* function call is required for audio playback to begin on such devices.
-*
-* \param stream the audio stream associated with the audio device to resume.
-* \returns true on success or false on failure; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_PauseAudioStreamDevice
-*/
-SDL_ResumeAudioStreamDevice :: (stream: *SDL_AudioStream) -> bool #foreign libsdl3;
-
-/**
-* Use this function to query if an audio device associated with a stream is
-* paused.
-*
-* Unlike in SDL2, audio devices start in an _unpaused_ state, since an app
-* has to bind a stream before any audio will flow.
-*
-* \param stream the audio stream associated with the audio device to query.
-* \returns true if device is valid and paused, false otherwise.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_PauseAudioStreamDevice
-* \sa SDL_ResumeAudioStreamDevice
-*/
-SDL_AudioStreamDevicePaused :: (stream: *SDL_AudioStream) -> bool #foreign libsdl3;
-
-/**
-* Lock an audio stream for serialized access.
-*
-* Each SDL_AudioStream has an internal mutex it uses to protect its data
-* structures from threading conflicts. This function allows an app to lock
-* that mutex, which could be useful if registering callbacks on this stream.
-*
-* One does not need to lock a stream to use in it most cases, as the stream
-* manages this lock internally. However, this lock is held during callbacks,
-* which may run from arbitrary threads at any time, so if an app needs to
-* protect shared data during those callbacks, locking the stream guarantees
-* that the callback is not running while the lock is held.
-*
-* As this is just a wrapper over SDL_LockMutex for an internal lock; it has
-* all the same attributes (recursive locks are allowed, etc).
-*
-* \param stream the audio stream to lock.
-* \returns true on success or false on failure; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_UnlockAudioStream
-*/
-SDL_LockAudioStream :: (stream: *SDL_AudioStream) -> bool #foreign libsdl3;
-
-/**
-* Unlock an audio stream for serialized access.
-*
-* This unlocks an audio stream after a call to SDL_LockAudioStream.
-*
-* \param stream the audio stream to unlock.
-* \returns true on success or false on failure; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety You should only call this from the same thread that
-*               previously called SDL_LockAudioStream.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_LockAudioStream
-*/
-SDL_UnlockAudioStream :: (stream: *SDL_AudioStream) -> bool #foreign libsdl3;
-
-/**
-* A callback that fires when data passes through an SDL_AudioStream.
-*
-* Apps can (optionally) register a callback with an audio stream that is
-* called when data is added with SDL_PutAudioStreamData, or requested with
-* SDL_GetAudioStreamData.
-*
-* Two values are offered here: one is the amount of additional data needed to
-* satisfy the immediate request (which might be zero if the stream already
-* has enough data queued) and the other is the total amount being requested.
-* In a Get call triggering a Put callback, these values can be different. In
-* a Put call triggering a Get callback, these values are always the same.
-*
-* Byte counts might be slightly overestimated due to buffering or resampling,
-* and may change from call to call.
-*
-* This callback is not required to do anything. Generally this is useful for
-* adding/reading data on demand, and the app will often put/get data as
-* appropriate, but the system goes on with the data currently available to it
-* if this callback does nothing.
-*
-* \param stream the SDL audio stream associated with this callback.
-* \param additional_amount the amount of data, in bytes, that is needed right
-*                          now.
-* \param total_amount the total amount of data requested, in bytes, that is
-*                     requested or available.
-* \param userdata an opaque pointer provided by the app for their personal
-*                 use.
-*
-* \threadsafety This callbacks may run from any thread, so if you need to
-*               protect shared data, you should use SDL_LockAudioStream to
-*               serialize access; this lock will be held before your callback
-*               is called, so your callback does not need to manage the lock
-*               explicitly.
-*
-* \since This datatype is available since SDL 3.2.0.
-*
-* \sa SDL_SetAudioStreamGetCallback
-* \sa SDL_SetAudioStreamPutCallback
-*/
-SDL_AudioStreamCallback :: #type (userdata: *void, stream: *SDL_AudioStream, additional_amount: s32, total_amount: s32) -> void #c_call;
-
-/**
-* Set a callback that runs when data is requested from an audio stream.
-*
-* This callback is called _before_ data is obtained from the stream, giving
-* the callback the chance to add more on-demand.
-*
-* The callback can (optionally) call SDL_PutAudioStreamData() to add more
-* audio to the stream during this call; if needed, the request that triggered
-* this callback will obtain the new data immediately.
-*
-* The callback's `additional_amount` argument is roughly how many bytes of
-* _unconverted_ data (in the stream's input format) is needed by the caller,
-* although this may overestimate a little for safety. This takes into account
-* how much is already in the stream and only asks for any extra necessary to
-* resolve the request, which means the callback may be asked for zero bytes,
-* and a different amount on each call.
-*
-* The callback is not required to supply exact amounts; it is allowed to
-* supply too much or too little or none at all. The caller will get what's
-* available, up to the amount they requested, regardless of this callback's
-* outcome.
-*
-* Clearing or flushing an audio stream does not call this callback.
-*
-* This function obtains the stream's lock, which means any existing callback
-* (get or put) in progress will finish running before setting the new
-* callback.
-*
-* Setting a NULL function turns off the callback.
-*
-* \param stream the audio stream to set the new callback on.
-* \param callback the new callback function to call when data is requested
-*                 from the stream.
-* \param userdata an opaque pointer provided to the callback for its own
-*                 personal use.
-* \returns true on success or false on failure; call SDL_GetError() for more
-*          information. This only fails if `stream` is NULL.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_SetAudioStreamPutCallback
-*/
-SDL_SetAudioStreamGetCallback :: (stream: *SDL_AudioStream, callback: SDL_AudioStreamCallback, userdata: *void) -> bool #foreign libsdl3;
-
-/**
-* Set a callback that runs when data is added to an audio stream.
-*
-* This callback is called _after_ the data is added to the stream, giving the
-* callback the chance to obtain it immediately.
-*
-* The callback can (optionally) call SDL_GetAudioStreamData() to obtain audio
-* from the stream during this call.
-*
-* The callback's `additional_amount` argument is how many bytes of
-* _converted_ data (in the stream's output format) was provided by the
-* caller, although this may underestimate a little for safety. This value
-* might be less than what is currently available in the stream, if data was
-* already there, and might be less than the caller provided if the stream
-* needs to keep a buffer to aid in resampling. Which means the callback may
-* be provided with zero bytes, and a different amount on each call.
-*
-* The callback may call SDL_GetAudioStreamAvailable to see the total amount
-* currently available to read from the stream, instead of the total provided
-* by the current call.
-*
-* The callback is not required to obtain all data. It is allowed to read less
-* or none at all. Anything not read now simply remains in the stream for
-* later access.
-*
-* Clearing or flushing an audio stream does not call this callback.
-*
-* This function obtains the stream's lock, which means any existing callback
-* (get or put) in progress will finish running before setting the new
-* callback.
-*
-* Setting a NULL function turns off the callback.
-*
-* \param stream the audio stream to set the new callback on.
-* \param callback the new callback function to call when data is added to the
-*                 stream.
-* \param userdata an opaque pointer provided to the callback for its own
-*                 personal use.
-* \returns true on success or false on failure; call SDL_GetError() for more
-*          information. This only fails if `stream` is NULL.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_SetAudioStreamGetCallback
-*/
-SDL_SetAudioStreamPutCallback :: (stream: *SDL_AudioStream, callback: SDL_AudioStreamCallback, userdata: *void) -> bool #foreign libsdl3;
-
-/**
-* Free an audio stream.
-*
-* This will release all allocated data, including any audio that is still
-* queued. You do not need to manually clear the stream first.
-*
-* If this stream was bound to an audio device, it is unbound during this
-* call. If this stream was created with SDL_OpenAudioDeviceStream, the audio
-* device that was opened alongside this stream's creation will be closed,
-* too.
-*
-* \param stream the audio stream to destroy.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_CreateAudioStream
-*/
-SDL_DestroyAudioStream :: (stream: *SDL_AudioStream) -> void #foreign libsdl3;
-
-/**
-* Convenience function for straightforward audio init for the common case.
-*
-* If all your app intends to do is provide a single source of PCM audio, this
-* function allows you to do all your audio setup in a single call.
-*
-* This is also intended to be a clean means to migrate apps from SDL2.
-*
-* This function will open an audio device, create a stream and bind it.
-* Unlike other methods of setup, the audio device will be closed when this
-* stream is destroyed, so the app can treat the returned SDL_AudioStream as
-* the only object needed to manage audio playback.
-*
-* Also unlike other functions, the audio device begins paused. This is to map
-* more closely to SDL2-style behavior, since there is no extra step here to
-* bind a stream to begin audio flowing. The audio device should be resumed
-* with SDL_ResumeAudioStreamDevice().
-*
-* This function works with both playback and recording devices.
-*
-* The `spec` parameter represents the app's side of the audio stream. That
-* is, for recording audio, this will be the output format, and for playing
-* audio, this will be the input format. If spec is NULL, the system will
-* choose the format, and the app can use SDL_GetAudioStreamFormat() to obtain
-* this information later.
-*
-* If you don't care about opening a specific audio device, you can (and
-* probably _should_), use SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK for playback and
-* SDL_AUDIO_DEVICE_DEFAULT_RECORDING for recording.
-*
-* One can optionally provide a callback function; if NULL, the app is
-* expected to queue audio data for playback (or unqueue audio data if
-* capturing). Otherwise, the callback will begin to fire once the device is
-* unpaused.
-*
-* Destroying the returned stream with SDL_DestroyAudioStream will also close
-* the audio device associated with this stream.
-*
-* \param devid an audio device to open, or SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK
-*              or SDL_AUDIO_DEVICE_DEFAULT_RECORDING.
-* \param spec the audio stream's data format. Can be NULL.
-* \param callback a callback where the app will provide new data for
-*                 playback, or receive new data for recording. Can be NULL,
-*                 in which case the app will need to call
-*                 SDL_PutAudioStreamData or SDL_GetAudioStreamData as
-*                 necessary.
-* \param userdata app-controlled pointer passed to callback. Can be NULL.
-*                 Ignored if callback is NULL.
-* \returns an audio stream on success, ready to use, or NULL on failure; call
-*          SDL_GetError() for more information. When done with this stream,
-*          call SDL_DestroyAudioStream to free resources and close the
-*          device.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_GetAudioStreamDevice
-* \sa SDL_ResumeAudioStreamDevice
-*/
-SDL_OpenAudioDeviceStream :: (devid: SDL_AudioDeviceID, spec: *SDL_AudioSpec, callback: SDL_AudioStreamCallback, userdata: *void) -> *SDL_AudioStream #foreign libsdl3;
-
-/**
-* A callback that fires when data is about to be fed to an audio device.
-*
-* This is useful for accessing the final mix, perhaps for writing a
-* visualizer or applying a final effect to the audio data before playback.
-*
-* This callback should run as quickly as possible and not block for any
-* significant time, as this callback delays submission of data to the audio
-* device, which can cause audio playback problems.
-*
-* The postmix callback _must_ be able to handle any audio data format
-* specified in `spec`, which can change between callbacks if the audio device
-* changed. However, this only covers frequency and channel count; data is
-* always provided here in SDL_AUDIO_F32 format.
-*
-* The postmix callback runs _after_ logical device gain and audiostream gain
-* have been applied, which is to say you can make the output data louder at
-* this point than the gain settings would suggest.
-*
-* \param userdata a pointer provided by the app through
-*                 SDL_SetAudioPostmixCallback, for its own use.
-* \param spec the current format of audio that is to be submitted to the
-*             audio device.
-* \param buffer the buffer of audio samples to be submitted. The callback can
-*               inspect and/or modify this data.
-* \param buflen the size of `buffer` in bytes.
-*
-* \threadsafety This will run from a background thread owned by SDL. The
-*               application is responsible for locking resources the callback
-*               touches that need to be protected.
-*
-* \since This datatype is available since SDL 3.2.0.
-*
-* \sa SDL_SetAudioPostmixCallback
-*/
-SDL_AudioPostmixCallback :: #type (userdata: *void, spec: *SDL_AudioSpec, buffer: *float, buflen: s32) -> void #c_call;
-
-/**
-* Set a callback that fires when data is about to be fed to an audio device.
-*
-* This is useful for accessing the final mix, perhaps for writing a
-* visualizer or applying a final effect to the audio data before playback.
-*
-* The buffer is the final mix of all bound audio streams on an opened device;
-* this callback will fire regularly for any device that is both opened and
-* unpaused. If there is no new data to mix, either because no streams are
-* bound to the device or all the streams are empty, this callback will still
-* fire with the entire buffer set to silence.
-*
-* This callback is allowed to make changes to the data; the contents of the
-* buffer after this call is what is ultimately passed along to the hardware.
-*
-* The callback is always provided the data in float format (values from -1.0f
-* to 1.0f), but the number of channels or sample rate may be different than
-* the format the app requested when opening the device; SDL might have had to
-* manage a conversion behind the scenes, or the playback might have jumped to
-* new physical hardware when a system default changed, etc. These details may
-* change between calls. Accordingly, the size of the buffer might change
-* between calls as well.
-*
-* This callback can run at any time, and from any thread; if you need to
-* serialize access to your app's data, you should provide and use a mutex or
-* other synchronization device.
-*
-* All of this to say: there are specific needs this callback can fulfill, but
-* it is not the simplest interface. Apps should generally provide audio in
-* their preferred format through an SDL_AudioStream and let SDL handle the
-* difference.
-*
-* This function is extremely time-sensitive; the callback should do the least
-* amount of work possible and return as quickly as it can. The longer the
-* callback runs, the higher the risk of audio dropouts or other problems.
-*
-* This function will block until the audio device is in between iterations,
-* so any existing callback that might be running will finish before this
-* function sets the new callback and returns.
-*
-* Setting a NULL callback function disables any previously-set callback.
-*
-* \param devid the ID of an opened audio device.
-* \param callback a callback function to be called. Can be NULL.
-* \param userdata app-controlled pointer passed to callback. Can be NULL.
-* \returns true on success or false on failure; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*/
-SDL_SetAudioPostmixCallback :: (devid: SDL_AudioDeviceID, callback: SDL_AudioPostmixCallback, userdata: *void) -> bool #foreign libsdl3;
-
-/**
-* Load the audio data of a WAVE file into memory.
-*
-* Loading a WAVE file requires `src`, `spec`, `audio_buf` and `audio_len` to
-* be valid pointers. The entire data portion of the file is then loaded into
-* memory and decoded if necessary.
-*
-* Supported formats are RIFF WAVE files with the formats PCM (8, 16, 24, and
-* 32 bits), IEEE Float (32 bits), Microsoft ADPCM and IMA ADPCM (4 bits), and
-* A-law and mu-law (8 bits). Other formats are currently unsupported and
-* cause an error.
-*
-* If this function succeeds, the return value is zero and the pointer to the
-* audio data allocated by the function is written to `audio_buf` and its
-* length in bytes to `audio_len`. The SDL_AudioSpec members `freq`,
-* `channels`, and `format` are set to the values of the audio data in the
-* buffer.
-*
-* It's necessary to use SDL_free() to free the audio data returned in
-* `audio_buf` when it is no longer used.
-*
-* Because of the underspecification of the .WAV format, there are many
-* problematic files in the wild that cause issues with strict decoders. To
-* provide compatibility with these files, this decoder is lenient in regards
-* to the truncation of the file, the fact chunk, and the size of the RIFF
-* chunk. The hints `SDL_HINT_WAVE_RIFF_CHUNK_SIZE`,
-* `SDL_HINT_WAVE_TRUNCATION`, and `SDL_HINT_WAVE_FACT_CHUNK` can be used to
-* tune the behavior of the loading process.
-*
-* Any file that is invalid (due to truncation, corruption, or wrong values in
-* the headers), too big, or unsupported causes an error. Additionally, any
-* critical I/O error from the data source will terminate the loading process
-* with an error. The function returns NULL on error and in all cases (with
-* the exception of `src` being NULL), an appropriate error message will be
-* set.
-*
-* It is required that the data source supports seeking.
-*
-* Example:
-*
-* ```c
-* SDL_LoadWAV_IO(SDL_IOFromFile("sample.wav", "rb"), true, &spec, &buf, &len);
-* ```
-*
-* Note that the SDL_LoadWAV function does this same thing for you, but in a
-* less messy way:
-*
-* ```c
-* SDL_LoadWAV("sample.wav", &spec, &buf, &len);
-* ```
-*
-* \param src the data source for the WAVE data.
-* \param closeio if true, calls SDL_CloseIO() on `src` before returning, even
-*                in the case of an error.
-* \param spec a pointer to an SDL_AudioSpec that will be set to the WAVE
-*             data's format details on successful return.
-* \param audio_buf a pointer filled with the audio data, allocated by the
-*                  function.
-* \param audio_len a pointer filled with the length of the audio data buffer
-*                  in bytes.
-* \returns true on success. `audio_buf` will be filled with a pointer to an
-*          allocated buffer containing the audio data, and `audio_len` is
-*          filled with the length of that audio buffer in bytes.
-*
-*          This function returns false if the .WAV file cannot be opened,
-*          uses an unknown data format, or is corrupt; call SDL_GetError()
-*          for more information.
-*
-*          When the application is done with the data returned in
-*          `audio_buf`, it should call SDL_free() to dispose of it.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_free
-* \sa SDL_LoadWAV
-*/
-SDL_LoadWAV_IO :: (src: *SDL_IOStream, closeio: bool, spec: *SDL_AudioSpec, audio_buf: **Uint8, audio_len: *Uint32) -> bool #foreign libsdl3;
-
-/**
-* Loads a WAV from a file path.
-*
-* This is a convenience function that is effectively the same as:
-*
-* ```c
-* SDL_LoadWAV_IO(SDL_IOFromFile(path, "rb"), true, spec, audio_buf, audio_len);
-* ```
-*
-* \param path the file path of the WAV file to open.
-* \param spec a pointer to an SDL_AudioSpec that will be set to the WAVE
-*             data's format details on successful return.
-* \param audio_buf a pointer filled with the audio data, allocated by the
-*                  function.
-* \param audio_len a pointer filled with the length of the audio data buffer
-*                  in bytes.
-* \returns true on success. `audio_buf` will be filled with a pointer to an
-*          allocated buffer containing the audio data, and `audio_len` is
-*          filled with the length of that audio buffer in bytes.
-*
-*          This function returns false if the .WAV file cannot be opened,
-*          uses an unknown data format, or is corrupt; call SDL_GetError()
-*          for more information.
-*
-*          When the application is done with the data returned in
-*          `audio_buf`, it should call SDL_free() to dispose of it.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_free
-* \sa SDL_LoadWAV_IO
-*/
-SDL_LoadWAV :: (path: *u8, spec: *SDL_AudioSpec, audio_buf: **Uint8, audio_len: *Uint32) -> bool #foreign libsdl3;
-
-/**
-* Mix audio data in a specified format.
-*
-* This takes an audio buffer `src` of `len` bytes of `format` data and mixes
-* it into `dst`, performing addition, volume adjustment, and overflow
-* clipping. The buffer pointed to by `dst` must also be `len` bytes of
-* `format` data.
-*
-* This is provided for convenience -- you can mix your own audio data.
-*
-* Do not use this function for mixing together more than two streams of
-* sample data. The output from repeated application of this function may be
-* distorted by clipping, because there is no accumulator with greater range
-* than the input (not to mention this being an inefficient way of doing it).
-*
-* It is a common misconception that this function is required to write audio
-* data to an output stream in an audio callback. While you can do that,
-* SDL_MixAudio() is really only needed when you're mixing a single audio
-* stream with a volume adjustment.
-*
-* \param dst the destination for the mixed audio.
-* \param src the source audio buffer to be mixed.
-* \param format the SDL_AudioFormat structure representing the desired audio
-*               format.
-* \param len the length of the audio buffer in bytes.
-* \param volume ranges from 0.0 - 1.0, and should be set to 1.0 for full
-*               audio volume.
-* \returns true on success or false on failure; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*/
-SDL_MixAudio :: (dst: *Uint8, src: *Uint8, format: SDL_AudioFormat, len: Uint32, volume: float) -> bool #foreign libsdl3;
-
-/**
-* Convert some audio data of one format to another format.
-*
-* Please note that this function is for convenience, but should not be used
-* to resample audio in blocks, as it will introduce audio artifacts on the
-* boundaries. You should only use this function if you are converting audio
-* data in its entirety in one call. If you want to convert audio in smaller
-* chunks, use an SDL_AudioStream, which is designed for this situation.
-*
-* Internally, this function creates and destroys an SDL_AudioStream on each
-* use, so it's also less efficient than using one directly, if you need to
-* convert multiple times.
-*
-* \param src_spec the format details of the input audio.
-* \param src_data the audio data to be converted.
-* \param src_len the len of src_data.
-* \param dst_spec the format details of the output audio.
-* \param dst_data will be filled with a pointer to converted audio data,
-*                 which should be freed with SDL_free(). On error, it will be
-*                 NULL.
-* \param dst_len will be filled with the len of dst_data.
-* \returns true on success or false on failure; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*/
-SDL_ConvertAudioSamples :: (src_spec: *SDL_AudioSpec, src_data: *Uint8, src_len: s32, dst_spec: *SDL_AudioSpec, dst_data: **Uint8, dst_len: *s32) -> bool #foreign libsdl3;
-
-/**
-* Get the human readable name of an audio format.
-*
-* \param format the audio format to query.
-* \returns the human readable name of the specified audio format or
-*          "SDL_AUDIO_UNKNOWN" if the format isn't recognized.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*/
-SDL_GetAudioFormatName :: (format: SDL_AudioFormat) -> *u8 #foreign libsdl3;
-
-/**
-* Get the appropriate memset value for silencing an audio format.
-*
-* The value returned by this function can be used as the second argument to
-* memset (or SDL_memset) to set an audio buffer in a specific format to
-* silence.
-*
-* \param format the audio data format to query.
-* \returns a byte value that can be passed to memset.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*/
-SDL_GetSilenceValueForFormat :: (format: SDL_AudioFormat) -> s32 #foreign libsdl3;
-
-/**
-* A set of blend modes used in drawing operations.
-*
-* These predefined blend modes are supported everywhere.
-*
-* Additional values may be obtained from SDL_ComposeCustomBlendMode.
-*
-* \since This datatype is available since SDL 3.2.0.
-*
-* \sa SDL_ComposeCustomBlendMode
-*/
-SDL_BlendMode :: Uint32;
-
-/**
-* The blend operation used when combining source and destination pixel
-* components.
-*
-* \since This enum is available since SDL 3.2.0.
-*/
-SDL_BlendOperation :: enum u32 {
-    ADD          :: 1;
-    SUBTRACT     :: 2;
-    REV_SUBTRACT :: 3;
-    MINIMUM      :: 4;
-    MAXIMUM      :: 5;
-
-    SDL_BLENDOPERATION_ADD          :: ADD;
-    SDL_BLENDOPERATION_SUBTRACT     :: SUBTRACT;
-    SDL_BLENDOPERATION_REV_SUBTRACT :: REV_SUBTRACT;
-    SDL_BLENDOPERATION_MINIMUM      :: MINIMUM;
-    SDL_BLENDOPERATION_MAXIMUM      :: MAXIMUM;
-}
-
-/**
-* The normalized factor used to multiply pixel components.
-*
-* The blend factors are multiplied with the pixels from a drawing operation
-* (src) and the pixels from the render target (dst) before the blend
-* operation. The comma-separated factors listed above are always applied in
-* the component order red, green, blue, and alpha.
-*
-* \since This enum is available since SDL 3.2.0.
-*/
-SDL_BlendFactor :: enum u32 {
-    ZERO                :: 1;
-    ONE                 :: 2;
-    SRC_COLOR           :: 3;
-    ONE_MINUS_SRC_COLOR :: 4;
-    SRC_ALPHA           :: 5;
-    ONE_MINUS_SRC_ALPHA :: 6;
-    DST_COLOR           :: 7;
-    ONE_MINUS_DST_COLOR :: 8;
-    DST_ALPHA           :: 9;
-    ONE_MINUS_DST_ALPHA :: 10;
-
-    SDL_BLENDFACTOR_ZERO                :: ZERO;
-    SDL_BLENDFACTOR_ONE                 :: ONE;
-    SDL_BLENDFACTOR_SRC_COLOR           :: SRC_COLOR;
-    SDL_BLENDFACTOR_ONE_MINUS_SRC_COLOR :: ONE_MINUS_SRC_COLOR;
-    SDL_BLENDFACTOR_SRC_ALPHA           :: SRC_ALPHA;
-    SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA :: ONE_MINUS_SRC_ALPHA;
-    SDL_BLENDFACTOR_DST_COLOR           :: DST_COLOR;
-    SDL_BLENDFACTOR_ONE_MINUS_DST_COLOR :: ONE_MINUS_DST_COLOR;
-    SDL_BLENDFACTOR_DST_ALPHA           :: DST_ALPHA;
-    SDL_BLENDFACTOR_ONE_MINUS_DST_ALPHA :: ONE_MINUS_DST_ALPHA;
-}
-
-/**
-* Compose a custom blend mode for renderers.
-*
-* The functions SDL_SetRenderDrawBlendMode and SDL_SetTextureBlendMode accept
-* the SDL_BlendMode returned by this function if the renderer supports it.
-*
-* A blend mode controls how the pixels from a drawing operation (source) get
-* combined with the pixels from the render target (destination). First, the
-* components of the source and destination pixels get multiplied with their
-* blend factors. Then, the blend operation takes the two products and
-* calculates the result that will get stored in the render target.
-*
-* Expressed in pseudocode, it would look like this:
-*
-* ```c
-* dstRGB = colorOperation(srcRGB * srcColorFactor, dstRGB * dstColorFactor);
-* dstA = alphaOperation(srcA * srcAlphaFactor, dstA * dstAlphaFactor);
-* ```
-*
-* Where the functions `colorOperation(src, dst)` and `alphaOperation(src,
-* dst)` can return one of the following:
-*
-* - `src + dst`
-* - `src - dst`
-* - `dst - src`
-* - `min(src, dst)`
-* - `max(src, dst)`
-*
-* The red, green, and blue components are always multiplied with the first,
-* second, and third components of the SDL_BlendFactor, respectively. The
-* fourth component is not used.
-*
-* The alpha component is always multiplied with the fourth component of the
-* SDL_BlendFactor. The other components are not used in the alpha
-* calculation.
-*
-* Support for these blend modes varies for each renderer. To check if a
-* specific SDL_BlendMode is supported, create a renderer and pass it to
-* either SDL_SetRenderDrawBlendMode or SDL_SetTextureBlendMode. They will
-* return with an error if the blend mode is not supported.
-*
-* This list describes the support of custom blend modes for each renderer.
-* All renderers support the four blend modes listed in the SDL_BlendMode
-* enumeration.
-*
-* - **direct3d**: Supports all operations with all factors. However, some
-*   factors produce unexpected results with `SDL_BLENDOPERATION_MINIMUM` and
-*   `SDL_BLENDOPERATION_MAXIMUM`.
-* - **direct3d11**: Same as Direct3D 9.
-* - **opengl**: Supports the `SDL_BLENDOPERATION_ADD` operation with all
-*   factors. OpenGL versions 1.1, 1.2, and 1.3 do not work correctly here.
-* - **opengles2**: Supports the `SDL_BLENDOPERATION_ADD`,
-*   `SDL_BLENDOPERATION_SUBTRACT`, `SDL_BLENDOPERATION_REV_SUBTRACT`
-*   operations with all factors.
-* - **psp**: No custom blend mode support.
-* - **software**: No custom blend mode support.
-*
-* Some renderers do not provide an alpha component for the default render
-* target. The `SDL_BLENDFACTOR_DST_ALPHA` and
-* `SDL_BLENDFACTOR_ONE_MINUS_DST_ALPHA` factors do not have an effect in this
-* case.
-*
-* \param srcColorFactor the SDL_BlendFactor applied to the red, green, and
-*                       blue components of the source pixels.
-* \param dstColorFactor the SDL_BlendFactor applied to the red, green, and
-*                       blue components of the destination pixels.
-* \param colorOperation the SDL_BlendOperation used to combine the red,
-*                       green, and blue components of the source and
-*                       destination pixels.
-* \param srcAlphaFactor the SDL_BlendFactor applied to the alpha component of
-*                       the source pixels.
-* \param dstAlphaFactor the SDL_BlendFactor applied to the alpha component of
-*                       the destination pixels.
-* \param alphaOperation the SDL_BlendOperation used to combine the alpha
-*                       component of the source and destination pixels.
-* \returns an SDL_BlendMode that represents the chosen factors and
-*          operations.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_SetRenderDrawBlendMode
-* \sa SDL_GetRenderDrawBlendMode
-* \sa SDL_SetTextureBlendMode
-* \sa SDL_GetTextureBlendMode
-*/
-SDL_ComposeCustomBlendMode :: (srcColorFactor: SDL_BlendFactor, dstColorFactor: SDL_BlendFactor, colorOperation: SDL_BlendOperation, srcAlphaFactor: SDL_BlendFactor, dstAlphaFactor: SDL_BlendFactor, alphaOperation: SDL_BlendOperation) -> SDL_BlendMode #foreign libsdl3;
-
-/**
-* Pixel type.
-*
-* \since This enum is available since SDL 3.2.0.
-*/
-SDL_PixelType :: enum u32 {
-    UNKNOWN  :: 0;
-    INDEX1   :: 1;
-    INDEX4   :: 2;
-    INDEX8   :: 3;
-    PACKED8  :: 4;
-    PACKED16 :: 5;
-    PACKED32 :: 6;
-    ARRAYU8  :: 7;
-    ARRAYU16 :: 8;
-    ARRAYU32 :: 9;
-    ARRAYF16 :: 10;
-    ARRAYF32 :: 11;
-
-    INDEX2   :: 12;
-
-    SDL_PIXELTYPE_UNKNOWN  :: UNKNOWN;
-    SDL_PIXELTYPE_INDEX1   :: INDEX1;
-    SDL_PIXELTYPE_INDEX4   :: INDEX4;
-    SDL_PIXELTYPE_INDEX8   :: INDEX8;
-    SDL_PIXELTYPE_PACKED8  :: PACKED8;
-    SDL_PIXELTYPE_PACKED16 :: PACKED16;
-    SDL_PIXELTYPE_PACKED32 :: PACKED32;
-    SDL_PIXELTYPE_ARRAYU8  :: ARRAYU8;
-    SDL_PIXELTYPE_ARRAYU16 :: ARRAYU16;
-    SDL_PIXELTYPE_ARRAYU32 :: ARRAYU32;
-    SDL_PIXELTYPE_ARRAYF16 :: ARRAYF16;
-    SDL_PIXELTYPE_ARRAYF32 :: ARRAYF32;
-
-    SDL_PIXELTYPE_INDEX2   :: INDEX2;
-}
-
-/**
-* Bitmap pixel order, high bit -> low bit.
-*
-* \since This enum is available since SDL 3.2.0.
-*/
-SDL_BitmapOrder :: enum u32 {
-    NONE  :: 0;
-    _4321 :: 1;
-    _1234 :: 2;
-
-    SDL_BITMAPORDER_NONE :: NONE;
-    SDL_BITMAPORDER_4321 :: _4321;
-    SDL_BITMAPORDER_1234 :: _1234;
-}
-
-/**
-* Packed component order, high bit -> low bit.
-*
-* \since This enum is available since SDL 3.2.0.
-*/
-SDL_PackedOrder :: enum u32 {
-    NONE :: 0;
-    XRGB :: 1;
-    RGBX :: 2;
-    ARGB :: 3;
-    RGBA :: 4;
-    XBGR :: 5;
-    BGRX :: 6;
-    ABGR :: 7;
-    BGRA :: 8;
-
-    SDL_PACKEDORDER_NONE :: NONE;
-    SDL_PACKEDORDER_XRGB :: XRGB;
-    SDL_PACKEDORDER_RGBX :: RGBX;
-    SDL_PACKEDORDER_ARGB :: ARGB;
-    SDL_PACKEDORDER_RGBA :: RGBA;
-    SDL_PACKEDORDER_XBGR :: XBGR;
-    SDL_PACKEDORDER_BGRX :: BGRX;
-    SDL_PACKEDORDER_ABGR :: ABGR;
-    SDL_PACKEDORDER_BGRA :: BGRA;
-}
-
-/**
-* Array component order, low byte -> high byte.
-*
-* \since This enum is available since SDL 3.2.0.
-*/
-SDL_ArrayOrder :: enum u32 {
-    NONE :: 0;
-    RGB  :: 1;
-    RGBA :: 2;
-    ARGB :: 3;
-    BGR  :: 4;
-    BGRA :: 5;
-    ABGR :: 6;
-
-    SDL_ARRAYORDER_NONE :: NONE;
-    SDL_ARRAYORDER_RGB  :: RGB;
-    SDL_ARRAYORDER_RGBA :: RGBA;
-    SDL_ARRAYORDER_ARGB :: ARGB;
-    SDL_ARRAYORDER_BGR  :: BGR;
-    SDL_ARRAYORDER_BGRA :: BGRA;
-    SDL_ARRAYORDER_ABGR :: ABGR;
-}
-
-/**
-* Packed component layout.
-*
-* \since This enum is available since SDL 3.2.0.
-*/
-SDL_PackedLayout :: enum u32 {
-    NONE     :: 0;
-    _332     :: 1;
-    _4444    :: 2;
-    _1555    :: 3;
-    _5551    :: 4;
-    _565     :: 5;
-    _8888    :: 6;
-    _2101010 :: 7;
-    _1010102 :: 8;
-
-    SDL_PACKEDLAYOUT_NONE    :: NONE;
-    SDL_PACKEDLAYOUT_332     :: _332;
-    SDL_PACKEDLAYOUT_4444    :: _4444;
-    SDL_PACKEDLAYOUT_1555    :: _1555;
-    SDL_PACKEDLAYOUT_5551    :: _5551;
-    SDL_PACKEDLAYOUT_565     :: _565;
-    SDL_PACKEDLAYOUT_8888    :: _8888;
-    SDL_PACKEDLAYOUT_2101010 :: _2101010;
-    SDL_PACKEDLAYOUT_1010102 :: _1010102;
-}
-
-/**
-* Pixel format.
-*
-* SDL's pixel formats have the following naming convention:
-*
-* - Names with a list of components and a single bit count, such as RGB24 and
-*   ABGR32, define a platform-independent encoding into bytes in the order
-*   specified. For example, in RGB24 data, each pixel is encoded in 3 bytes
-*   (red, green, blue) in that order, and in ABGR32 data, each pixel is
-*   encoded in 4 bytes (alpha, blue, green, red) in that order. Use these
-*   names if the property of a format that is important to you is the order
-*   of the bytes in memory or on disk.
-* - Names with a bit count per component, such as ARGB8888 and XRGB1555, are
-*   "packed" into an appropriately-sized integer in the platform's native
-*   endianness. For example, ARGB8888 is a sequence of 32-bit integers; in
-*   each integer, the most significant bits are alpha, and the least
-*   significant bits are blue. On a little-endian CPU such as x86, the least
-*   significant bits of each integer are arranged first in memory, but on a
-*   big-endian CPU such as s390x, the most significant bits are arranged
-*   first. Use these names if the property of a format that is important to
-*   you is the meaning of each bit position within a native-endianness
-*   integer.
-* - In indexed formats such as INDEX4LSB, each pixel is represented by
-*   encoding an index into the palette into the indicated number of bits,
-*   with multiple pixels packed into each byte if appropriate. In LSB
-*   formats, the first (leftmost) pixel is stored in the least-significant
-*   bits of the byte; in MSB formats, it's stored in the most-significant
-*   bits. INDEX8 does not need LSB/MSB variants, because each pixel exactly
-*   fills one byte.
-*
-* The 32-bit byte-array encodings such as RGBA32 are aliases for the
-* appropriate 8888 encoding for the current platform. For example, RGBA32 is
-* an alias for ABGR8888 on little-endian CPUs like x86, or an alias for
-* RGBA8888 on big-endian CPUs.
-*
-* \since This enum is available since SDL 3.2.0.
-*/
-SDL_PixelFormat :: enum u32 {
-    UNKNOWN       :: 0;
-    INDEX1LSB     :: 286261504;
-
-    INDEX1MSB     :: 287310080;
-
-    INDEX2LSB     :: 470811136;
-
-    INDEX2MSB     :: 471859712;
-
-    INDEX4LSB     :: 303039488;
-
-    INDEX4MSB     :: 304088064;
-
-    INDEX8        :: 318769153;
-
-    RGB332        :: 336660481;
-
-    XRGB4444      :: 353504258;
-
-    XBGR4444      :: 357698562;
-
-    XRGB1555      :: 353570562;
-
-    XBGR1555      :: 357764866;
-
-    ARGB4444      :: 355602434;
-
-    RGBA4444      :: 356651010;
-
-    ABGR4444      :: 359796738;
-
-    BGRA4444      :: 360845314;
-
-    ARGB1555      :: 355667970;
-
-    RGBA5551      :: 356782082;
-
-    ABGR1555      :: 359862274;
-
-    BGRA5551      :: 360976386;
-
-    RGB565        :: 353701890;
-
-    BGR565        :: 357896194;
-
-    RGB24         :: 386930691;
-
-    BGR24         :: 390076419;
-
-    XRGB8888      :: 370546692;
-
-    RGBX8888      :: 371595268;
-
-    XBGR8888      :: 374740996;
-
-    BGRX8888      :: 375789572;
-
-    ARGB8888      :: 372645892;
-
-    RGBA8888      :: 373694468;
-
-    ABGR8888      :: 376840196;
-
-    BGRA8888      :: 377888772;
-
-    XRGB2101010   :: 370614276;
-
-    XBGR2101010   :: 374808580;
-
-    ARGB2101010   :: 372711428;
-
-    ABGR2101010   :: 376905732;
-
-    RGB48         :: 403714054;
-
-    BGR48         :: 406859782;
-
-    RGBA64        :: 404766728;
-
-    ARGB64        :: 405815304;
-
-    BGRA64        :: 407912456;
-
-    ABGR64        :: 408961032;
-
-    RGB48_FLOAT   :: 437268486;
-
-    BGR48_FLOAT   :: 440414214;
-
-    RGBA64_FLOAT  :: 438321160;
-
-    ARGB64_FLOAT  :: 439369736;
-
-    BGRA64_FLOAT  :: 441466888;
-
-    ABGR64_FLOAT  :: 442515464;
-
-    RGB96_FLOAT   :: 454057996;
-
-    BGR96_FLOAT   :: 457203724;
-
-    RGBA128_FLOAT :: 455114768;
-
-    ARGB128_FLOAT :: 456163344;
-
-    BGRA128_FLOAT :: 458260496;
-
-    ABGR128_FLOAT :: 459309072;
-
-    YV12          :: 842094169;
-
-    IYUV          :: 1448433993;
-
-    YUY2          :: 844715353;
-
-    UYVY          :: 1498831189;
-
-    YVYU          :: 1431918169;
-
-    NV12          :: 842094158;
-
-    NV21          :: 825382478;
-
-    P010          :: 808530000;
-
-    EXTERNAL_OES  :: 542328143;
-
-    MJPG          :: 1196444237;
-
-    RGBA32        :: 376840196;
-    ARGB32        :: 377888772;
-    BGRA32        :: 372645892;
-    ABGR32        :: 373694468;
-    RGBX32        :: 374740996;
-    XRGB32        :: 375789572;
-    BGRX32        :: 370546692;
-    XBGR32        :: 371595268;
-
-    SDL_PIXELFORMAT_UNKNOWN       :: UNKNOWN;
-    SDL_PIXELFORMAT_INDEX1LSB     :: INDEX1LSB;
-
-    SDL_PIXELFORMAT_INDEX1MSB     :: INDEX1MSB;
-
-    SDL_PIXELFORMAT_INDEX2LSB     :: INDEX2LSB;
-
-    SDL_PIXELFORMAT_INDEX2MSB     :: INDEX2MSB;
-
-    SDL_PIXELFORMAT_INDEX4LSB     :: INDEX4LSB;
-
-    SDL_PIXELFORMAT_INDEX4MSB     :: INDEX4MSB;
-
-    SDL_PIXELFORMAT_INDEX8        :: INDEX8;
-
-    SDL_PIXELFORMAT_RGB332        :: RGB332;
-
-    SDL_PIXELFORMAT_XRGB4444      :: XRGB4444;
-
-    SDL_PIXELFORMAT_XBGR4444      :: XBGR4444;
-
-    SDL_PIXELFORMAT_XRGB1555      :: XRGB1555;
-
-    SDL_PIXELFORMAT_XBGR1555      :: XBGR1555;
-
-    SDL_PIXELFORMAT_ARGB4444      :: ARGB4444;
-
-    SDL_PIXELFORMAT_RGBA4444      :: RGBA4444;
-
-    SDL_PIXELFORMAT_ABGR4444      :: ABGR4444;
-
-    SDL_PIXELFORMAT_BGRA4444      :: BGRA4444;
-
-    SDL_PIXELFORMAT_ARGB1555      :: ARGB1555;
-
-    SDL_PIXELFORMAT_RGBA5551      :: RGBA5551;
-
-    SDL_PIXELFORMAT_ABGR1555      :: ABGR1555;
-
-    SDL_PIXELFORMAT_BGRA5551      :: BGRA5551;
-
-    SDL_PIXELFORMAT_RGB565        :: RGB565;
-
-    SDL_PIXELFORMAT_BGR565        :: BGR565;
-
-    SDL_PIXELFORMAT_RGB24         :: RGB24;
-
-    SDL_PIXELFORMAT_BGR24         :: BGR24;
-
-    SDL_PIXELFORMAT_XRGB8888      :: XRGB8888;
-
-    SDL_PIXELFORMAT_RGBX8888      :: RGBX8888;
-
-    SDL_PIXELFORMAT_XBGR8888      :: XBGR8888;
-
-    SDL_PIXELFORMAT_BGRX8888      :: BGRX8888;
-
-    SDL_PIXELFORMAT_ARGB8888      :: ARGB8888;
-
-    SDL_PIXELFORMAT_RGBA8888      :: RGBA8888;
-
-    SDL_PIXELFORMAT_ABGR8888      :: ABGR8888;
-
-    SDL_PIXELFORMAT_BGRA8888      :: BGRA8888;
-
-    SDL_PIXELFORMAT_XRGB2101010   :: XRGB2101010;
-
-    SDL_PIXELFORMAT_XBGR2101010   :: XBGR2101010;
-
-    SDL_PIXELFORMAT_ARGB2101010   :: ARGB2101010;
-
-    SDL_PIXELFORMAT_ABGR2101010   :: ABGR2101010;
-
-    SDL_PIXELFORMAT_RGB48         :: RGB48;
-
-    SDL_PIXELFORMAT_BGR48         :: BGR48;
-
-    SDL_PIXELFORMAT_RGBA64        :: RGBA64;
-
-    SDL_PIXELFORMAT_ARGB64        :: ARGB64;
-
-    SDL_PIXELFORMAT_BGRA64        :: BGRA64;
-
-    SDL_PIXELFORMAT_ABGR64        :: ABGR64;
-
-    SDL_PIXELFORMAT_RGB48_FLOAT   :: RGB48_FLOAT;
-
-    SDL_PIXELFORMAT_BGR48_FLOAT   :: BGR48_FLOAT;
-
-    SDL_PIXELFORMAT_RGBA64_FLOAT  :: RGBA64_FLOAT;
-
-    SDL_PIXELFORMAT_ARGB64_FLOAT  :: ARGB64_FLOAT;
-
-    SDL_PIXELFORMAT_BGRA64_FLOAT  :: BGRA64_FLOAT;
-
-    SDL_PIXELFORMAT_ABGR64_FLOAT  :: ABGR64_FLOAT;
-
-    SDL_PIXELFORMAT_RGB96_FLOAT   :: RGB96_FLOAT;
-
-    SDL_PIXELFORMAT_BGR96_FLOAT   :: BGR96_FLOAT;
-
-    SDL_PIXELFORMAT_RGBA128_FLOAT :: RGBA128_FLOAT;
-
-    SDL_PIXELFORMAT_ARGB128_FLOAT :: ARGB128_FLOAT;
-
-    SDL_PIXELFORMAT_BGRA128_FLOAT :: BGRA128_FLOAT;
-
-    SDL_PIXELFORMAT_ABGR128_FLOAT :: ABGR128_FLOAT;
-
-    SDL_PIXELFORMAT_YV12          :: YV12;
-
-    SDL_PIXELFORMAT_IYUV          :: IYUV;
-
-    SDL_PIXELFORMAT_YUY2          :: YUY2;
-
-    SDL_PIXELFORMAT_UYVY          :: UYVY;
-
-    SDL_PIXELFORMAT_YVYU          :: YVYU;
-
-    SDL_PIXELFORMAT_NV12          :: NV12;
-
-    SDL_PIXELFORMAT_NV21          :: NV21;
-
-    SDL_PIXELFORMAT_P010          :: P010;
-
-    SDL_PIXELFORMAT_EXTERNAL_OES  :: EXTERNAL_OES;
-
-    SDL_PIXELFORMAT_MJPG          :: MJPG;
-
-    SDL_PIXELFORMAT_RGBA32        :: RGBA32;
-    SDL_PIXELFORMAT_ARGB32        :: ARGB32;
-    SDL_PIXELFORMAT_BGRA32        :: BGRA32;
-    SDL_PIXELFORMAT_ABGR32        :: ABGR32;
-    SDL_PIXELFORMAT_RGBX32        :: RGBX32;
-    SDL_PIXELFORMAT_XRGB32        :: XRGB32;
-    SDL_PIXELFORMAT_BGRX32        :: BGRX32;
-    SDL_PIXELFORMAT_XBGR32        :: XBGR32;
-}
-
-/**
-* Colorspace color type.
-*
-* \since This enum is available since SDL 3.2.0.
-*/
-SDL_ColorType :: enum u32 {
-    UNKNOWN :: 0;
-    RGB     :: 1;
-    YCBCR   :: 2;
-
-    SDL_COLOR_TYPE_UNKNOWN :: UNKNOWN;
-    SDL_COLOR_TYPE_RGB     :: RGB;
-    SDL_COLOR_TYPE_YCBCR   :: YCBCR;
-}
-
-/**
-* Colorspace color range, as described by
-* https://www.itu.int/rec/R-REC-BT.2100-2-201807-I/en
-*
-* \since This enum is available since SDL 3.2.0.
-*/
-SDL_ColorRange :: enum u32 {
-    UNKNOWN :: 0;
-    LIMITED :: 1;
-    FULL    :: 2;
-
-    SDL_COLOR_RANGE_UNKNOWN :: UNKNOWN;
-    SDL_COLOR_RANGE_LIMITED :: LIMITED;
-    SDL_COLOR_RANGE_FULL    :: FULL;
-}
-
-/**
-* Colorspace color primaries, as described by
-* https://www.itu.int/rec/T-REC-H.273-201612-S/en
-*
-* \since This enum is available since SDL 3.2.0.
-*/
-SDL_ColorPrimaries :: enum u32 {
-    UNKNOWN      :: 0;
-    BT709        :: 1;
-    UNSPECIFIED  :: 2;
-    BT470M       :: 4;
-    BT470BG      :: 5;
-    BT601        :: 6;
-    SMPTE240     :: 7;
-    GENERIC_FILM :: 8;
-    BT2020       :: 9;
-    XYZ          :: 10;
-    SMPTE431     :: 11;
-    SMPTE432     :: 12;
-    EBU3213      :: 22;
-    CUSTOM       :: 31;
-
-    SDL_COLOR_PRIMARIES_UNKNOWN      :: UNKNOWN;
-    SDL_COLOR_PRIMARIES_BT709        :: BT709;
-    SDL_COLOR_PRIMARIES_UNSPECIFIED  :: UNSPECIFIED;
-    SDL_COLOR_PRIMARIES_BT470M       :: BT470M;
-    SDL_COLOR_PRIMARIES_BT470BG      :: BT470BG;
-    SDL_COLOR_PRIMARIES_BT601        :: BT601;
-    SDL_COLOR_PRIMARIES_SMPTE240     :: SMPTE240;
-    SDL_COLOR_PRIMARIES_GENERIC_FILM :: GENERIC_FILM;
-    SDL_COLOR_PRIMARIES_BT2020       :: BT2020;
-    SDL_COLOR_PRIMARIES_XYZ          :: XYZ;
-    SDL_COLOR_PRIMARIES_SMPTE431     :: SMPTE431;
-    SDL_COLOR_PRIMARIES_SMPTE432     :: SMPTE432;
-    SDL_COLOR_PRIMARIES_EBU3213      :: EBU3213;
-    SDL_COLOR_PRIMARIES_CUSTOM       :: CUSTOM;
-}
-
-/**
-* Colorspace transfer characteristics.
-*
-* These are as described by https://www.itu.int/rec/T-REC-H.273-201612-S/en
-*
-* \since This enum is available since SDL 3.2.0.
-*/
-SDL_TransferCharacteristics :: enum u32 {
-    UNKNOWN       :: 0;
-    BT709         :: 1;
-    UNSPECIFIED   :: 2;
-    GAMMA22       :: 4;
-    GAMMA28       :: 5;
-    BT601         :: 6;
-    SMPTE240      :: 7;
-    LINEAR        :: 8;
-    LOG100        :: 9;
-    LOG100_SQRT10 :: 10;
-    IEC61966      :: 11;
-    BT1361        :: 12;
-    SRGB          :: 13;
-    BT2020_10BIT  :: 14;
-    BT2020_12BIT  :: 15;
-    PQ            :: 16;
-    SMPTE428      :: 17;
-    HLG           :: 18;
-    CUSTOM        :: 31;
-
-    SDL_TRANSFER_CHARACTERISTICS_UNKNOWN       :: UNKNOWN;
-    SDL_TRANSFER_CHARACTERISTICS_BT709         :: BT709;
-    SDL_TRANSFER_CHARACTERISTICS_UNSPECIFIED   :: UNSPECIFIED;
-    SDL_TRANSFER_CHARACTERISTICS_GAMMA22       :: GAMMA22;
-    SDL_TRANSFER_CHARACTERISTICS_GAMMA28       :: GAMMA28;
-    SDL_TRANSFER_CHARACTERISTICS_BT601         :: BT601;
-    SDL_TRANSFER_CHARACTERISTICS_SMPTE240      :: SMPTE240;
-    SDL_TRANSFER_CHARACTERISTICS_LINEAR        :: LINEAR;
-    SDL_TRANSFER_CHARACTERISTICS_LOG100        :: LOG100;
-    SDL_TRANSFER_CHARACTERISTICS_LOG100_SQRT10 :: LOG100_SQRT10;
-    SDL_TRANSFER_CHARACTERISTICS_IEC61966      :: IEC61966;
-    SDL_TRANSFER_CHARACTERISTICS_BT1361        :: BT1361;
-    SDL_TRANSFER_CHARACTERISTICS_SRGB          :: SRGB;
-    SDL_TRANSFER_CHARACTERISTICS_BT2020_10BIT  :: BT2020_10BIT;
-    SDL_TRANSFER_CHARACTERISTICS_BT2020_12BIT  :: BT2020_12BIT;
-    SDL_TRANSFER_CHARACTERISTICS_PQ            :: PQ;
-    SDL_TRANSFER_CHARACTERISTICS_SMPTE428      :: SMPTE428;
-    SDL_TRANSFER_CHARACTERISTICS_HLG           :: HLG;
-    SDL_TRANSFER_CHARACTERISTICS_CUSTOM        :: CUSTOM;
-}
-
-/**
-* Colorspace matrix coefficients.
-*
-* These are as described by https://www.itu.int/rec/T-REC-H.273-201612-S/en
-*
-* \since This enum is available since SDL 3.2.0.
-*/
-SDL_MatrixCoefficients :: enum u32 {
-    IDENTITY           :: 0;
-    BT709              :: 1;
-    UNSPECIFIED        :: 2;
-    FCC                :: 4;
-    BT470BG            :: 5;
-    BT601              :: 6;
-    SMPTE240           :: 7;
-    YCGCO              :: 8;
-    BT2020_NCL         :: 9;
-    BT2020_CL          :: 10;
-    SMPTE2085          :: 11;
-    CHROMA_DERIVED_NCL :: 12;
-    CHROMA_DERIVED_CL  :: 13;
-    ICTCP              :: 14;
-    CUSTOM             :: 31;
-
-    SDL_MATRIX_COEFFICIENTS_IDENTITY           :: IDENTITY;
-    SDL_MATRIX_COEFFICIENTS_BT709              :: BT709;
-    SDL_MATRIX_COEFFICIENTS_UNSPECIFIED        :: UNSPECIFIED;
-    SDL_MATRIX_COEFFICIENTS_FCC                :: FCC;
-    SDL_MATRIX_COEFFICIENTS_BT470BG            :: BT470BG;
-    SDL_MATRIX_COEFFICIENTS_BT601              :: BT601;
-    SDL_MATRIX_COEFFICIENTS_SMPTE240           :: SMPTE240;
-    SDL_MATRIX_COEFFICIENTS_YCGCO              :: YCGCO;
-    SDL_MATRIX_COEFFICIENTS_BT2020_NCL         :: BT2020_NCL;
-    SDL_MATRIX_COEFFICIENTS_BT2020_CL          :: BT2020_CL;
-    SDL_MATRIX_COEFFICIENTS_SMPTE2085          :: SMPTE2085;
-    SDL_MATRIX_COEFFICIENTS_CHROMA_DERIVED_NCL :: CHROMA_DERIVED_NCL;
-    SDL_MATRIX_COEFFICIENTS_CHROMA_DERIVED_CL  :: CHROMA_DERIVED_CL;
-    SDL_MATRIX_COEFFICIENTS_ICTCP              :: ICTCP;
-    SDL_MATRIX_COEFFICIENTS_CUSTOM             :: CUSTOM;
-}
-
-/**
-* Colorspace chroma sample location.
-*
-* \since This enum is available since SDL 3.2.0.
-*/
-SDL_ChromaLocation :: enum u32 {
-    NONE    :: 0;
-    LEFT    :: 1;
-    CENTER  :: 2;
-    TOPLEFT :: 3;
-
-    SDL_CHROMA_LOCATION_NONE    :: NONE;
-    SDL_CHROMA_LOCATION_LEFT    :: LEFT;
-    SDL_CHROMA_LOCATION_CENTER  :: CENTER;
-    SDL_CHROMA_LOCATION_TOPLEFT :: TOPLEFT;
-}
-
-/**
-* Colorspace definitions.
-*
-* Since similar colorspaces may vary in their details (matrix, transfer
-* function, etc.), this is not an exhaustive list, but rather a
-* representative sample of the kinds of colorspaces supported in SDL.
-*
-* \since This enum is available since SDL 3.2.0.
-*
-* \sa SDL_ColorPrimaries
-* \sa SDL_ColorRange
-* \sa SDL_ColorType
-* \sa SDL_MatrixCoefficients
-* \sa SDL_TransferCharacteristics
-*/
-SDL_Colorspace :: enum u32 {
-    UNKNOWN        :: 0;
-
-    SRGB           :: 301991328;
-
-    SRGB_LINEAR    :: 301991168;
-
-    HDR10          :: 301999616;
-
-    JPEG           :: 570426566;
-
-    BT601_LIMITED  :: 554703046;
-
-    BT601_FULL     :: 571480262;
-
-    BT709_LIMITED  :: 554697761;
-
-    BT709_FULL     :: 571474977;
-
-    BT2020_LIMITED :: 554706441;
-
-    BT2020_FULL    :: 571483657;
-
-    RGB_DEFAULT    :: 301991328;
-    YUV_DEFAULT    :: 554703046;
-
-    SDL_COLORSPACE_UNKNOWN        :: UNKNOWN;
-
-    SDL_COLORSPACE_SRGB           :: SRGB;
-
-    SDL_COLORSPACE_SRGB_LINEAR    :: SRGB_LINEAR;
-
-    SDL_COLORSPACE_HDR10          :: HDR10;
-
-    SDL_COLORSPACE_JPEG           :: JPEG;
-
-    SDL_COLORSPACE_BT601_LIMITED  :: BT601_LIMITED;
-
-    SDL_COLORSPACE_BT601_FULL     :: BT601_FULL;
-
-    SDL_COLORSPACE_BT709_LIMITED  :: BT709_LIMITED;
-
-    SDL_COLORSPACE_BT709_FULL     :: BT709_FULL;
-
-    SDL_COLORSPACE_BT2020_LIMITED :: BT2020_LIMITED;
-
-    SDL_COLORSPACE_BT2020_FULL    :: BT2020_FULL;
-
-    SDL_COLORSPACE_RGB_DEFAULT    :: RGB_DEFAULT;
-    SDL_COLORSPACE_YUV_DEFAULT    :: YUV_DEFAULT;
-}
-
-/**
-* A structure that represents a color as RGBA components.
-*
-* The bits of this structure can be directly reinterpreted as an
-* integer-packed color which uses the SDL_PIXELFORMAT_RGBA32 format
-* (SDL_PIXELFORMAT_ABGR8888 on little-endian systems and
-* SDL_PIXELFORMAT_RGBA8888 on big-endian systems).
-*
-* \since This struct is available since SDL 3.2.0.
-*/
-SDL_Color :: struct {
-    r: Uint8;
-    g: Uint8;
-    b: Uint8;
-    a: Uint8;
-}
-
-/**
-* The bits of this structure can be directly reinterpreted as a float-packed
-* color which uses the SDL_PIXELFORMAT_RGBA128_FLOAT format
-*
-* \since This struct is available since SDL 3.2.0.
-*/
-SDL_FColor :: struct {
-    r: float;
-    g: float;
-    b: float;
-    a: float;
-}
-
-/**
-* A set of indexed colors representing a palette.
-*
-* \since This struct is available since SDL 3.2.0.
-*
-* \sa SDL_SetPaletteColors
-*/
-SDL_Palette :: struct {
-    ncolors:  s32; /**< number of elements in `colors`. */
-    colors:   *SDL_Color; /**< an array of colors, `ncolors` long. */
-    version:  Uint32; /**< internal use only, do not touch. */
-    refcount: s32; /**< internal use only, do not touch. */
-}
-
-/**
-* Details about the format of a pixel.
-*
-* \since This struct is available since SDL 3.2.0.
-*/
-SDL_PixelFormatDetails :: struct {
-    format:          SDL_PixelFormat;
-    bits_per_pixel:  Uint8;
-    bytes_per_pixel: Uint8;
-    padding:         [2] Uint8;
-    Rmask:           Uint32;
-    Gmask:           Uint32;
-    Bmask:           Uint32;
-    Amask:           Uint32;
-    Rbits:           Uint8;
-    Gbits:           Uint8;
-    Bbits:           Uint8;
-    Abits:           Uint8;
-    Rshift:          Uint8;
-    Gshift:          Uint8;
-    Bshift:          Uint8;
-    Ashift:          Uint8;
-}
-
-/**
-* Get the human readable name of a pixel format.
-*
-* \param format the pixel format to query.
-* \returns the human readable name of the specified pixel format or
-*          "SDL_PIXELFORMAT_UNKNOWN" if the format isn't recognized.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*/
-SDL_GetPixelFormatName :: (format: SDL_PixelFormat) -> *u8 #foreign libsdl3;
-
-/**
-* Convert one of the enumerated pixel formats to a bpp value and RGBA masks.
-*
-* \param format one of the SDL_PixelFormat values.
-* \param bpp a bits per pixel value; usually 15, 16, or 32.
-* \param Rmask a pointer filled in with the red mask for the format.
-* \param Gmask a pointer filled in with the green mask for the format.
-* \param Bmask a pointer filled in with the blue mask for the format.
-* \param Amask a pointer filled in with the alpha mask for the format.
-* \returns true on success or false on failure; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_GetPixelFormatForMasks
-*/
-SDL_GetMasksForPixelFormat :: (format: SDL_PixelFormat, bpp: *s32, Rmask: *Uint32, Gmask: *Uint32, Bmask: *Uint32, Amask: *Uint32) -> bool #foreign libsdl3;
-
-/**
-* Convert a bpp value and RGBA masks to an enumerated pixel format.
-*
-* This will return `SDL_PIXELFORMAT_UNKNOWN` if the conversion wasn't
-* possible.
-*
-* \param bpp a bits per pixel value; usually 15, 16, or 32.
-* \param Rmask the red mask for the format.
-* \param Gmask the green mask for the format.
-* \param Bmask the blue mask for the format.
-* \param Amask the alpha mask for the format.
-* \returns the SDL_PixelFormat value corresponding to the format masks, or
-*          SDL_PIXELFORMAT_UNKNOWN if there isn't a match.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_GetMasksForPixelFormat
-*/
-SDL_GetPixelFormatForMasks :: (bpp: s32, Rmask: Uint32, Gmask: Uint32, Bmask: Uint32, Amask: Uint32) -> SDL_PixelFormat #foreign libsdl3;
-
-/**
-* Create an SDL_PixelFormatDetails structure corresponding to a pixel format.
-*
-* Returned structure may come from a shared global cache (i.e. not newly
-* allocated), and hence should not be modified, especially the palette. Weird
-* errors such as `Blit combination not supported` may occur.
-*
-* \param format one of the SDL_PixelFormat values.
-* \returns a pointer to a SDL_PixelFormatDetails structure or NULL on
-*          failure; call SDL_GetError() for more information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*/
-SDL_GetPixelFormatDetails :: (format: SDL_PixelFormat) -> *SDL_PixelFormatDetails #foreign libsdl3;
-
-/**
-* Create a palette structure with the specified number of color entries.
-*
-* The palette entries are initialized to white.
-*
-* \param ncolors represents the number of color entries in the color palette.
-* \returns a new SDL_Palette structure on success or NULL on failure (e.g. if
-*          there wasn't enough memory); call SDL_GetError() for more
-*          information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_DestroyPalette
-* \sa SDL_SetPaletteColors
-* \sa SDL_SetSurfacePalette
-*/
-SDL_CreatePalette :: (ncolors: s32) -> *SDL_Palette #foreign libsdl3;
-
-/**
-* Set a range of colors in a palette.
-*
-* \param palette the SDL_Palette structure to modify.
-* \param colors an array of SDL_Color structures to copy into the palette.
-* \param firstcolor the index of the first palette entry to modify.
-* \param ncolors the number of entries to modify.
-* \returns true on success or false on failure; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety It is safe to call this function from any thread, as long as
-*               the palette is not modified or destroyed in another thread.
-*
-* \since This function is available since SDL 3.2.0.
-*/
-SDL_SetPaletteColors :: (palette: *SDL_Palette, colors: *SDL_Color, firstcolor: s32, ncolors: s32) -> bool #foreign libsdl3;
-
-/**
-* Free a palette created with SDL_CreatePalette().
-*
-* \param palette the SDL_Palette structure to be freed.
-*
-* \threadsafety It is safe to call this function from any thread, as long as
-*               the palette is not modified or destroyed in another thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_CreatePalette
-*/
-SDL_DestroyPalette :: (palette: *SDL_Palette) -> void #foreign libsdl3;
-
-/**
-* Map an RGB triple to an opaque pixel value for a given pixel format.
-*
-* This function maps the RGB color value to the specified pixel format and
-* returns the pixel value best approximating the given RGB color value for
-* the given pixel format.
-*
-* If the format has a palette (8-bit) the index of the closest matching color
-* in the palette will be returned.
-*
-* If the specified pixel format has an alpha component it will be returned as
-* all 1 bits (fully opaque).
-*
-* If the pixel format bpp (color depth) is less than 32-bpp then the unused
-* upper bits of the return value can safely be ignored (e.g., with a 16-bpp
-* format the return value can be assigned to a Uint16, and similarly a Uint8
-* for an 8-bpp format).
-*
-* \param format a pointer to SDL_PixelFormatDetails describing the pixel
-*               format.
-* \param palette an optional palette for indexed formats, may be NULL.
-* \param r the red component of the pixel in the range 0-255.
-* \param g the green component of the pixel in the range 0-255.
-* \param b the blue component of the pixel in the range 0-255.
-* \returns a pixel value.
-*
-* \threadsafety It is safe to call this function from any thread, as long as
-*               the palette is not modified.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_GetPixelFormatDetails
-* \sa SDL_GetRGB
-* \sa SDL_MapRGBA
-* \sa SDL_MapSurfaceRGB
-*/
-SDL_MapRGB :: (format: *SDL_PixelFormatDetails, palette: *SDL_Palette, r: Uint8, g: Uint8, b: Uint8) -> Uint32 #foreign libsdl3;
-
-/**
-* Map an RGBA quadruple to a pixel value for a given pixel format.
-*
-* This function maps the RGBA color value to the specified pixel format and
-* returns the pixel value best approximating the given RGBA color value for
-* the given pixel format.
-*
-* If the specified pixel format has no alpha component the alpha value will
-* be ignored (as it will be in formats with a palette).
-*
-* If the format has a palette (8-bit) the index of the closest matching color
-* in the palette will be returned.
-*
-* If the pixel format bpp (color depth) is less than 32-bpp then the unused
-* upper bits of the return value can safely be ignored (e.g., with a 16-bpp
-* format the return value can be assigned to a Uint16, and similarly a Uint8
-* for an 8-bpp format).
-*
-* \param format a pointer to SDL_PixelFormatDetails describing the pixel
-*               format.
-* \param palette an optional palette for indexed formats, may be NULL.
-* \param r the red component of the pixel in the range 0-255.
-* \param g the green component of the pixel in the range 0-255.
-* \param b the blue component of the pixel in the range 0-255.
-* \param a the alpha component of the pixel in the range 0-255.
-* \returns a pixel value.
-*
-* \threadsafety It is safe to call this function from any thread, as long as
-*               the palette is not modified.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_GetPixelFormatDetails
-* \sa SDL_GetRGBA
-* \sa SDL_MapRGB
-* \sa SDL_MapSurfaceRGBA
-*/
-SDL_MapRGBA :: (format: *SDL_PixelFormatDetails, palette: *SDL_Palette, r: Uint8, g: Uint8, b: Uint8, a: Uint8) -> Uint32 #foreign libsdl3;
-
-/**
-* Get RGB values from a pixel in the specified format.
-*
-* This function uses the entire 8-bit [0..255] range when converting color
-* components from pixel formats with less than 8-bits per RGB component
-* (e.g., a completely white pixel in 16-bit RGB565 format would return [0xff,
-* 0xff, 0xff] not [0xf8, 0xfc, 0xf8]).
-*
-* \param pixelvalue a pixel value.
-* \param format a pointer to SDL_PixelFormatDetails describing the pixel
-*               format.
-* \param palette an optional palette for indexed formats, may be NULL.
-* \param r a pointer filled in with the red component, may be NULL.
-* \param g a pointer filled in with the green component, may be NULL.
-* \param b a pointer filled in with the blue component, may be NULL.
-*
-* \threadsafety It is safe to call this function from any thread, as long as
-*               the palette is not modified.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_GetPixelFormatDetails
-* \sa SDL_GetRGBA
-* \sa SDL_MapRGB
-* \sa SDL_MapRGBA
-*/
-SDL_GetRGB :: (pixelvalue: Uint32, format: *SDL_PixelFormatDetails, palette: *SDL_Palette, r: *Uint8, g: *Uint8, b: *Uint8) -> void #foreign libsdl3;
-
-/**
-* Get RGBA values from a pixel in the specified format.
-*
-* This function uses the entire 8-bit [0..255] range when converting color
-* components from pixel formats with less than 8-bits per RGB component
-* (e.g., a completely white pixel in 16-bit RGB565 format would return [0xff,
-* 0xff, 0xff] not [0xf8, 0xfc, 0xf8]).
-*
-* If the surface has no alpha component, the alpha will be returned as 0xff
-* (100% opaque).
-*
-* \param pixelvalue a pixel value.
-* \param format a pointer to SDL_PixelFormatDetails describing the pixel
-*               format.
-* \param palette an optional palette for indexed formats, may be NULL.
-* \param r a pointer filled in with the red component, may be NULL.
-* \param g a pointer filled in with the green component, may be NULL.
-* \param b a pointer filled in with the blue component, may be NULL.
-* \param a a pointer filled in with the alpha component, may be NULL.
-*
-* \threadsafety It is safe to call this function from any thread, as long as
-*               the palette is not modified.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_GetPixelFormatDetails
-* \sa SDL_GetRGB
-* \sa SDL_MapRGB
-* \sa SDL_MapRGBA
-*/
-SDL_GetRGBA :: (pixelvalue: Uint32, format: *SDL_PixelFormatDetails, palette: *SDL_Palette, r: *Uint8, g: *Uint8, b: *Uint8, a: *Uint8) -> void #foreign libsdl3;
-
-/**
-* The structure that defines a point (using integers).
-*
-* \since This struct is available since SDL 3.2.0.
-*
-* \sa SDL_GetRectEnclosingPoints
-* \sa SDL_PointInRect
-*/
-SDL_Point :: struct {
-    x: s32;
-    y: s32;
-}
-
-/**
-* The structure that defines a point (using floating point values).
-*
-* \since This struct is available since SDL 3.2.0.
-*
-* \sa SDL_GetRectEnclosingPointsFloat
-* \sa SDL_PointInRectFloat
-*/
-SDL_FPoint :: struct {
-    x: float;
-    y: float;
-}
-
-/**
-* A rectangle, with the origin at the upper left (using integers).
-*
-* \since This struct is available since SDL 3.2.0.
-*
-* \sa SDL_RectEmpty
-* \sa SDL_RectsEqual
-* \sa SDL_HasRectIntersection
-* \sa SDL_GetRectIntersection
-* \sa SDL_GetRectAndLineIntersection
-* \sa SDL_GetRectUnion
-* \sa SDL_GetRectEnclosingPoints
-*/
-SDL_Rect :: struct {
-    x: s32;
-    y: s32;
-    w: s32;
-    h: s32;
-}
-
-/**
-* A rectangle stored using floating point values.
-*
-* The origin of the coordinate space is in the top-left, with increasing
-* values moving down and right. The properties `x` and `y` represent the
-* coordinates of the top-left corner of the rectangle.
-*
-* \since This struct is available since SDL 3.2.0.
-*
-* \sa SDL_RectEmptyFloat
-* \sa SDL_RectsEqualFloat
-* \sa SDL_RectsEqualEpsilon
-* \sa SDL_HasRectIntersectionFloat
-* \sa SDL_GetRectIntersectionFloat
-* \sa SDL_GetRectAndLineIntersectionFloat
-* \sa SDL_GetRectUnionFloat
-* \sa SDL_GetRectEnclosingPointsFloat
-* \sa SDL_PointInRectFloat
-*/
-SDL_FRect :: struct {
-    x: float;
-    y: float;
-    w: float;
-    h: float;
-}
-
-/**
-* Determine whether two rectangles intersect.
-*
-* If either pointer is NULL the function will return false.
-*
-* \param A an SDL_Rect structure representing the first rectangle.
-* \param B an SDL_Rect structure representing the second rectangle.
-* \returns true if there is an intersection, false otherwise.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_GetRectIntersection
-*/
-SDL_HasRectIntersection :: (A: *SDL_Rect, B: *SDL_Rect) -> bool #foreign libsdl3;
-
-/**
-* Calculate the intersection of two rectangles.
-*
-* If `result` is NULL then this function will return false.
-*
-* \param A an SDL_Rect structure representing the first rectangle.
-* \param B an SDL_Rect structure representing the second rectangle.
-* \param result an SDL_Rect structure filled in with the intersection of
-*               rectangles `A` and `B`.
-* \returns true if there is an intersection, false otherwise.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_HasRectIntersection
-*/
-SDL_GetRectIntersection :: (A: *SDL_Rect, B: *SDL_Rect, result: *SDL_Rect) -> bool #foreign libsdl3;
-
-/**
-* Calculate the union of two rectangles.
-*
-* \param A an SDL_Rect structure representing the first rectangle.
-* \param B an SDL_Rect structure representing the second rectangle.
-* \param result an SDL_Rect structure filled in with the union of rectangles
-*               `A` and `B`.
-* \returns true on success or false on failure; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*/
-SDL_GetRectUnion :: (A: *SDL_Rect, B: *SDL_Rect, result: *SDL_Rect) -> bool #foreign libsdl3;
-
-/**
-* Calculate a minimal rectangle enclosing a set of points.
-*
-* If `clip` is not NULL then only points inside of the clipping rectangle are
-* considered.
-*
-* \param points an array of SDL_Point structures representing points to be
-*               enclosed.
-* \param count the number of structures in the `points` array.
-* \param clip an SDL_Rect used for clipping or NULL to enclose all points.
-* \param result an SDL_Rect structure filled in with the minimal enclosing
-*               rectangle.
-* \returns true if any points were enclosed or false if all the points were
-*          outside of the clipping rectangle.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*/
-SDL_GetRectEnclosingPoints :: (points: *SDL_Point, count: s32, clip: *SDL_Rect, result: *SDL_Rect) -> bool #foreign libsdl3;
-
-/**
-* Calculate the intersection of a rectangle and line segment.
-*
-* This function is used to clip a line segment to a rectangle. A line segment
-* contained entirely within the rectangle or that does not intersect will
-* remain unchanged. A line segment that crosses the rectangle at either or
-* both ends will be clipped to the boundary of the rectangle and the new
-* coordinates saved in `X1`, `Y1`, `X2`, and/or `Y2` as necessary.
-*
-* \param rect an SDL_Rect structure representing the rectangle to intersect.
-* \param X1 a pointer to the starting X-coordinate of the line.
-* \param Y1 a pointer to the starting Y-coordinate of the line.
-* \param X2 a pointer to the ending X-coordinate of the line.
-* \param Y2 a pointer to the ending Y-coordinate of the line.
-* \returns true if there is an intersection, false otherwise.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*/
-SDL_GetRectAndLineIntersection :: (rect: *SDL_Rect, X1: *s32, Y1: *s32, X2: *s32, Y2: *s32) -> bool #foreign libsdl3;
-
-/**
-* Determine whether two rectangles intersect with float precision.
-*
-* If either pointer is NULL the function will return false.
-*
-* \param A an SDL_FRect structure representing the first rectangle.
-* \param B an SDL_FRect structure representing the second rectangle.
-* \returns true if there is an intersection, false otherwise.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_GetRectIntersectionFloat
-*/
-SDL_HasRectIntersectionFloat :: (A: *SDL_FRect, B: *SDL_FRect) -> bool #foreign libsdl3;
-
-/**
-* Calculate the intersection of two rectangles with float precision.
-*
-* If `result` is NULL then this function will return false.
-*
-* \param A an SDL_FRect structure representing the first rectangle.
-* \param B an SDL_FRect structure representing the second rectangle.
-* \param result an SDL_FRect structure filled in with the intersection of
-*               rectangles `A` and `B`.
-* \returns true if there is an intersection, false otherwise.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_HasRectIntersectionFloat
-*/
-SDL_GetRectIntersectionFloat :: (A: *SDL_FRect, B: *SDL_FRect, result: *SDL_FRect) -> bool #foreign libsdl3;
-
-/**
-* Calculate the union of two rectangles with float precision.
-*
-* \param A an SDL_FRect structure representing the first rectangle.
-* \param B an SDL_FRect structure representing the second rectangle.
-* \param result an SDL_FRect structure filled in with the union of rectangles
-*               `A` and `B`.
-* \returns true on success or false on failure; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*/
-SDL_GetRectUnionFloat :: (A: *SDL_FRect, B: *SDL_FRect, result: *SDL_FRect) -> bool #foreign libsdl3;
-
-/**
-* Calculate a minimal rectangle enclosing a set of points with float
-* precision.
-*
-* If `clip` is not NULL then only points inside of the clipping rectangle are
-* considered.
-*
-* \param points an array of SDL_FPoint structures representing points to be
-*               enclosed.
-* \param count the number of structures in the `points` array.
-* \param clip an SDL_FRect used for clipping or NULL to enclose all points.
-* \param result an SDL_FRect structure filled in with the minimal enclosing
-*               rectangle.
-* \returns true if any points were enclosed or false if all the points were
-*          outside of the clipping rectangle.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*/
-SDL_GetRectEnclosingPointsFloat :: (points: *SDL_FPoint, count: s32, clip: *SDL_FRect, result: *SDL_FRect) -> bool #foreign libsdl3;
-
-/**
-* Calculate the intersection of a rectangle and line segment with float
-* precision.
-*
-* This function is used to clip a line segment to a rectangle. A line segment
-* contained entirely within the rectangle or that does not intersect will
-* remain unchanged. A line segment that crosses the rectangle at either or
-* both ends will be clipped to the boundary of the rectangle and the new
-* coordinates saved in `X1`, `Y1`, `X2`, and/or `Y2` as necessary.
-*
-* \param rect an SDL_FRect structure representing the rectangle to intersect.
-* \param X1 a pointer to the starting X-coordinate of the line.
-* \param Y1 a pointer to the starting Y-coordinate of the line.
-* \param X2 a pointer to the ending X-coordinate of the line.
-* \param Y2 a pointer to the ending Y-coordinate of the line.
-* \returns true if there is an intersection, false otherwise.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*/
-SDL_GetRectAndLineIntersectionFloat :: (rect: *SDL_FRect, X1: *float, Y1: *float, X2: *float, Y2: *float) -> bool #foreign libsdl3;
 
 /**
 * The flags on an SDL_Surface.
@@ -14812,992 +10765,6 @@ SDL_WriteSurfacePixel :: (surface: *SDL_Surface, x: s32, y: s32, r: Uint8, g: Ui
 * \since This function is available since SDL 3.2.0.
 */
 SDL_WriteSurfacePixelFloat :: (surface: *SDL_Surface, x: s32, y: s32, r: float, g: float, b: float, a: float) -> bool #foreign libsdl3;
-
-/**
-* This is a unique ID for a camera device for the time it is connected to the
-* system, and is never reused for the lifetime of the application.
-*
-* If the device is disconnected and reconnected, it will get a new ID.
-*
-* The value 0 is an invalid ID.
-*
-* \since This datatype is available since SDL 3.2.0.
-*
-* \sa SDL_GetCameras
-*/
-SDL_CameraID :: Uint32;
-
-SDL_Camera :: struct {}
-
-/**
-* The details of an output format for a camera device.
-*
-* Cameras often support multiple formats; each one will be encapsulated in
-* this struct.
-*
-* \since This struct is available since SDL 3.2.0.
-*
-* \sa SDL_GetCameraSupportedFormats
-* \sa SDL_GetCameraFormat
-*/
-SDL_CameraSpec :: struct {
-    format:                SDL_PixelFormat; /**< Frame format */
-    colorspace:            SDL_Colorspace; /**< Frame colorspace */
-    width:                 s32; /**< Frame width */
-    height:                s32; /**< Frame height */
-    framerate_numerator:   s32; /**< Frame rate numerator ((num / denom) == FPS, (denom / num) == duration in seconds) */
-    framerate_denominator: s32; /**< Frame rate denominator ((num / denom) == FPS, (denom / num) == duration in seconds) */
-}
-
-/**
-* The position of camera in relation to system device.
-*
-* \since This enum is available since SDL 3.2.0.
-*
-* \sa SDL_GetCameraPosition
-*/
-SDL_CameraPosition :: enum u32 {
-    UNKNOWN      :: 0;
-    FRONT_FACING :: 1;
-    BACK_FACING  :: 2;
-
-    SDL_CAMERA_POSITION_UNKNOWN      :: UNKNOWN;
-    SDL_CAMERA_POSITION_FRONT_FACING :: FRONT_FACING;
-    SDL_CAMERA_POSITION_BACK_FACING  :: BACK_FACING;
-}
-
-/**
-* The current state of a request for camera access.
-*
-* \since This enum is available since SDL 3.4.0.
-*
-* \sa SDL_GetCameraPermissionState
-*/
-SDL_CameraPermissionState :: enum s32 {
-    DENIED   :: -1;
-    PENDING  :: 0;
-    APPROVED :: 1;
-
-    SDL_CAMERA_PERMISSION_STATE_DENIED   :: DENIED;
-    SDL_CAMERA_PERMISSION_STATE_PENDING  :: PENDING;
-    SDL_CAMERA_PERMISSION_STATE_APPROVED :: APPROVED;
-}
-
-/**
-* Use this function to get the number of built-in camera drivers.
-*
-* This function returns a hardcoded number. This never returns a negative
-* value; if there are no drivers compiled into this build of SDL, this
-* function returns zero. The presence of a driver in this list does not mean
-* it will function, it just means SDL is capable of interacting with that
-* interface. For example, a build of SDL might have v4l2 support, but if
-* there's no kernel support available, SDL's v4l2 driver would fail if used.
-*
-* By default, SDL tries all drivers, in its preferred order, until one is
-* found to be usable.
-*
-* \returns the number of built-in camera drivers.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_GetCameraDriver
-*/
-SDL_GetNumCameraDrivers :: () -> s32 #foreign libsdl3;
-
-/**
-* Use this function to get the name of a built in camera driver.
-*
-* The list of camera drivers is given in the order that they are normally
-* initialized by default; the drivers that seem more reasonable to choose
-* first (as far as the SDL developers believe) are earlier in the list.
-*
-* The names of drivers are all simple, low-ASCII identifiers, like "v4l2",
-* "coremedia" or "android". These never have Unicode characters, and are not
-* meant to be proper names.
-*
-* \param index the index of the camera driver; the value ranges from 0 to
-*              SDL_GetNumCameraDrivers() - 1.
-* \returns the name of the camera driver at the requested index, or NULL if
-*          an invalid index was specified.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_GetNumCameraDrivers
-*/
-SDL_GetCameraDriver :: (index: s32) -> *u8 #foreign libsdl3;
-
-/**
-* Get the name of the current camera driver.
-*
-* The names of drivers are all simple, low-ASCII identifiers, like "v4l2",
-* "coremedia" or "android". These never have Unicode characters, and are not
-* meant to be proper names.
-*
-* \returns the name of the current camera driver or NULL if no driver has
-*          been initialized.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*/
-SDL_GetCurrentCameraDriver :: () -> *u8 #foreign libsdl3;
-
-/**
-* Get a list of currently connected camera devices.
-*
-* \param count a pointer filled in with the number of cameras returned, may
-*              be NULL.
-* \returns a 0 terminated array of camera instance IDs or NULL on failure;
-*          call SDL_GetError() for more information. This should be freed
-*          with SDL_free() when it is no longer needed.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_OpenCamera
-*/
-SDL_GetCameras :: (count: *s32) -> *SDL_CameraID #foreign libsdl3;
-
-/**
-* Get the list of native formats/sizes a camera supports.
-*
-* This returns a list of all formats and frame sizes that a specific camera
-* can offer. This is useful if your app can accept a variety of image formats
-* and sizes and so want to find the optimal spec that doesn't require
-* conversion.
-*
-* This function isn't strictly required; if you call SDL_OpenCamera with a
-* NULL spec, SDL will choose a native format for you, and if you instead
-* specify a desired format, it will transparently convert to the requested
-* format on your behalf.
-*
-* If `count` is not NULL, it will be filled with the number of elements in
-* the returned array.
-*
-* Note that it's legal for a camera to supply an empty list. This is what
-* will happen on Emscripten builds, since that platform won't tell _anything_
-* about available cameras until you've opened one, and won't even tell if
-* there _is_ a camera until the user has given you permission to check
-* through a scary warning popup.
-*
-* \param instance_id the camera device instance ID.
-* \param count a pointer filled in with the number of elements in the list,
-*              may be NULL.
-* \returns a NULL terminated array of pointers to SDL_CameraSpec or NULL on
-*          failure; call SDL_GetError() for more information. This is a
-*          single allocation that should be freed with SDL_free() when it is
-*          no longer needed.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_GetCameras
-* \sa SDL_OpenCamera
-*/
-SDL_GetCameraSupportedFormats :: (instance_id: SDL_CameraID, count: *s32) -> **SDL_CameraSpec #foreign libsdl3;
-
-/**
-* Get the human-readable device name for a camera.
-*
-* \param instance_id the camera device instance ID.
-* \returns a human-readable device name or NULL on failure; call
-*          SDL_GetError() for more information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_GetCameras
-*/
-SDL_GetCameraName :: (instance_id: SDL_CameraID) -> *u8 #foreign libsdl3;
-
-/**
-* Get the position of the camera in relation to the system.
-*
-* Most platforms will report UNKNOWN, but mobile devices, like phones, can
-* often make a distinction between cameras on the front of the device (that
-* points towards the user, for taking "selfies") and cameras on the back (for
-* filming in the direction the user is facing).
-*
-* \param instance_id the camera device instance ID.
-* \returns the position of the camera on the system hardware.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_GetCameras
-*/
-SDL_GetCameraPosition :: (instance_id: SDL_CameraID) -> SDL_CameraPosition #foreign libsdl3;
-
-/**
-* Open a video recording device (a "camera").
-*
-* You can open the device with any reasonable spec, and if the hardware can't
-* directly support it, it will convert data seamlessly to the requested
-* format. This might incur overhead, including scaling of image data.
-*
-* If you would rather accept whatever format the device offers, you can pass
-* a NULL spec here and it will choose one for you (and you can use
-* SDL_Surface's conversion/scaling functions directly if necessary).
-*
-* You can call SDL_GetCameraFormat() to get the actual data format if passing
-* a NULL spec here. You can see the exact specs a device can support without
-* conversion with SDL_GetCameraSupportedFormats().
-*
-* SDL will not attempt to emulate framerate; it will try to set the hardware
-* to the rate closest to the requested speed, but it won't attempt to limit
-* or duplicate frames artificially; call SDL_GetCameraFormat() to see the
-* actual framerate of the opened the device, and check your timestamps if
-* this is crucial to your app!
-*
-* Note that the camera is not usable until the user approves its use! On some
-* platforms, the operating system will prompt the user to permit access to
-* the camera, and they can choose Yes or No at that point. Until they do, the
-* camera will not be usable. The app should either wait for an
-* SDL_EVENT_CAMERA_DEVICE_APPROVED (or SDL_EVENT_CAMERA_DEVICE_DENIED) event,
-* or poll SDL_GetCameraPermissionState() occasionally until it returns
-* non-zero. On platforms that don't require explicit user approval (and
-* perhaps in places where the user previously permitted access), the approval
-* event might come immediately, but it might come seconds, minutes, or hours
-* later!
-*
-* \param instance_id the camera device instance ID.
-* \param spec the desired format for data the device will provide. Can be
-*             NULL.
-* \returns an SDL_Camera object or NULL on failure; call SDL_GetError() for
-*          more information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_GetCameras
-* \sa SDL_GetCameraFormat
-*/
-SDL_OpenCamera :: (instance_id: SDL_CameraID, spec: *SDL_CameraSpec) -> *SDL_Camera #foreign libsdl3;
-
-/**
-* Query if camera access has been approved by the user.
-*
-* Cameras will not function between when the device is opened by the app and
-* when the user permits access to the hardware. On some platforms, this
-* presents as a popup dialog where the user has to explicitly approve access;
-* on others the approval might be implicit and not alert the user at all.
-*
-* This function can be used to check the status of that approval. It will
-* return SDL_CAMERA_PERMISSION_STATE_PENDING if waiting for user response,
-* SDL_CAMERA_PERMISSION_STATE_APPROVED if the camera is approved for use, and
-* SDL_CAMERA_PERMISSION_STATE_DENIED if the user denied access.
-*
-* Instead of polling with this function, you can wait for a
-* SDL_EVENT_CAMERA_DEVICE_APPROVED (or SDL_EVENT_CAMERA_DEVICE_DENIED) event
-* in the standard SDL event loop, which is guaranteed to be sent once when
-* permission to use the camera is decided.
-*
-* If a camera is declined, there's nothing to be done but call
-* SDL_CloseCamera() to dispose of it.
-*
-* \param camera the opened camera device to query.
-* \returns an SDL_CameraPermissionState value indicating if access is
-*          granted, or `SDL_CAMERA_PERMISSION_STATE_PENDING` if the decision
-*          is still pending.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_OpenCamera
-* \sa SDL_CloseCamera
-*/
-SDL_GetCameraPermissionState :: (camera: *SDL_Camera) -> SDL_CameraPermissionState #foreign libsdl3;
-
-/**
-* Get the instance ID of an opened camera.
-*
-* \param camera an SDL_Camera to query.
-* \returns the instance ID of the specified camera on success or 0 on
-*          failure; call SDL_GetError() for more information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_OpenCamera
-*/
-SDL_GetCameraID :: (camera: *SDL_Camera) -> SDL_CameraID #foreign libsdl3;
-
-/**
-* Get the properties associated with an opened camera.
-*
-* \param camera the SDL_Camera obtained from SDL_OpenCamera().
-* \returns a valid property ID on success or 0 on failure; call
-*          SDL_GetError() for more information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*/
-SDL_GetCameraProperties :: (camera: *SDL_Camera) -> SDL_PropertiesID #foreign libsdl3;
-
-/**
-* Get the spec that a camera is using when generating images.
-*
-* Note that this might not be the native format of the hardware, as SDL might
-* be converting to this format behind the scenes.
-*
-* If the system is waiting for the user to approve access to the camera, as
-* some platforms require, this will return false, but this isn't necessarily
-* a fatal error; you should either wait for an
-* SDL_EVENT_CAMERA_DEVICE_APPROVED (or SDL_EVENT_CAMERA_DEVICE_DENIED) event,
-* or poll SDL_GetCameraPermissionState() occasionally until it returns
-* non-zero.
-*
-* \param camera opened camera device.
-* \param spec the SDL_CameraSpec to be initialized by this function.
-* \returns true on success or false on failure; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_OpenCamera
-*/
-SDL_GetCameraFormat :: (camera: *SDL_Camera, spec: *SDL_CameraSpec) -> bool #foreign libsdl3;
-
-/**
-* Acquire a frame.
-*
-* The frame is a memory pointer to the image data, whose size and format are
-* given by the spec requested when opening the device.
-*
-* This is a non blocking API. If there is a frame available, a non-NULL
-* surface is returned, and timestampNS will be filled with a non-zero value.
-*
-* Note that an error case can also return NULL, but a NULL by itself is
-* normal and just signifies that a new frame is not yet available. Note that
-* even if a camera device fails outright (a USB camera is unplugged while in
-* use, etc), SDL will send an event separately to notify the app, but
-* continue to provide blank frames at ongoing intervals until
-* SDL_CloseCamera() is called, so real failure here is almost always an out
-* of memory condition.
-*
-* After use, the frame should be released with SDL_ReleaseCameraFrame(). If
-* you don't do this, the system may stop providing more video!
-*
-* Do not call SDL_DestroySurface() on the returned surface! It must be given
-* back to the camera subsystem with SDL_ReleaseCameraFrame!
-*
-* If the system is waiting for the user to approve access to the camera, as
-* some platforms require, this will return NULL (no frames available); you
-* should either wait for an SDL_EVENT_CAMERA_DEVICE_APPROVED (or
-* SDL_EVENT_CAMERA_DEVICE_DENIED) event, or poll
-* SDL_GetCameraPermissionState() occasionally until it returns non-zero.
-*
-* \param camera opened camera device.
-* \param timestampNS a pointer filled in with the frame's timestamp, or 0 on
-*                    error. Can be NULL.
-* \returns a new frame of video on success, NULL if none is currently
-*          available.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_ReleaseCameraFrame
-*/
-SDL_AcquireCameraFrame :: (camera: *SDL_Camera, timestampNS: *Uint64) -> *SDL_Surface #foreign libsdl3;
-
-/**
-* Release a frame of video acquired from a camera.
-*
-* Let the back-end re-use the internal buffer for camera.
-*
-* This function _must_ be called only on surface objects returned by
-* SDL_AcquireCameraFrame(). This function should be called as quickly as
-* possible after acquisition, as SDL keeps a small FIFO queue of surfaces for
-* video frames; if surfaces aren't released in a timely manner, SDL may drop
-* upcoming video frames from the camera.
-*
-* If the app needs to keep the surface for a significant time, they should
-* make a copy of it and release the original.
-*
-* The app should not use the surface again after calling this function;
-* assume the surface is freed and the pointer is invalid.
-*
-* \param camera opened camera device.
-* \param frame the video frame surface to release.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_AcquireCameraFrame
-*/
-SDL_ReleaseCameraFrame :: (camera: *SDL_Camera, frame: *SDL_Surface) -> void #foreign libsdl3;
-
-/**
-* Use this function to shut down camera processing and close the camera
-* device.
-*
-* \param camera opened camera device.
-*
-* \threadsafety It is safe to call this function from any thread, but no
-*               thread may reference `device` once this function is called.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_OpenCamera
-*/
-SDL_CloseCamera :: (camera: *SDL_Camera) -> void #foreign libsdl3;
-
-/**
-* Put UTF-8 text into the clipboard.
-*
-* \param text the text to store in the clipboard.
-* \returns true on success or false on failure; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety This function should only be called on the main thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_GetClipboardText
-* \sa SDL_HasClipboardText
-*/
-SDL_SetClipboardText :: (text: *u8) -> bool #foreign libsdl3;
-
-/**
-* Get UTF-8 text from the clipboard.
-*
-* This function returns an empty string if there is not enough memory left
-* for a copy of the clipboard's content.
-*
-* \returns the clipboard text on success or an empty string on failure; call
-*          SDL_GetError() for more information. This should be freed with
-*          SDL_free() when it is no longer needed.
-*
-* \threadsafety This function should only be called on the main thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_HasClipboardText
-* \sa SDL_SetClipboardText
-*/
-SDL_GetClipboardText :: () -> *u8 #foreign libsdl3;
-
-/**
-* Query whether the clipboard exists and contains a non-empty text string.
-*
-* \returns true if the clipboard has text, or false if it does not.
-*
-* \threadsafety This function should only be called on the main thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_GetClipboardText
-* \sa SDL_SetClipboardText
-*/
-SDL_HasClipboardText :: () -> bool #foreign libsdl3;
-
-/**
-* Put UTF-8 text into the primary selection.
-*
-* \param text the text to store in the primary selection.
-* \returns true on success or false on failure; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety This function should only be called on the main thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_GetPrimarySelectionText
-* \sa SDL_HasPrimarySelectionText
-*/
-SDL_SetPrimarySelectionText :: (text: *u8) -> bool #foreign libsdl3;
-
-/**
-* Get UTF-8 text from the primary selection.
-*
-* This function returns an empty string if there is not enough memory left
-* for a copy of the primary selection's content.
-*
-* \returns the primary selection text on success or an empty string on
-*          failure; call SDL_GetError() for more information. This should be
-*          freed with SDL_free() when it is no longer needed.
-*
-* \threadsafety This function should only be called on the main thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_HasPrimarySelectionText
-* \sa SDL_SetPrimarySelectionText
-*/
-SDL_GetPrimarySelectionText :: () -> *u8 #foreign libsdl3;
-
-/**
-* Query whether the primary selection exists and contains a non-empty text
-* string.
-*
-* \returns true if the primary selection has text, or false if it does not.
-*
-* \threadsafety This function should only be called on the main thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_GetPrimarySelectionText
-* \sa SDL_SetPrimarySelectionText
-*/
-SDL_HasPrimarySelectionText :: () -> bool #foreign libsdl3;
-
-/**
-* Callback function that will be called when data for the specified mime-type
-* is requested by the OS.
-*
-* The callback function is called with NULL as the mime_type when the
-* clipboard is cleared or new data is set. The clipboard is automatically
-* cleared in SDL_Quit().
-*
-* \param userdata a pointer to the provided user data.
-* \param mime_type the requested mime-type.
-* \param size a pointer filled in with the length of the returned data.
-* \returns a pointer to the data for the provided mime-type. Returning NULL
-*          or setting the length to 0 will cause zero length data to be sent
-*          to the "receiver", which should be able to handle this. The
-*          returned data will not be freed, so it needs to be retained and
-*          dealt with internally.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_SetClipboardData
-*/
-SDL_ClipboardDataCallback :: #type (userdata: *void, mime_type: *u8, size: *u64) -> *void #c_call;
-
-/**
-* Callback function that will be called when the clipboard is cleared, or
-* when new data is set.
-*
-* \param userdata a pointer to the provided user data.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_SetClipboardData
-*/
-SDL_ClipboardCleanupCallback :: #type (userdata: *void) -> void #c_call;
-
-/**
-* Offer clipboard data to the OS.
-*
-* Tell the operating system that the application is offering clipboard data
-* for each of the provided mime-types. Once another application requests the
-* data the callback function will be called, allowing it to generate and
-* respond with the data for the requested mime-type.
-*
-* The size of text data does not include any terminator, and the text does
-* not need to be null-terminated (e.g., you can directly copy a portion of a
-* document).
-*
-* \param callback a function pointer to the function that provides the
-*                 clipboard data.
-* \param cleanup a function pointer to the function that cleans up the
-*                clipboard data.
-* \param userdata an opaque pointer that will be forwarded to the callbacks.
-* \param mime_types a list of mime-types that are being offered. SDL copies
-*                   the given list.
-* \param num_mime_types the number of mime-types in the mime_types list.
-* \returns true on success or false on failure; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety This function should only be called on the main thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_ClearClipboardData
-* \sa SDL_GetClipboardData
-* \sa SDL_HasClipboardData
-*/
-SDL_SetClipboardData :: (callback: SDL_ClipboardDataCallback, cleanup: SDL_ClipboardCleanupCallback, userdata: *void, mime_types: **u8, num_mime_types: u64) -> bool #foreign libsdl3;
-
-/**
-* Clear the clipboard data.
-*
-* \returns true on success or false on failure; call SDL_GetError() for more
-*          information.
-*
-* \threadsafety This function should only be called on the main thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_SetClipboardData
-*/
-SDL_ClearClipboardData :: () -> bool #foreign libsdl3;
-
-/**
-* Get the data from the clipboard for a given mime type.
-*
-* The size of text data does not include the terminator, but the text is
-* guaranteed to be null-terminated.
-*
-* \param mime_type the mime type to read from the clipboard.
-* \param size a pointer filled in with the length of the returned data.
-* \returns the retrieved data buffer or NULL on failure; call SDL_GetError()
-*          for more information. This should be freed with SDL_free() when it
-*          is no longer needed.
-*
-* \threadsafety This function should only be called on the main thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_HasClipboardData
-* \sa SDL_SetClipboardData
-*/
-SDL_GetClipboardData :: (mime_type: *u8, size: *u64) -> *void #foreign libsdl3;
-
-/**
-* Query whether there is data in the clipboard for the provided mime type.
-*
-* \param mime_type the mime type to check for data.
-* \returns true if data exists in the clipboard for the provided mime type,
-*          false if it does not.
-*
-* \threadsafety This function should only be called on the main thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_SetClipboardData
-* \sa SDL_GetClipboardData
-*/
-SDL_HasClipboardData :: (mime_type: *u8) -> bool #foreign libsdl3;
-
-/**
-* Retrieve the list of mime types available in the clipboard.
-*
-* \param num_mime_types a pointer filled with the number of mime types, may
-*                       be NULL.
-* \returns a null-terminated array of strings with mime types, or NULL on
-*          failure; call SDL_GetError() for more information. This should be
-*          freed with SDL_free() when it is no longer needed.
-*
-* \threadsafety This function should only be called on the main thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_SetClipboardData
-*/
-SDL_GetClipboardMimeTypes :: (num_mime_types: *u64) -> **u8 #foreign libsdl3;
-
-/**
-* Get the number of logical CPU cores available.
-*
-* \returns the total number of logical CPU cores. On CPUs that include
-*          technologies such as hyperthreading, the number of logical cores
-*          may be more than the number of physical cores.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*/
-SDL_GetNumLogicalCPUCores :: () -> s32 #foreign libsdl3;
-
-/**
-* Determine the L1 cache line size of the CPU.
-*
-* This is useful for determining multi-threaded structure padding or SIMD
-* prefetch sizes.
-*
-* \returns the L1 cache line size of the CPU, in bytes.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*/
-SDL_GetCPUCacheLineSize :: () -> s32 #foreign libsdl3;
-
-/**
-* Determine whether the CPU has AltiVec features.
-*
-* This always returns false on CPUs that aren't using PowerPC instruction
-* sets.
-*
-* \returns true if the CPU has AltiVec features or false if not.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*/
-SDL_HasAltiVec :: () -> bool #foreign libsdl3;
-
-/**
-* Determine whether the CPU has MMX features.
-*
-* This always returns false on CPUs that aren't using Intel instruction sets.
-*
-* \returns true if the CPU has MMX features or false if not.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*/
-SDL_HasMMX :: () -> bool #foreign libsdl3;
-
-/**
-* Determine whether the CPU has SSE features.
-*
-* This always returns false on CPUs that aren't using Intel instruction sets.
-*
-* \returns true if the CPU has SSE features or false if not.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_HasSSE2
-* \sa SDL_HasSSE3
-* \sa SDL_HasSSE41
-* \sa SDL_HasSSE42
-*/
-SDL_HasSSE :: () -> bool #foreign libsdl3;
-
-/**
-* Determine whether the CPU has SSE2 features.
-*
-* This always returns false on CPUs that aren't using Intel instruction sets.
-*
-* \returns true if the CPU has SSE2 features or false if not.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_HasSSE
-* \sa SDL_HasSSE3
-* \sa SDL_HasSSE41
-* \sa SDL_HasSSE42
-*/
-SDL_HasSSE2 :: () -> bool #foreign libsdl3;
-
-/**
-* Determine whether the CPU has SSE3 features.
-*
-* This always returns false on CPUs that aren't using Intel instruction sets.
-*
-* \returns true if the CPU has SSE3 features or false if not.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_HasSSE
-* \sa SDL_HasSSE2
-* \sa SDL_HasSSE41
-* \sa SDL_HasSSE42
-*/
-SDL_HasSSE3 :: () -> bool #foreign libsdl3;
-
-/**
-* Determine whether the CPU has SSE4.1 features.
-*
-* This always returns false on CPUs that aren't using Intel instruction sets.
-*
-* \returns true if the CPU has SSE4.1 features or false if not.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_HasSSE
-* \sa SDL_HasSSE2
-* \sa SDL_HasSSE3
-* \sa SDL_HasSSE42
-*/
-SDL_HasSSE41 :: () -> bool #foreign libsdl3;
-
-/**
-* Determine whether the CPU has SSE4.2 features.
-*
-* This always returns false on CPUs that aren't using Intel instruction sets.
-*
-* \returns true if the CPU has SSE4.2 features or false if not.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_HasSSE
-* \sa SDL_HasSSE2
-* \sa SDL_HasSSE3
-* \sa SDL_HasSSE41
-*/
-SDL_HasSSE42 :: () -> bool #foreign libsdl3;
-
-/**
-* Determine whether the CPU has AVX features.
-*
-* This always returns false on CPUs that aren't using Intel instruction sets.
-*
-* \returns true if the CPU has AVX features or false if not.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_HasAVX2
-* \sa SDL_HasAVX512F
-*/
-SDL_HasAVX :: () -> bool #foreign libsdl3;
-
-/**
-* Determine whether the CPU has AVX2 features.
-*
-* This always returns false on CPUs that aren't using Intel instruction sets.
-*
-* \returns true if the CPU has AVX2 features or false if not.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_HasAVX
-* \sa SDL_HasAVX512F
-*/
-SDL_HasAVX2 :: () -> bool #foreign libsdl3;
-
-/**
-* Determine whether the CPU has AVX-512F (foundation) features.
-*
-* This always returns false on CPUs that aren't using Intel instruction sets.
-*
-* \returns true if the CPU has AVX-512F features or false if not.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_HasAVX
-* \sa SDL_HasAVX2
-*/
-SDL_HasAVX512F :: () -> bool #foreign libsdl3;
-
-/**
-* Determine whether the CPU has ARM SIMD (ARMv6) features.
-*
-* This is different from ARM NEON, which is a different instruction set.
-*
-* This always returns false on CPUs that aren't using ARM instruction sets.
-*
-* \returns true if the CPU has ARM SIMD features or false if not.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_HasNEON
-*/
-SDL_HasARMSIMD :: () -> bool #foreign libsdl3;
-
-/**
-* Determine whether the CPU has NEON (ARM SIMD) features.
-*
-* This always returns false on CPUs that aren't using ARM instruction sets.
-*
-* \returns true if the CPU has ARM NEON features or false if not.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*/
-SDL_HasNEON :: () -> bool #foreign libsdl3;
-
-/**
-* Determine whether the CPU has LSX (LOONGARCH SIMD) features.
-*
-* This always returns false on CPUs that aren't using LOONGARCH instruction
-* sets.
-*
-* \returns true if the CPU has LOONGARCH LSX features or false if not.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*/
-SDL_HasLSX :: () -> bool #foreign libsdl3;
-
-/**
-* Determine whether the CPU has LASX (LOONGARCH SIMD) features.
-*
-* This always returns false on CPUs that aren't using LOONGARCH instruction
-* sets.
-*
-* \returns true if the CPU has LOONGARCH LASX features or false if not.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*/
-SDL_HasLASX :: () -> bool #foreign libsdl3;
-
-/**
-* Get the amount of RAM configured in the system.
-*
-* \returns the amount of RAM configured in the system in MiB.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*/
-SDL_GetSystemRAM :: () -> s32 #foreign libsdl3;
-
-/**
-* Report the alignment this system needs for SIMD allocations.
-*
-* This will return the minimum number of bytes to which a pointer must be
-* aligned to be compatible with SIMD instructions on the current machine. For
-* example, if the machine supports SSE only, it will return 16, but if it
-* supports AVX-512F, it'll return 64 (etc). This only reports values for
-* instruction sets SDL knows about, so if your SDL build doesn't have
-* SDL_HasAVX512F(), then it might return 16 for the SSE support it sees and
-* not 64 for the AVX-512 instructions that exist but SDL doesn't know about.
-* Plan accordingly.
-*
-* \returns the alignment in bytes needed for available, known SIMD
-*          instructions.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_aligned_alloc
-* \sa SDL_aligned_free
-*/
-SDL_GetSIMDAlignment :: () -> u64 #foreign libsdl3;
-
-/**
-* Report the size of a page of memory.
-*
-* Different platforms might have different memory page sizes. In current
-* times, 4 kilobytes is not unusual, but newer systems are moving to larger
-* page sizes, and esoteric platforms might have any unexpected size.
-*
-* Note that this function can return 0, which means SDL can't determine the
-* page size on this platform. It will _not_ set an error string to be
-* retrieved with SDL_GetError() in this case! In this case, defaulting to
-* 4096 is often a reasonable option.
-*
-* \returns the size of a single page of memory, in bytes, or 0 if SDL can't
-*          determine this information.
-*
-* \threadsafety It is safe to call this function from any thread.
-*
-* \since This function is available since SDL 3.4.0.
-*/
-SDL_GetSystemPageSize :: () -> s32 #foreign libsdl3;
 
 /**
 * This is a unique ID for a display for the time it is connected to the
@@ -18976,6 +13943,5096 @@ SDL_GL_SwapWindow :: (window: *SDL_Window) -> bool #foreign libsdl3;
 * \sa SDL_GL_CreateContext
 */
 SDL_GL_DestroyContext :: (_context: SDL_GLContext) -> bool #foreign libsdl3;
+
+/**
+* A handle to a CAMetalLayer-backed NSView (macOS) or UIView (iOS/tvOS).
+*
+* \since This datatype is available since SDL 3.2.0.
+*/
+SDL_MetalView :: *void;
+
+/**
+* Create a CAMetalLayer-backed NSView/UIView and attach it to the specified
+* window.
+*
+* On macOS, this does *not* associate a MTLDevice with the CAMetalLayer on
+* its own. It is up to user code to do that.
+*
+* The returned handle can be casted directly to a NSView or UIView. To access
+* the backing CAMetalLayer, call SDL_Metal_GetLayer().
+*
+* \param window the window.
+* \returns handle NSView or UIView.
+*
+* \threadsafety This function should only be called on the main thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_Metal_DestroyView
+* \sa SDL_Metal_GetLayer
+*/
+SDL_Metal_CreateView :: (window: *SDL_Window) -> SDL_MetalView #foreign libsdl3;
+
+/**
+* Destroy an existing SDL_MetalView object.
+*
+* This should be called before SDL_DestroyWindow, if SDL_Metal_CreateView was
+* called after SDL_CreateWindow.
+*
+* \param view the SDL_MetalView object.
+*
+* \threadsafety This function should only be called on the main thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_Metal_CreateView
+*/
+SDL_Metal_DestroyView :: (view: SDL_MetalView) -> void #foreign libsdl3;
+
+/**
+* Get a pointer to the backing CAMetalLayer for the given view.
+*
+* \param view the SDL_MetalView object.
+* \returns a pointer.
+*
+* \threadsafety This function should only be called on the main thread.
+*
+* \since This function is available since SDL 3.2.0.
+*/
+SDL_Metal_GetLayer :: (view: SDL_MetalView) -> *void #foreign libsdl3;
+
+/**
+* Possible outcomes from a triggered assertion.
+*
+* When an enabled assertion triggers, it may call the assertion handler
+* (possibly one provided by the app via SDL_SetAssertionHandler), which will
+* return one of these values, possibly after asking the user.
+*
+* Then SDL will respond based on this outcome (loop around to retry the
+* condition, try to break in a debugger, kill the program, or ignore the
+* problem).
+*
+* \since This enum is available since SDL 3.2.0.
+*/
+SDL_AssertState :: enum u32 {
+    RETRY         :: 0;
+    BREAK         :: 1;
+    ABORT         :: 2;
+    IGNORE        :: 3;
+    ALWAYS_IGNORE :: 4;
+
+    SDL_ASSERTION_RETRY         :: RETRY;
+    SDL_ASSERTION_BREAK         :: BREAK;
+    SDL_ASSERTION_ABORT         :: ABORT;
+    SDL_ASSERTION_IGNORE        :: IGNORE;
+    SDL_ASSERTION_ALWAYS_IGNORE :: ALWAYS_IGNORE;
+}
+
+/**
+* Information about an assertion failure.
+*
+* This structure is filled in with information about a triggered assertion,
+* used by the assertion handler, then added to the assertion report. This is
+* returned as a linked list from SDL_GetAssertionReport().
+*
+* \since This struct is available since SDL 3.2.0.
+*/
+SDL_AssertData :: struct {
+    always_ignore: bool; /**< true if app should always continue when assertion is triggered. */
+    trigger_count: u32; /**< Number of times this assertion has been triggered. */
+    condition:     *u8; /**< A string of this assert's test code. */
+    filename:      *u8; /**< The source file where this assert lives. */
+    linenum:       s32; /**< The line in `filename` where this assert lives. */
+    function:      *u8; /**< The name of the function where this assert lives. */
+    next:          *SDL_AssertData; /**< next item in the linked list. */
+}
+
+/**
+* Never call this directly.
+*
+* Use the SDL_assert macros instead.
+*
+* \param data assert data structure.
+* \param func function name.
+* \param file file name.
+* \param line line number.
+* \returns assert state.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*/
+SDL_ReportAssertion :: (data: *SDL_AssertData, func: *u8, file: *u8, line: s32) -> SDL_AssertState #foreign libsdl3;
+
+/**
+* A callback that fires when an SDL assertion fails.
+*
+* \param data a pointer to the SDL_AssertData structure corresponding to the
+*             current assertion.
+* \param userdata what was passed as `userdata` to SDL_SetAssertionHandler().
+* \returns an SDL_AssertState value indicating how to handle the failure.
+*
+* \threadsafety This callback may be called from any thread that triggers an
+*               assert at any time.
+*
+* \since This datatype is available since SDL 3.2.0.
+*/
+SDL_AssertionHandler :: #type (data: *SDL_AssertData, userdata: *void) -> SDL_AssertState #c_call;
+
+/**
+* Set an application-defined assertion handler.
+*
+* This function allows an application to show its own assertion UI and/or
+* force the response to an assertion failure. If the application doesn't
+* provide this, SDL will try to do the right thing, popping up a
+* system-specific GUI dialog, and probably minimizing any fullscreen windows.
+*
+* This callback may fire from any thread, but it runs wrapped in a mutex, so
+* it will only fire from one thread at a time.
+*
+* This callback is NOT reset to SDL's internal handler upon SDL_Quit()!
+*
+* \param handler the SDL_AssertionHandler function to call when an assertion
+*                fails or NULL for the default handler.
+* \param userdata a pointer that is passed to `handler`.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_GetAssertionHandler
+*/
+SDL_SetAssertionHandler :: (handler: SDL_AssertionHandler, userdata: *void) -> void #foreign libsdl3;
+
+/**
+* Get the default assertion handler.
+*
+* This returns the function pointer that is called by default when an
+* assertion is triggered. This is an internal function provided by SDL, that
+* is used for assertions when SDL_SetAssertionHandler() hasn't been used to
+* provide a different function.
+*
+* \returns the default SDL_AssertionHandler that is called when an assert
+*          triggers.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_GetAssertionHandler
+*/
+SDL_GetDefaultAssertionHandler :: () -> SDL_AssertionHandler #foreign libsdl3;
+
+/**
+* Get the current assertion handler.
+*
+* This returns the function pointer that is called when an assertion is
+* triggered. This is either the value last passed to
+* SDL_SetAssertionHandler(), or if no application-specified function is set,
+* is equivalent to calling SDL_GetDefaultAssertionHandler().
+*
+* The parameter `puserdata` is a pointer to a void*, which will store the
+* "userdata" pointer that was passed to SDL_SetAssertionHandler(). This value
+* will always be NULL for the default handler. If you don't care about this
+* data, it is safe to pass a NULL pointer to this function to ignore it.
+*
+* \param puserdata pointer which is filled with the "userdata" pointer that
+*                  was passed to SDL_SetAssertionHandler().
+* \returns the SDL_AssertionHandler that is called when an assert triggers.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_SetAssertionHandler
+*/
+SDL_GetAssertionHandler :: (puserdata: **void) -> SDL_AssertionHandler #foreign libsdl3;
+
+/**
+* Get a list of all assertion failures.
+*
+* This function gets all assertions triggered since the last call to
+* SDL_ResetAssertionReport(), or the start of the program.
+*
+* The proper way to examine this data looks something like this:
+*
+* ```c
+* const SDL_AssertData *item = SDL_GetAssertionReport();
+* while (item) {
+*    printf("'%s', %s (%s:%d), triggered %u times, always ignore: %s.\\n",
+*           item->condition, item->function, item->filename,
+*           item->linenum, item->trigger_count,
+*           item->always_ignore ? "yes" : "no");
+*    item = item->next;
+* }
+* ```
+*
+* \returns a list of all failed assertions or NULL if the list is empty. This
+*          memory should not be modified or freed by the application. This
+*          pointer remains valid until the next call to SDL_Quit() or
+*          SDL_ResetAssertionReport().
+*
+* \threadsafety This function is not thread safe. Other threads calling
+*               SDL_ResetAssertionReport() simultaneously, may render the
+*               returned pointer invalid.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_ResetAssertionReport
+*/
+SDL_GetAssertionReport :: () -> *SDL_AssertData #foreign libsdl3;
+
+/**
+* Clear the list of all assertion failures.
+*
+* This function will clear the list of all assertions triggered up to that
+* point. Immediately following this call, SDL_GetAssertionReport will return
+* no items. In addition, any previously-triggered assertions will be reset to
+* a trigger_count of zero, and their always_ignore state will be false.
+*
+* \threadsafety This function is not thread safe. Other threads triggering an
+*               assertion, or simultaneously calling this function may cause
+*               memory leaks or crashes.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_GetAssertionReport
+*/
+SDL_ResetAssertionReport :: () -> void #foreign libsdl3;
+
+SDL_AsyncIO :: struct {}
+
+/**
+* Types of asynchronous I/O tasks.
+*
+* \since This enum is available since SDL 3.2.0.
+*/
+SDL_AsyncIOTaskType :: enum u32 {
+    READ  :: 0;
+    WRITE :: 1;
+    CLOSE :: 2;
+
+    SDL_ASYNCIO_TASK_READ  :: READ;
+    SDL_ASYNCIO_TASK_WRITE :: WRITE;
+    SDL_ASYNCIO_TASK_CLOSE :: CLOSE;
+}
+
+/**
+* Possible outcomes of an asynchronous I/O task.
+*
+* \since This enum is available since SDL 3.2.0.
+*/
+SDL_AsyncIOResult :: enum u32 {
+    COMPLETE :: 0;
+    FAILURE  :: 1;
+    CANCELED :: 2;
+
+    SDL_ASYNCIO_COMPLETE :: COMPLETE;
+    SDL_ASYNCIO_FAILURE  :: FAILURE;
+    SDL_ASYNCIO_CANCELED :: CANCELED;
+}
+
+/**
+* Information about a completed asynchronous I/O request.
+*
+* \since This struct is available since SDL 3.2.0.
+*/
+SDL_AsyncIOOutcome :: struct {
+    asyncio:           *SDL_AsyncIO; /**< what generated this task. This pointer will be invalid if it was closed! */
+    type:              SDL_AsyncIOTaskType; /**< What sort of task was this? Read, write, etc? */
+    result:            SDL_AsyncIOResult; /**< the result of the work (success, failure, cancellation). */
+    buffer:            *void; /**< buffer where data was read/written. */
+    offset:            Uint64; /**< offset in the SDL_AsyncIO where data was read/written. */
+    bytes_requested:   Uint64; /**< number of bytes the task was to read/write. */
+    bytes_transferred: Uint64; /**< actual number of bytes that were read/written. */
+    userdata:          *void; /**< pointer provided by the app when starting the task */
+}
+
+SDL_AsyncIOQueue :: struct {}
+
+/**
+* Use this function to create a new SDL_AsyncIO object for reading from
+* and/or writing to a named file.
+*
+* The `mode` string understands the following values:
+*
+* - "r": Open a file for reading only. It must exist.
+* - "w": Open a file for writing only. It will create missing files or
+*   truncate existing ones.
+* - "r+": Open a file for update both reading and writing. The file must
+*   exist.
+* - "w+": Create an empty file for both reading and writing. If a file with
+*   the same name already exists its content is erased and the file is
+*   treated as a new empty file.
+*
+* There is no "b" mode, as there is only "binary" style I/O, and no "a" mode
+* for appending, since you specify the position when starting a task.
+*
+* This function supports Unicode filenames, but they must be encoded in UTF-8
+* format, regardless of the underlying operating system.
+*
+* This call is _not_ asynchronous; it will open the file before returning,
+* under the assumption that doing so is generally a fast operation. Future
+* reads and writes to the opened file will be async, however.
+*
+* \param file a UTF-8 string representing the filename to open.
+* \param mode an ASCII string representing the mode to be used for opening
+*             the file.
+* \returns a pointer to the SDL_AsyncIO structure that is created or NULL on
+*          failure; call SDL_GetError() for more information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_CloseAsyncIO
+* \sa SDL_ReadAsyncIO
+* \sa SDL_WriteAsyncIO
+*/
+SDL_AsyncIOFromFile :: (file: *u8, mode: *u8) -> *SDL_AsyncIO #foreign libsdl3;
+
+/**
+* Use this function to get the size of the data stream in an SDL_AsyncIO.
+*
+* This call is _not_ asynchronous; it assumes that obtaining this info is a
+* non-blocking operation in most reasonable cases.
+*
+* \param asyncio the SDL_AsyncIO to get the size of the data stream from.
+* \returns the size of the data stream in the SDL_IOStream on success or a
+*          negative error code on failure; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*/
+SDL_GetAsyncIOSize :: (asyncio: *SDL_AsyncIO) -> Sint64 #foreign libsdl3;
+
+/**
+* Start an async read.
+*
+* This function reads up to `size` bytes from `offset` position in the data
+* source to the area pointed at by `ptr`. This function may read less bytes
+* than requested.
+*
+* This function returns as quickly as possible; it does not wait for the read
+* to complete. On a successful return, this work will continue in the
+* background. If the work begins, even failure is asynchronous: a failing
+* return value from this function only means the work couldn't start at all.
+*
+* `ptr` must remain available until the work is done, and may be accessed by
+* the system at any time until then. Do not allocate it on the stack, as this
+* might take longer than the life of the calling function to complete!
+*
+* An SDL_AsyncIOQueue must be specified. The newly-created task will be added
+* to it when it completes its work.
+*
+* \param asyncio a pointer to an SDL_AsyncIO structure.
+* \param ptr a pointer to a buffer to read data into.
+* \param offset the position to start reading in the data source.
+* \param size the number of bytes to read from the data source.
+* \param queue a queue to add the new SDL_AsyncIO to.
+* \param userdata an app-defined pointer that will be provided with the task
+*                 results.
+* \returns true on success or false on failure; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_WriteAsyncIO
+* \sa SDL_CreateAsyncIOQueue
+*/
+SDL_ReadAsyncIO :: (asyncio: *SDL_AsyncIO, ptr: *void, offset: Uint64, size: Uint64, queue: *SDL_AsyncIOQueue, userdata: *void) -> bool #foreign libsdl3;
+
+/**
+* Start an async write.
+*
+* This function writes `size` bytes from `offset` position in the data source
+* to the area pointed at by `ptr`.
+*
+* This function returns as quickly as possible; it does not wait for the
+* write to complete. On a successful return, this work will continue in the
+* background. If the work begins, even failure is asynchronous: a failing
+* return value from this function only means the work couldn't start at all.
+*
+* `ptr` must remain available until the work is done, and may be accessed by
+* the system at any time until then. Do not allocate it on the stack, as this
+* might take longer than the life of the calling function to complete!
+*
+* An SDL_AsyncIOQueue must be specified. The newly-created task will be added
+* to it when it completes its work.
+*
+* \param asyncio a pointer to an SDL_AsyncIO structure.
+* \param ptr a pointer to a buffer to write data from.
+* \param offset the position to start writing to the data source.
+* \param size the number of bytes to write to the data source.
+* \param queue a queue to add the new SDL_AsyncIO to.
+* \param userdata an app-defined pointer that will be provided with the task
+*                 results.
+* \returns true on success or false on failure; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_ReadAsyncIO
+* \sa SDL_CreateAsyncIOQueue
+*/
+SDL_WriteAsyncIO :: (asyncio: *SDL_AsyncIO, ptr: *void, offset: Uint64, size: Uint64, queue: *SDL_AsyncIOQueue, userdata: *void) -> bool #foreign libsdl3;
+
+/**
+* Close and free any allocated resources for an async I/O object.
+*
+* Closing a file is _also_ an asynchronous task! If a write failure were to
+* happen during the closing process, for example, the task results will
+* report it as usual.
+*
+* Closing a file that has been written to does not guarantee the data has
+* made it to physical media; it may remain in the operating system's file
+* cache, for later writing to disk. This means that a successfully-closed
+* file can be lost if the system crashes or loses power in this small window.
+* To prevent this, call this function with the `flush` parameter set to true.
+* This will make the operation take longer, and perhaps increase system load
+* in general, but a successful result guarantees that the data has made it to
+* physical storage. Don't use this for temporary files, caches, and
+* unimportant data, and definitely use it for crucial irreplaceable files,
+* like game saves.
+*
+* This function guarantees that the close will happen after any other pending
+* tasks to `asyncio`, so it's safe to open a file, start several operations,
+* close the file immediately, then check for all results later. This function
+* will not block until the tasks have completed.
+*
+* Once this function returns true, `asyncio` is no longer valid, regardless
+* of any future outcomes. Any completed tasks might still contain this
+* pointer in their SDL_AsyncIOOutcome data, in case the app was using this
+* value to track information, but it should not be used again.
+*
+* If this function returns false, the close wasn't started at all, and it's
+* safe to attempt to close again later.
+*
+* An SDL_AsyncIOQueue must be specified. The newly-created task will be added
+* to it when it completes its work.
+*
+* \param asyncio a pointer to an SDL_AsyncIO structure to close.
+* \param flush true if data should sync to disk before the task completes.
+* \param queue a queue to add the new SDL_AsyncIO to.
+* \param userdata an app-defined pointer that will be provided with the task
+*                 results.
+* \returns true on success or false on failure; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety It is safe to call this function from any thread, but two
+*               threads should not attempt to close the same object.
+*
+* \since This function is available since SDL 3.2.0.
+*/
+SDL_CloseAsyncIO :: (asyncio: *SDL_AsyncIO, flush: bool, queue: *SDL_AsyncIOQueue, userdata: *void) -> bool #foreign libsdl3;
+
+/**
+* Create a task queue for tracking multiple I/O operations.
+*
+* Async I/O operations are assigned to a queue when started. The queue can be
+* checked for completed tasks thereafter.
+*
+* \returns a new task queue object or NULL if there was an error; call
+*          SDL_GetError() for more information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_DestroyAsyncIOQueue
+* \sa SDL_GetAsyncIOResult
+* \sa SDL_WaitAsyncIOResult
+*/
+SDL_CreateAsyncIOQueue :: () -> *SDL_AsyncIOQueue #foreign libsdl3;
+
+/**
+* Destroy a previously-created async I/O task queue.
+*
+* If there are still tasks pending for this queue, this call will block until
+* those tasks are finished. All those tasks will be deallocated. Their
+* results will be lost to the app.
+*
+* Any pending reads from SDL_LoadFileAsync() that are still in this queue
+* will have their buffers deallocated by this function, to prevent a memory
+* leak.
+*
+* Once this function is called, the queue is no longer valid and should not
+* be used, including by other threads that might access it while destruction
+* is blocking on pending tasks.
+*
+* Do not destroy a queue that still has threads waiting on it through
+* SDL_WaitAsyncIOResult(). You can call SDL_SignalAsyncIOQueue() first to
+* unblock those threads, and take measures (such as SDL_WaitThread()) to make
+* sure they have finished their wait and won't wait on the queue again.
+*
+* \param queue the task queue to destroy.
+*
+* \threadsafety It is safe to call this function from any thread, so long as
+*               no other thread is waiting on the queue with
+*               SDL_WaitAsyncIOResult.
+*
+* \since This function is available since SDL 3.2.0.
+*/
+SDL_DestroyAsyncIOQueue :: (queue: *SDL_AsyncIOQueue) -> void #foreign libsdl3;
+
+/**
+* Query an async I/O task queue for completed tasks.
+*
+* If a task assigned to this queue has finished, this will return true and
+* fill in `outcome` with the details of the task. If no task in the queue has
+* finished, this function will return false. This function does not block.
+*
+* If a task has completed, this function will free its resources and the task
+* pointer will no longer be valid. The task will be removed from the queue.
+*
+* It is safe for multiple threads to call this function on the same queue at
+* once; a completed task will only go to one of the threads.
+*
+* \param queue the async I/O task queue to query.
+* \param outcome details of a finished task will be written here. May not be
+*                NULL.
+* \returns true if a task has completed, false otherwise.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_WaitAsyncIOResult
+*/
+SDL_GetAsyncIOResult :: (queue: *SDL_AsyncIOQueue, outcome: *SDL_AsyncIOOutcome) -> bool #foreign libsdl3;
+
+/**
+* Block until an async I/O task queue has a completed task.
+*
+* This function puts the calling thread to sleep until there a task assigned
+* to the queue that has finished.
+*
+* If a task assigned to the queue has finished, this will return true and
+* fill in `outcome` with the details of the task. If no task in the queue has
+* finished, this function will return false.
+*
+* If a task has completed, this function will free its resources and the task
+* pointer will no longer be valid. The task will be removed from the queue.
+*
+* It is safe for multiple threads to call this function on the same queue at
+* once; a completed task will only go to one of the threads.
+*
+* Note that by the nature of various platforms, more than one waiting thread
+* may wake to handle a single task, but only one will obtain it, so
+* `timeoutMS` is a _maximum_ wait time, and this function may return false
+* sooner.
+*
+* This function may return false if there was a system error, the OS
+* inadvertently awoke multiple threads, or if SDL_SignalAsyncIOQueue() was
+* called to wake up all waiting threads without a finished task.
+*
+* A timeout can be used to specify a maximum wait time, but rather than
+* polling, it is possible to have a timeout of -1 to wait forever, and use
+* SDL_SignalAsyncIOQueue() to wake up the waiting threads later.
+*
+* \param queue the async I/O task queue to wait on.
+* \param outcome details of a finished task will be written here. May not be
+*                NULL.
+* \param timeoutMS the maximum time to wait, in milliseconds, or -1 to wait
+*                  indefinitely.
+* \returns true if task has completed, false otherwise.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_SignalAsyncIOQueue
+*/
+SDL_WaitAsyncIOResult :: (queue: *SDL_AsyncIOQueue, outcome: *SDL_AsyncIOOutcome, timeoutMS: Sint32) -> bool #foreign libsdl3;
+
+/**
+* Wake up any threads that are blocking in SDL_WaitAsyncIOResult().
+*
+* This will unblock any threads that are sleeping in a call to
+* SDL_WaitAsyncIOResult for the specified queue, and cause them to return
+* from that function.
+*
+* This can be useful when destroying a queue to make sure nothing is touching
+* it indefinitely. In this case, once this call completes, the caller should
+* take measures to make sure any previously-blocked threads have returned
+* from their wait and will not touch the queue again (perhaps by setting a
+* flag to tell the threads to terminate and then using SDL_WaitThread() to
+* make sure they've done so).
+*
+* \param queue the async I/O task queue to signal.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_WaitAsyncIOResult
+*/
+SDL_SignalAsyncIOQueue :: (queue: *SDL_AsyncIOQueue) -> void #foreign libsdl3;
+
+/**
+* Load all the data from a file path, asynchronously.
+*
+* This function returns as quickly as possible; it does not wait for the read
+* to complete. On a successful return, this work will continue in the
+* background. If the work begins, even failure is asynchronous: a failing
+* return value from this function only means the work couldn't start at all.
+*
+* The data is allocated with a zero byte at the end (null terminated) for
+* convenience. This extra byte is not included in SDL_AsyncIOOutcome's
+* bytes_transferred value.
+*
+* This function will allocate the buffer to contain the file. It must be
+* deallocated by calling SDL_free() on SDL_AsyncIOOutcome's buffer field
+* after completion.
+*
+* An SDL_AsyncIOQueue must be specified. The newly-created task will be added
+* to it when it completes its work.
+*
+* \param file the path to read all available data from.
+* \param queue a queue to add the new SDL_AsyncIO to.
+* \param userdata an app-defined pointer that will be provided with the task
+*                 results.
+* \returns true on success or false on failure; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_LoadFile_IO
+*/
+SDL_LoadFileAsync :: (file: *u8, queue: *SDL_AsyncIOQueue, userdata: *void) -> bool #foreign libsdl3;
+
+/**
+* An atomic spinlock.
+*
+* The atomic locks are efficient spinlocks using CPU instructions, but are
+* vulnerable to starvation and can spin forever if a thread holding a lock
+* has been terminated. For this reason you should minimize the code executed
+* inside an atomic lock and never do expensive things like API or system
+* calls while holding them.
+*
+* They are also vulnerable to starvation if the thread holding the lock is
+* lower priority than other threads and doesn't get scheduled. In general you
+* should use mutexes instead, since they have better performance and
+* contention behavior.
+*
+* The atomic locks are not safe to lock recursively.
+*
+* Porting Note: The spin lock functions and type are required and can not be
+* emulated because they are used in the atomic emulation code.
+*/
+SDL_SpinLock :: s32;
+
+/**
+* Try to lock a spin lock by setting it to a non-zero value.
+*
+* ***Please note that spinlocks are dangerous if you don't know what you're
+* doing. Please be careful using any sort of spinlock!***
+*
+* \param lock a pointer to a lock variable.
+* \returns true if the lock succeeded, false if the lock is already held.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_LockSpinlock
+* \sa SDL_UnlockSpinlock
+*/
+SDL_TryLockSpinlock :: (lock: *SDL_SpinLock) -> bool #foreign libsdl3;
+
+/**
+* Lock a spin lock by setting it to a non-zero value.
+*
+* ***Please note that spinlocks are dangerous if you don't know what you're
+* doing. Please be careful using any sort of spinlock!***
+*
+* \param lock a pointer to a lock variable.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_TryLockSpinlock
+* \sa SDL_UnlockSpinlock
+*/
+SDL_LockSpinlock :: (lock: *SDL_SpinLock) -> void #foreign libsdl3;
+
+/**
+* Unlock a spin lock by setting it to 0.
+*
+* Always returns immediately.
+*
+* ***Please note that spinlocks are dangerous if you don't know what you're
+* doing. Please be careful using any sort of spinlock!***
+*
+* \param lock a pointer to a lock variable.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_LockSpinlock
+* \sa SDL_TryLockSpinlock
+*/
+SDL_UnlockSpinlock :: (lock: *SDL_SpinLock) -> void #foreign libsdl3;
+
+/**
+* Insert a memory release barrier (function version).
+*
+* Please refer to SDL_MemoryBarrierRelease for details. This is a function
+* version, which might be useful if you need to use this functionality from a
+* scripting language, etc. Also, some of the macro versions call this
+* function behind the scenes, where more heavy lifting can happen inside of
+* SDL. Generally, though, an app written in C/C++/etc should use the macro
+* version, as it will be more efficient.
+*
+* \threadsafety Obviously this function is safe to use from any thread at any
+*               time, but if you find yourself needing this, you are probably
+*               dealing with some very sensitive code; be careful!
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_MemoryBarrierRelease
+*/
+SDL_MemoryBarrierReleaseFunction :: () -> void #foreign libsdl3;
+
+/**
+* Insert a memory acquire barrier (function version).
+*
+* Please refer to SDL_MemoryBarrierRelease for details. This is a function
+* version, which might be useful if you need to use this functionality from a
+* scripting language, etc. Also, some of the macro versions call this
+* function behind the scenes, where more heavy lifting can happen inside of
+* SDL. Generally, though, an app written in C/C++/etc should use the macro
+* version, as it will be more efficient.
+*
+* \threadsafety Obviously this function is safe to use from any thread at any
+*               time, but if you find yourself needing this, you are probably
+*               dealing with some very sensitive code; be careful!
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_MemoryBarrierAcquire
+*/
+SDL_MemoryBarrierAcquireFunction :: () -> void #foreign libsdl3;
+
+/**
+* A type representing an atomic integer value.
+*
+* This can be used to manage a value that is synchronized across multiple
+* CPUs without a race condition; when an app sets a value with
+* SDL_SetAtomicInt all other threads, regardless of the CPU it is running on,
+* will see that value when retrieved with SDL_GetAtomicInt, regardless of CPU
+* caches, etc.
+*
+* This is also useful for atomic compare-and-swap operations: a thread can
+* change the value as long as its current value matches expectations. When
+* done in a loop, one can guarantee data consistency across threads without a
+* lock (but the usual warnings apply: if you don't know what you're doing, or
+* you don't do it carefully, you can confidently cause any number of
+* disasters with this, so in most cases, you _should_ use a mutex instead of
+* this!).
+*
+* This is a struct so people don't accidentally use numeric operations on it
+* directly. You have to use SDL atomic functions.
+*
+* \since This struct is available since SDL 3.2.0.
+*
+* \sa SDL_CompareAndSwapAtomicInt
+* \sa SDL_GetAtomicInt
+* \sa SDL_SetAtomicInt
+* \sa SDL_AddAtomicInt
+*/
+SDL_AtomicInt :: struct {
+    value: s32;
+}
+
+/**
+* Set an atomic variable to a new value if it is currently an old value.
+*
+* ***Note: If you don't know what this function is for, you shouldn't use
+* it!***
+*
+* \param a a pointer to an SDL_AtomicInt variable to be modified.
+* \param oldval the old value.
+* \param newval the new value.
+* \returns true if the atomic variable was set, false otherwise.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_GetAtomicInt
+* \sa SDL_SetAtomicInt
+*/
+SDL_CompareAndSwapAtomicInt :: (a: *SDL_AtomicInt, oldval: s32, newval: s32) -> bool #foreign libsdl3;
+
+/**
+* Set an atomic variable to a value.
+*
+* This function also acts as a full memory barrier.
+*
+* ***Note: If you don't know what this function is for, you shouldn't use
+* it!***
+*
+* \param a a pointer to an SDL_AtomicInt variable to be modified.
+* \param v the desired value.
+* \returns the previous value of the atomic variable.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_GetAtomicInt
+*/
+SDL_SetAtomicInt :: (a: *SDL_AtomicInt, v: s32) -> s32 #foreign libsdl3;
+
+/**
+* Get the value of an atomic variable.
+*
+* ***Note: If you don't know what this function is for, you shouldn't use
+* it!***
+*
+* \param a a pointer to an SDL_AtomicInt variable.
+* \returns the current value of an atomic variable.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_SetAtomicInt
+*/
+SDL_GetAtomicInt :: (a: *SDL_AtomicInt) -> s32 #foreign libsdl3;
+
+/**
+* Add to an atomic variable.
+*
+* This function also acts as a full memory barrier.
+*
+* ***Note: If you don't know what this function is for, you shouldn't use
+* it!***
+*
+* \param a a pointer to an SDL_AtomicInt variable to be modified.
+* \param v the desired value to add.
+* \returns the previous value of the atomic variable.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_AtomicDecRef
+* \sa SDL_AtomicIncRef
+*/
+SDL_AddAtomicInt :: (a: *SDL_AtomicInt, v: s32) -> s32 #foreign libsdl3;
+
+/**
+* A type representing an atomic unsigned 32-bit value.
+*
+* This can be used to manage a value that is synchronized across multiple
+* CPUs without a race condition; when an app sets a value with
+* SDL_SetAtomicU32 all other threads, regardless of the CPU it is running on,
+* will see that value when retrieved with SDL_GetAtomicU32, regardless of CPU
+* caches, etc.
+*
+* This is also useful for atomic compare-and-swap operations: a thread can
+* change the value as long as its current value matches expectations. When
+* done in a loop, one can guarantee data consistency across threads without a
+* lock (but the usual warnings apply: if you don't know what you're doing, or
+* you don't do it carefully, you can confidently cause any number of
+* disasters with this, so in most cases, you _should_ use a mutex instead of
+* this!).
+*
+* This is a struct so people don't accidentally use numeric operations on it
+* directly. You have to use SDL atomic functions.
+*
+* \since This struct is available since SDL 3.2.0.
+*
+* \sa SDL_CompareAndSwapAtomicU32
+* \sa SDL_GetAtomicU32
+* \sa SDL_SetAtomicU32
+*/
+SDL_AtomicU32 :: struct {
+    value: Uint32;
+}
+
+/**
+* Set an atomic variable to a new value if it is currently an old value.
+*
+* ***Note: If you don't know what this function is for, you shouldn't use
+* it!***
+*
+* \param a a pointer to an SDL_AtomicU32 variable to be modified.
+* \param oldval the old value.
+* \param newval the new value.
+* \returns true if the atomic variable was set, false otherwise.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_GetAtomicU32
+* \sa SDL_SetAtomicU32
+*/
+SDL_CompareAndSwapAtomicU32 :: (a: *SDL_AtomicU32, oldval: Uint32, newval: Uint32) -> bool #foreign libsdl3;
+
+/**
+* Set an atomic variable to a value.
+*
+* This function also acts as a full memory barrier.
+*
+* ***Note: If you don't know what this function is for, you shouldn't use
+* it!***
+*
+* \param a a pointer to an SDL_AtomicU32 variable to be modified.
+* \param v the desired value.
+* \returns the previous value of the atomic variable.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_GetAtomicU32
+*/
+SDL_SetAtomicU32 :: (a: *SDL_AtomicU32, v: Uint32) -> Uint32 #foreign libsdl3;
+
+/**
+* Get the value of an atomic variable.
+*
+* ***Note: If you don't know what this function is for, you shouldn't use
+* it!***
+*
+* \param a a pointer to an SDL_AtomicU32 variable.
+* \returns the current value of an atomic variable.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_SetAtomicU32
+*/
+SDL_GetAtomicU32 :: (a: *SDL_AtomicU32) -> Uint32 #foreign libsdl3;
+
+/**
+* Add to an atomic variable.
+*
+* This function also acts as a full memory barrier.
+*
+* ***Note: If you don't know what this function is for, you shouldn't use
+* it!***
+*
+* \param a a pointer to an SDL_AtomicU32 variable to be modified.
+* \param v the desired value to add or subtract.
+* \returns the previous value of the atomic variable.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.4.0.
+*/
+SDL_AddAtomicU32 :: (a: *SDL_AtomicU32, v: s32) -> Uint32 #foreign libsdl3;
+
+/**
+* Set a pointer to a new value if it is currently an old value.
+*
+* ***Note: If you don't know what this function is for, you shouldn't use
+* it!***
+*
+* \param a a pointer to a pointer.
+* \param oldval the old pointer value.
+* \param newval the new pointer value.
+* \returns true if the pointer was set, false otherwise.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_CompareAndSwapAtomicInt
+* \sa SDL_GetAtomicPointer
+* \sa SDL_SetAtomicPointer
+*/
+SDL_CompareAndSwapAtomicPointer :: (a: **void, oldval: *void, newval: *void) -> bool #foreign libsdl3;
+
+/**
+* Set a pointer to a value atomically.
+*
+* ***Note: If you don't know what this function is for, you shouldn't use
+* it!***
+*
+* \param a a pointer to a pointer.
+* \param v the desired pointer value.
+* \returns the previous value of the pointer.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_CompareAndSwapAtomicPointer
+* \sa SDL_GetAtomicPointer
+*/
+SDL_SetAtomicPointer :: (a: **void, v: *void) -> *void #foreign libsdl3;
+
+/**
+* Get the value of a pointer atomically.
+*
+* ***Note: If you don't know what this function is for, you shouldn't use
+* it!***
+*
+* \param a a pointer to a pointer.
+* \returns the current value of a pointer.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_CompareAndSwapAtomicPointer
+* \sa SDL_SetAtomicPointer
+*/
+SDL_GetAtomicPointer :: (a: **void) -> *void #foreign libsdl3;
+
+SDL_Thread :: struct {}
+
+/**
+* A unique numeric ID that identifies a thread.
+*
+* These are different from SDL_Thread objects, which are generally what an
+* application will operate on, but having a way to uniquely identify a thread
+* can be useful at times.
+*
+* \since This datatype is available since SDL 3.2.0.
+*
+* \sa SDL_GetThreadID
+* \sa SDL_GetCurrentThreadID
+*/
+SDL_ThreadID :: Uint64;
+
+/**
+* Thread local storage ID.
+*
+* 0 is the invalid ID. An app can create these and then set data for these
+* IDs that is unique to each thread.
+*
+* \since This datatype is available since SDL 3.2.0.
+*
+* \sa SDL_GetTLS
+* \sa SDL_SetTLS
+*/
+SDL_TLSID :: SDL_AtomicInt;
+
+/**
+* The SDL thread priority.
+*
+* SDL will make system changes as necessary in order to apply the thread
+* priority. Code which attempts to control thread state related to priority
+* should be aware that calling SDL_SetCurrentThreadPriority may alter such
+* state. SDL_HINT_THREAD_PRIORITY_POLICY can be used to control aspects of
+* this behavior.
+*
+* \since This enum is available since SDL 3.2.0.
+*/
+SDL_ThreadPriority :: enum u32 {
+    LOW           :: 0;
+    NORMAL        :: 1;
+    HIGH          :: 2;
+    TIME_CRITICAL :: 3;
+
+    SDL_THREAD_PRIORITY_LOW           :: LOW;
+    SDL_THREAD_PRIORITY_NORMAL        :: NORMAL;
+    SDL_THREAD_PRIORITY_HIGH          :: HIGH;
+    SDL_THREAD_PRIORITY_TIME_CRITICAL :: TIME_CRITICAL;
+}
+
+/**
+* The SDL thread state.
+*
+* The current state of a thread can be checked by calling SDL_GetThreadState.
+*
+* \since This enum is available since SDL 3.2.0.
+*
+* \sa SDL_GetThreadState
+*/
+SDL_ThreadState :: enum u32 {
+    UNKNOWN  :: 0;
+    ALIVE    :: 1;
+    DETACHED :: 2;
+    COMPLETE :: 3;
+
+    SDL_THREAD_UNKNOWN  :: UNKNOWN;
+    SDL_THREAD_ALIVE    :: ALIVE;
+    SDL_THREAD_DETACHED :: DETACHED;
+    SDL_THREAD_COMPLETE :: COMPLETE;
+}
+
+/**
+* The function passed to SDL_CreateThread() as the new thread's entry point.
+*
+* \param data what was passed as `data` to SDL_CreateThread().
+* \returns a value that can be reported through SDL_WaitThread().
+*
+* \since This datatype is available since SDL 3.2.0.
+*/
+SDL_ThreadFunction :: #type (data: *void) -> s32 #c_call;
+
+/* These are the actual functions exported from SDL! Don't use them directly! Use the SDL_CreateThread and SDL_CreateThreadWithProperties macros! */
+/**
+* The actual entry point for SDL_CreateThread.
+*
+* \param fn the SDL_ThreadFunction function to call in the new thread
+* \param name the name of the thread
+* \param data a pointer that is passed to `fn`
+* \param pfnBeginThread the C runtime's _beginthreadex (or whatnot). Can be NULL.
+* \param pfnEndThread the C runtime's _endthreadex (or whatnot). Can be NULL.
+* \returns an opaque pointer to the new thread object on success, NULL if the
+*          new thread could not be created; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*/
+SDL_CreateThreadRuntime :: (fn: SDL_ThreadFunction, name: *u8, data: *void, pfnBeginThread: SDL_FunctionPointer, pfnEndThread: SDL_FunctionPointer) -> *SDL_Thread #foreign libsdl3;
+
+/**
+* The actual entry point for SDL_CreateThreadWithProperties.
+*
+* \param props the properties to use
+* \param pfnBeginThread the C runtime's _beginthreadex (or whatnot). Can be NULL.
+* \param pfnEndThread the C runtime's _endthreadex (or whatnot). Can be NULL.
+* \returns an opaque pointer to the new thread object on success, NULL if the
+*          new thread could not be created; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*/
+SDL_CreateThreadWithPropertiesRuntime :: (props: SDL_PropertiesID, pfnBeginThread: SDL_FunctionPointer, pfnEndThread: SDL_FunctionPointer) -> *SDL_Thread #foreign libsdl3;
+
+/**
+* Get the thread name as it was specified in SDL_CreateThread().
+*
+* \param thread the thread to query.
+* \returns a pointer to a UTF-8 string that names the specified thread, or
+*          NULL if it doesn't have a name.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*/
+SDL_GetThreadName :: (thread: *SDL_Thread) -> *u8 #foreign libsdl3;
+
+/**
+* Get the thread identifier for the current thread.
+*
+* This thread identifier is as reported by the underlying operating system.
+* If SDL is running on a platform that does not support threads the return
+* value will always be zero.
+*
+* This function also returns a valid thread ID when called from the main
+* thread.
+*
+* \returns the ID of the current thread.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_GetThreadID
+*/
+SDL_GetCurrentThreadID :: () -> SDL_ThreadID #foreign libsdl3;
+
+/**
+* Get the thread identifier for the specified thread.
+*
+* This thread identifier is as reported by the underlying operating system.
+* If SDL is running on a platform that does not support threads the return
+* value will always be zero.
+*
+* \param thread the thread to query.
+* \returns the ID of the specified thread, or the ID of the current thread if
+*          `thread` is NULL.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_GetCurrentThreadID
+*/
+SDL_GetThreadID :: (thread: *SDL_Thread) -> SDL_ThreadID #foreign libsdl3;
+
+/**
+* Set the priority for the current thread.
+*
+* Note that some platforms will not let you alter the priority (or at least,
+* promote the thread to a higher priority) at all, and some require you to be
+* an administrator account. Be prepared for this to fail.
+*
+* \param priority the SDL_ThreadPriority to set.
+* \returns true on success or false on failure; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*/
+SDL_SetCurrentThreadPriority :: (priority: SDL_ThreadPriority) -> bool #foreign libsdl3;
+
+/**
+* Wait for a thread to finish.
+*
+* Threads that haven't been detached will remain until this function cleans
+* them up. Not doing so is a resource leak.
+*
+* Once a thread has been cleaned up through this function, the SDL_Thread
+* that references it becomes invalid and should not be referenced again. As
+* such, only one thread may call SDL_WaitThread() on another.
+*
+* The return code from the thread function is placed in the area pointed to
+* by `status`, if `status` is not NULL.
+*
+* You may not wait on a thread that has been used in a call to
+* SDL_DetachThread(). Use either that function or this one, but not both, or
+* behavior is undefined.
+*
+* It is safe to pass a NULL thread to this function; it is a no-op.
+*
+* Note that the thread pointer is freed by this function and is not valid
+* afterward.
+*
+* \param thread the SDL_Thread pointer that was returned from the
+*               SDL_CreateThread() call that started this thread.
+* \param status a pointer filled in with the value returned from the thread
+*               function by its 'return', or -1 if the thread has been
+*               detached or isn't valid, may be NULL.
+*
+* \threadsafety It is safe to call this function from any thread, but only a
+*               single thread can wait any specific thread to finish.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_CreateThread
+* \sa SDL_DetachThread
+*/
+SDL_WaitThread :: (thread: *SDL_Thread, status: *s32) -> void #foreign libsdl3;
+
+/**
+* Get the current state of a thread.
+*
+* \param thread the thread to query.
+* \returns the current state of a thread, or SDL_THREAD_UNKNOWN if the thread
+*          isn't valid.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_ThreadState
+*/
+SDL_GetThreadState :: (thread: *SDL_Thread) -> SDL_ThreadState #foreign libsdl3;
+
+/**
+* Let a thread clean up on exit without intervention.
+*
+* A thread may be "detached" to signify that it should not remain until
+* another thread has called SDL_WaitThread() on it. Detaching a thread is
+* useful for long-running threads that nothing needs to synchronize with or
+* further manage. When a detached thread is done, it simply goes away.
+*
+* There is no way to recover the return code of a detached thread. If you
+* need this, don't detach the thread and instead use SDL_WaitThread().
+*
+* Once a thread is detached, you should usually assume the SDL_Thread isn't
+* safe to reference again, as it will become invalid immediately upon the
+* detached thread's exit, instead of remaining until someone has called
+* SDL_WaitThread() to finally clean it up. As such, don't detach the same
+* thread more than once.
+*
+* If a thread has already exited when passed to SDL_DetachThread(), it will
+* stop waiting for a call to SDL_WaitThread() and clean up immediately. It is
+* not safe to detach a thread that might be used with SDL_WaitThread().
+*
+* You may not call SDL_WaitThread() on a thread that has been detached. Use
+* either that function or this one, but not both, or behavior is undefined.
+*
+* It is safe to pass NULL to this function; it is a no-op.
+*
+* \param thread the SDL_Thread pointer that was returned from the
+*               SDL_CreateThread() call that started this thread.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_CreateThread
+* \sa SDL_WaitThread
+*/
+SDL_DetachThread :: (thread: *SDL_Thread) -> void #foreign libsdl3;
+
+/**
+* Get the current thread's value associated with a thread local storage ID.
+*
+* \param id a pointer to the thread local storage ID, may not be NULL.
+* \returns the value associated with the ID for the current thread or NULL if
+*          no value has been set; call SDL_GetError() for more information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_SetTLS
+*/
+SDL_GetTLS :: (id: *SDL_TLSID) -> *void #foreign libsdl3;
+
+/**
+* The callback used to cleanup data passed to SDL_SetTLS.
+*
+* This is called when a thread exits, to allow an app to free any resources.
+*
+* \param value a pointer previously handed to SDL_SetTLS.
+*
+* \since This datatype is available since SDL 3.2.0.
+*
+* \sa SDL_SetTLS
+*/
+SDL_TLSDestructorCallback :: #type (value: *void) -> void #c_call;
+
+/**
+* Set the current thread's value associated with a thread local storage ID.
+*
+* If the thread local storage ID is not initialized (the value is 0), a new
+* ID will be created in a thread-safe way, so all calls using a pointer to
+* the same ID will refer to the same local storage.
+*
+* Note that replacing a value from a previous call to this function on the
+* same thread does _not_ call the previous value's destructor!
+*
+* `destructor` can be NULL; it is assumed that `value` does not need to be
+* cleaned up if so.
+*
+* \param id a pointer to the thread local storage ID, may not be NULL.
+* \param value the value to associate with the ID for the current thread.
+* \param destructor a function called when the thread exits, to free the
+*                   value, may be NULL.
+* \returns true on success or false on failure; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_GetTLS
+*/
+SDL_SetTLS :: (id: *SDL_TLSID, value: *void, destructor: SDL_TLSDestructorCallback) -> bool #foreign libsdl3;
+
+/**
+* Cleanup all TLS data for this thread.
+*
+* If you are creating your threads outside of SDL and then calling SDL
+* functions, you should call this function before your thread exits, to
+* properly clean up SDL memory.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*/
+SDL_CleanupTLS :: () -> void #foreign libsdl3;
+
+SDL_Mutex :: struct {}
+
+/**
+* Create a new mutex.
+*
+* All newly-created mutexes begin in the _unlocked_ state.
+*
+* Calls to SDL_LockMutex() will not return while the mutex is locked by
+* another thread. See SDL_TryLockMutex() to attempt to lock without blocking.
+*
+* SDL mutexes are reentrant.
+*
+* \returns the initialized and unlocked mutex or NULL on failure; call
+*          SDL_GetError() for more information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_DestroyMutex
+* \sa SDL_LockMutex
+* \sa SDL_TryLockMutex
+* \sa SDL_UnlockMutex
+*/
+SDL_CreateMutex :: () -> *SDL_Mutex #foreign libsdl3;
+
+/**
+* Lock the mutex.
+*
+* This will block until the mutex is available, which is to say it is in the
+* unlocked state and the OS has chosen the caller as the next thread to lock
+* it. Of all threads waiting to lock the mutex, only one may do so at a time.
+*
+* It is legal for the owning thread to lock an already-locked mutex. It must
+* unlock it the same number of times before it is actually made available for
+* other threads in the system (this is known as a "recursive mutex").
+*
+* This function does not fail; if mutex is NULL, it will return immediately
+* having locked nothing. If the mutex is valid, this function will always
+* block until it can lock the mutex, and return with it locked.
+*
+* \param mutex the mutex to lock.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_TryLockMutex
+* \sa SDL_UnlockMutex
+*/
+SDL_LockMutex :: (mutex: *SDL_Mutex) -> void #foreign libsdl3;
+
+/**
+* Try to lock a mutex without blocking.
+*
+* This works just like SDL_LockMutex(), but if the mutex is not available,
+* this function returns false immediately.
+*
+* This technique is useful if you need exclusive access to a resource but
+* don't want to wait for it, and will return to it to try again later.
+*
+* This function returns true if passed a NULL mutex.
+*
+* \param mutex the mutex to try to lock.
+* \returns true on success, false if the mutex would block.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_LockMutex
+* \sa SDL_UnlockMutex
+*/
+SDL_TryLockMutex :: (mutex: *SDL_Mutex) -> bool #foreign libsdl3;
+
+/**
+* Unlock the mutex.
+*
+* It is legal for the owning thread to lock an already-locked mutex. It must
+* unlock it the same number of times before it is actually made available for
+* other threads in the system (this is known as a "recursive mutex").
+*
+* It is illegal to unlock a mutex that has not been locked by the current
+* thread, and doing so results in undefined behavior.
+*
+* \param mutex the mutex to unlock.
+*
+* \threadsafety This call must be paired with a previous locking call on the
+*               same thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_LockMutex
+* \sa SDL_TryLockMutex
+*/
+SDL_UnlockMutex :: (mutex: *SDL_Mutex) -> void #foreign libsdl3;
+
+/**
+* Destroy a mutex created with SDL_CreateMutex().
+*
+* This function must be called on any mutex that is no longer needed. Failure
+* to destroy a mutex will result in a system memory or resource leak. While
+* it is safe to destroy a mutex that is _unlocked_, it is not safe to attempt
+* to destroy a locked mutex, and may result in undefined behavior depending
+* on the platform.
+*
+* \param mutex the mutex to destroy.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_CreateMutex
+*/
+SDL_DestroyMutex :: (mutex: *SDL_Mutex) -> void #foreign libsdl3;
+
+SDL_RWLock :: struct {}
+
+/**
+* Create a new read/write lock.
+*
+* A read/write lock is useful for situations where you have multiple threads
+* trying to access a resource that is rarely updated. All threads requesting
+* a read-only lock will be allowed to run in parallel; if a thread requests a
+* write lock, it will be provided exclusive access. This makes it safe for
+* multiple threads to use a resource at the same time if they promise not to
+* change it, and when it has to be changed, the rwlock will serve as a
+* gateway to make sure those changes can be made safely.
+*
+* In the right situation, a rwlock can be more efficient than a mutex, which
+* only lets a single thread proceed at a time, even if it won't be modifying
+* the data.
+*
+* All newly-created read/write locks begin in the _unlocked_ state.
+*
+* Calls to SDL_LockRWLockForReading() and SDL_LockRWLockForWriting will not
+* return while the rwlock is locked _for writing_ by another thread. See
+* SDL_TryLockRWLockForReading() and SDL_TryLockRWLockForWriting() to attempt
+* to lock without blocking.
+*
+* SDL read/write locks are only recursive for read-only locks! They are not
+* guaranteed to be fair, or provide access in a FIFO manner! They are not
+* guaranteed to favor writers. You may not lock a rwlock for both read-only
+* and write access at the same time from the same thread (so you can't
+* promote your read-only lock to a write lock without unlocking first).
+*
+* \returns the initialized and unlocked read/write lock or NULL on failure;
+*          call SDL_GetError() for more information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_DestroyRWLock
+* \sa SDL_LockRWLockForReading
+* \sa SDL_LockRWLockForWriting
+* \sa SDL_TryLockRWLockForReading
+* \sa SDL_TryLockRWLockForWriting
+* \sa SDL_UnlockRWLock
+*/
+SDL_CreateRWLock :: () -> *SDL_RWLock #foreign libsdl3;
+
+/**
+* Lock the read/write lock for _read only_ operations.
+*
+* This will block until the rwlock is available, which is to say it is not
+* locked for writing by any other thread. Of all threads waiting to lock the
+* rwlock, all may do so at the same time as long as they are requesting
+* read-only access; if a thread wants to lock for writing, only one may do so
+* at a time, and no other threads, read-only or not, may hold the lock at the
+* same time.
+*
+* It is legal for the owning thread to lock an already-locked rwlock for
+* reading. It must unlock it the same number of times before it is actually
+* made available for other threads in the system (this is known as a
+* "recursive rwlock").
+*
+* Note that locking for writing is not recursive (this is only available to
+* read-only locks).
+*
+* It is illegal to request a read-only lock from a thread that already holds
+* the write lock. Doing so results in undefined behavior. Unlock the write
+* lock before requesting a read-only lock. (But, of course, if you have the
+* write lock, you don't need further locks to read in any case.)
+*
+* This function does not fail; if rwlock is NULL, it will return immediately
+* having locked nothing. If the rwlock is valid, this function will always
+* block until it can lock the mutex, and return with it locked.
+*
+* \param rwlock the read/write lock to lock.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_LockRWLockForWriting
+* \sa SDL_TryLockRWLockForReading
+* \sa SDL_UnlockRWLock
+*/
+SDL_LockRWLockForReading :: (rwlock: *SDL_RWLock) -> void #foreign libsdl3;
+
+/**
+* Lock the read/write lock for _write_ operations.
+*
+* This will block until the rwlock is available, which is to say it is not
+* locked for reading or writing by any other thread. Only one thread may hold
+* the lock when it requests write access; all other threads, whether they
+* also want to write or only want read-only access, must wait until the
+* writer thread has released the lock.
+*
+* It is illegal for the owning thread to lock an already-locked rwlock for
+* writing (read-only may be locked recursively, writing can not). Doing so
+* results in undefined behavior.
+*
+* It is illegal to request a write lock from a thread that already holds a
+* read-only lock. Doing so results in undefined behavior. Unlock the
+* read-only lock before requesting a write lock.
+*
+* This function does not fail; if rwlock is NULL, it will return immediately
+* having locked nothing. If the rwlock is valid, this function will always
+* block until it can lock the mutex, and return with it locked.
+*
+* \param rwlock the read/write lock to lock.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_LockRWLockForReading
+* \sa SDL_TryLockRWLockForWriting
+* \sa SDL_UnlockRWLock
+*/
+SDL_LockRWLockForWriting :: (rwlock: *SDL_RWLock) -> void #foreign libsdl3;
+
+/**
+* Try to lock a read/write lock _for reading_ without blocking.
+*
+* This works just like SDL_LockRWLockForReading(), but if the rwlock is not
+* available, then this function returns false immediately.
+*
+* This technique is useful if you need access to a resource but don't want to
+* wait for it, and will return to it to try again later.
+*
+* Trying to lock for read-only access can succeed if other threads are
+* holding read-only locks, as this won't prevent access.
+*
+* This function returns true if passed a NULL rwlock.
+*
+* \param rwlock the rwlock to try to lock.
+* \returns true on success, false if the lock would block.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_LockRWLockForReading
+* \sa SDL_TryLockRWLockForWriting
+* \sa SDL_UnlockRWLock
+*/
+SDL_TryLockRWLockForReading :: (rwlock: *SDL_RWLock) -> bool #foreign libsdl3;
+
+/**
+* Try to lock a read/write lock _for writing_ without blocking.
+*
+* This works just like SDL_LockRWLockForWriting(), but if the rwlock is not
+* available, then this function returns false immediately.
+*
+* This technique is useful if you need exclusive access to a resource but
+* don't want to wait for it, and will return to it to try again later.
+*
+* It is illegal for the owning thread to lock an already-locked rwlock for
+* writing (read-only may be locked recursively, writing can not). Doing so
+* results in undefined behavior.
+*
+* It is illegal to request a write lock from a thread that already holds a
+* read-only lock. Doing so results in undefined behavior. Unlock the
+* read-only lock before requesting a write lock.
+*
+* This function returns true if passed a NULL rwlock.
+*
+* \param rwlock the rwlock to try to lock.
+* \returns true on success, false if the lock would block.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_LockRWLockForWriting
+* \sa SDL_TryLockRWLockForReading
+* \sa SDL_UnlockRWLock
+*/
+SDL_TryLockRWLockForWriting :: (rwlock: *SDL_RWLock) -> bool #foreign libsdl3;
+
+/**
+* Unlock the read/write lock.
+*
+* Use this function to unlock the rwlock, whether it was locked for read-only
+* or write operations.
+*
+* It is legal for the owning thread to lock an already-locked read-only lock.
+* It must unlock it the same number of times before it is actually made
+* available for other threads in the system (this is known as a "recursive
+* rwlock").
+*
+* It is illegal to unlock a rwlock that has not been locked by the current
+* thread, and doing so results in undefined behavior.
+*
+* \param rwlock the rwlock to unlock.
+*
+* \threadsafety This call must be paired with a previous locking call on the
+*               same thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_LockRWLockForReading
+* \sa SDL_LockRWLockForWriting
+* \sa SDL_TryLockRWLockForReading
+* \sa SDL_TryLockRWLockForWriting
+*/
+SDL_UnlockRWLock :: (rwlock: *SDL_RWLock) -> void #foreign libsdl3;
+
+/**
+* Destroy a read/write lock created with SDL_CreateRWLock().
+*
+* This function must be called on any read/write lock that is no longer
+* needed. Failure to destroy a rwlock will result in a system memory or
+* resource leak. While it is safe to destroy a rwlock that is _unlocked_, it
+* is not safe to attempt to destroy a locked rwlock, and may result in
+* undefined behavior depending on the platform.
+*
+* \param rwlock the rwlock to destroy.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_CreateRWLock
+*/
+SDL_DestroyRWLock :: (rwlock: *SDL_RWLock) -> void #foreign libsdl3;
+
+SDL_Semaphore :: struct {}
+
+/**
+* Create a semaphore.
+*
+* This function creates a new semaphore and initializes it with the value
+* `initial_value`. Each wait operation on the semaphore will atomically
+* decrement the semaphore value and potentially block if the semaphore value
+* is 0. Each post operation will atomically increment the semaphore value and
+* wake waiting threads and allow them to retry the wait operation.
+*
+* \param initial_value the starting value of the semaphore.
+* \returns a new semaphore or NULL on failure; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_DestroySemaphore
+* \sa SDL_SignalSemaphore
+* \sa SDL_TryWaitSemaphore
+* \sa SDL_GetSemaphoreValue
+* \sa SDL_WaitSemaphore
+* \sa SDL_WaitSemaphoreTimeout
+*/
+SDL_CreateSemaphore :: (initial_value: Uint32) -> *SDL_Semaphore #foreign libsdl3;
+
+/**
+* Destroy a semaphore.
+*
+* It is not safe to destroy a semaphore if there are threads currently
+* waiting on it.
+*
+* \param sem the semaphore to destroy.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_CreateSemaphore
+*/
+SDL_DestroySemaphore :: (sem: *SDL_Semaphore) -> void #foreign libsdl3;
+
+/**
+* Wait until a semaphore has a positive value and then decrements it.
+*
+* This function suspends the calling thread until the semaphore pointed to by
+* `sem` has a positive value, and then atomically decrement the semaphore
+* value.
+*
+* This function is the equivalent of calling SDL_WaitSemaphoreTimeout() with
+* a time length of -1.
+*
+* \param sem the semaphore wait on.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_SignalSemaphore
+* \sa SDL_TryWaitSemaphore
+* \sa SDL_WaitSemaphoreTimeout
+*/
+SDL_WaitSemaphore :: (sem: *SDL_Semaphore) -> void #foreign libsdl3;
+
+/**
+* See if a semaphore has a positive value and decrement it if it does.
+*
+* This function checks to see if the semaphore pointed to by `sem` has a
+* positive value and atomically decrements the semaphore value if it does. If
+* the semaphore doesn't have a positive value, the function immediately
+* returns false.
+*
+* \param sem the semaphore to wait on.
+* \returns true if the wait succeeds, false if the wait would block.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_SignalSemaphore
+* \sa SDL_WaitSemaphore
+* \sa SDL_WaitSemaphoreTimeout
+*/
+SDL_TryWaitSemaphore :: (sem: *SDL_Semaphore) -> bool #foreign libsdl3;
+
+/**
+* Wait until a semaphore has a positive value and then decrements it.
+*
+* This function suspends the calling thread until either the semaphore
+* pointed to by `sem` has a positive value or the specified time has elapsed.
+* If the call is successful it will atomically decrement the semaphore value.
+*
+* \param sem the semaphore to wait on.
+* \param timeoutMS the length of the timeout, in milliseconds, or -1 to wait
+*                  indefinitely.
+* \returns true if the wait succeeds or false if the wait times out.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_SignalSemaphore
+* \sa SDL_TryWaitSemaphore
+* \sa SDL_WaitSemaphore
+*/
+SDL_WaitSemaphoreTimeout :: (sem: *SDL_Semaphore, timeoutMS: Sint32) -> bool #foreign libsdl3;
+
+/**
+* Atomically increment a semaphore's value and wake waiting threads.
+*
+* \param sem the semaphore to increment.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_TryWaitSemaphore
+* \sa SDL_WaitSemaphore
+* \sa SDL_WaitSemaphoreTimeout
+*/
+SDL_SignalSemaphore :: (sem: *SDL_Semaphore) -> void #foreign libsdl3;
+
+/**
+* Get the current value of a semaphore.
+*
+* \param sem the semaphore to query.
+* \returns the current value of the semaphore.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*/
+SDL_GetSemaphoreValue :: (sem: *SDL_Semaphore) -> Uint32 #foreign libsdl3;
+
+SDL_Condition :: struct {}
+
+/**
+* Create a condition variable.
+*
+* \returns a new condition variable or NULL on failure; call SDL_GetError()
+*          for more information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_BroadcastCondition
+* \sa SDL_SignalCondition
+* \sa SDL_WaitCondition
+* \sa SDL_WaitConditionTimeout
+* \sa SDL_DestroyCondition
+*/
+SDL_CreateCondition :: () -> *SDL_Condition #foreign libsdl3;
+
+/**
+* Destroy a condition variable.
+*
+* \param cond the condition variable to destroy.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_CreateCondition
+*/
+SDL_DestroyCondition :: (cond: *SDL_Condition) -> void #foreign libsdl3;
+
+/**
+* Restart one of the threads that are waiting on the condition variable.
+*
+* \param cond the condition variable to signal.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_BroadcastCondition
+* \sa SDL_WaitCondition
+* \sa SDL_WaitConditionTimeout
+*/
+SDL_SignalCondition :: (cond: *SDL_Condition) -> void #foreign libsdl3;
+
+/**
+* Restart all threads that are waiting on the condition variable.
+*
+* \param cond the condition variable to signal.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_SignalCondition
+* \sa SDL_WaitCondition
+* \sa SDL_WaitConditionTimeout
+*/
+SDL_BroadcastCondition :: (cond: *SDL_Condition) -> void #foreign libsdl3;
+
+/**
+* Wait until a condition variable is signaled.
+*
+* This function unlocks the specified `mutex` and waits for another thread to
+* call SDL_SignalCondition() or SDL_BroadcastCondition() on the condition
+* variable `cond`. Once the condition variable is signaled, the mutex is
+* re-locked and the function returns.
+*
+* The mutex must be locked before calling this function. Locking the mutex
+* recursively (more than once) is not supported and leads to undefined
+* behavior.
+*
+* This function is the equivalent of calling SDL_WaitConditionTimeout() with
+* a time length of -1.
+*
+* \param cond the condition variable to wait on.
+* \param mutex the mutex used to coordinate thread access.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_BroadcastCondition
+* \sa SDL_SignalCondition
+* \sa SDL_WaitConditionTimeout
+*/
+SDL_WaitCondition :: (cond: *SDL_Condition, mutex: *SDL_Mutex) -> void #foreign libsdl3;
+
+/**
+* Wait until a condition variable is signaled or a certain time has passed.
+*
+* This function unlocks the specified `mutex` and waits for another thread to
+* call SDL_SignalCondition() or SDL_BroadcastCondition() on the condition
+* variable `cond`, or for the specified time to elapse. Once the condition
+* variable is signaled or the time elapsed, the mutex is re-locked and the
+* function returns.
+*
+* The mutex must be locked before calling this function. Locking the mutex
+* recursively (more than once) is not supported and leads to undefined
+* behavior.
+*
+* \param cond the condition variable to wait on.
+* \param mutex the mutex used to coordinate thread access.
+* \param timeoutMS the maximum time to wait, in milliseconds, or -1 to wait
+*                  indefinitely.
+* \returns true if the condition variable is signaled, false if the condition
+*          is not signaled in the allotted time.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_BroadcastCondition
+* \sa SDL_SignalCondition
+* \sa SDL_WaitCondition
+*/
+SDL_WaitConditionTimeout :: (cond: *SDL_Condition, mutex: *SDL_Mutex, timeoutMS: Sint32) -> bool #foreign libsdl3;
+
+/**
+* The current status of an SDL_InitState structure.
+*
+* \since This enum is available since SDL 3.2.0.
+*/
+SDL_InitStatus :: enum u32 {
+    UNINITIALIZED  :: 0;
+    INITIALIZING   :: 1;
+    INITIALIZED    :: 2;
+    UNINITIALIZING :: 3;
+
+    SDL_INIT_STATUS_UNINITIALIZED  :: UNINITIALIZED;
+    SDL_INIT_STATUS_INITIALIZING   :: INITIALIZING;
+    SDL_INIT_STATUS_INITIALIZED    :: INITIALIZED;
+    SDL_INIT_STATUS_UNINITIALIZING :: UNINITIALIZING;
+}
+
+/**
+* A structure used for thread-safe initialization and shutdown.
+*
+* Here is an example of using this:
+*
+* ```c
+*    static SDL_InitState init;
+*
+*    bool InitSystem(void)
+*    {
+*        if (!SDL_ShouldInit(&init)) {
+*            // The system is initialized
+*            return true;
+*        }
+*
+*        // At this point, you should not leave this function without calling SDL_SetInitialized()
+*
+*        bool initialized = DoInitTasks();
+*        SDL_SetInitialized(&init, initialized);
+*        return initialized;
+*    }
+*
+*    bool UseSubsystem(void)
+*    {
+*        if (SDL_ShouldInit(&init)) {
+*            // Error, the subsystem isn't initialized
+*            SDL_SetInitialized(&init, false);
+*            return false;
+*        }
+*
+*        // Do work using the initialized subsystem
+*
+*        return true;
+*    }
+*
+*    void QuitSystem(void)
+*    {
+*        if (!SDL_ShouldQuit(&init)) {
+*            // The system is not initialized
+*            return;
+*        }
+*
+*        // At this point, you should not leave this function without calling SDL_SetInitialized()
+*
+*        DoQuitTasks();
+*        SDL_SetInitialized(&init, false);
+*    }
+* ```
+*
+* Note that this doesn't protect any resources created during initialization,
+* or guarantee that nobody is using those resources during cleanup. You
+* should use other mechanisms to protect those, if that's a concern for your
+* code.
+*
+* \since This struct is available since SDL 3.2.0.
+*/
+SDL_InitState :: struct {
+    status:   SDL_AtomicInt;
+    thread:   SDL_ThreadID;
+    reserved: *void;
+}
+
+/**
+* Return whether initialization should be done.
+*
+* This function checks the passed in state and if initialization should be
+* done, sets the status to `SDL_INIT_STATUS_INITIALIZING` and returns true.
+* If another thread is already modifying this state, it will wait until
+* that's done before returning.
+*
+* If this function returns true, the calling code must call
+* SDL_SetInitialized() to complete the initialization.
+*
+* \param state the initialization state to check.
+* \returns true if initialization needs to be done, false otherwise.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_SetInitialized
+* \sa SDL_ShouldQuit
+*/
+SDL_ShouldInit :: (state: *SDL_InitState) -> bool #foreign libsdl3;
+
+/**
+* Return whether cleanup should be done.
+*
+* This function checks the passed in state and if cleanup should be done,
+* sets the status to `SDL_INIT_STATUS_UNINITIALIZING` and returns true.
+*
+* If this function returns true, the calling code must call
+* SDL_SetInitialized() to complete the cleanup.
+*
+* \param state the initialization state to check.
+* \returns true if cleanup needs to be done, false otherwise.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_SetInitialized
+* \sa SDL_ShouldInit
+*/
+SDL_ShouldQuit :: (state: *SDL_InitState) -> bool #foreign libsdl3;
+
+/**
+* Finish an initialization state transition.
+*
+* This function sets the status of the passed in state to
+* `SDL_INIT_STATUS_INITIALIZED` or `SDL_INIT_STATUS_UNINITIALIZED` and allows
+* any threads waiting for the status to proceed.
+*
+* \param state the initialization state to check.
+* \param initialized the new initialization state.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_ShouldInit
+* \sa SDL_ShouldQuit
+*/
+SDL_SetInitialized :: (state: *SDL_InitState, initialized: bool) -> void #foreign libsdl3;
+
+/**
+* Audio format.
+*
+* \since This enum is available since SDL 3.2.0.
+*
+* \sa SDL_AUDIO_BITSIZE
+* \sa SDL_AUDIO_BYTESIZE
+* \sa SDL_AUDIO_ISINT
+* \sa SDL_AUDIO_ISFLOAT
+* \sa SDL_AUDIO_ISBIGENDIAN
+* \sa SDL_AUDIO_ISLITTLEENDIAN
+* \sa SDL_AUDIO_ISSIGNED
+* \sa SDL_AUDIO_ISUNSIGNED
+*/
+SDL_AudioFormat :: enum u32 {
+    UNKNOWN :: 0;
+    U8      :: 8;
+
+    S8      :: 32776;
+
+    S16LE   :: 32784;
+
+    S16BE   :: 36880;
+
+    S32LE   :: 32800;
+
+    S32BE   :: 36896;
+
+    F32LE   :: 33056;
+
+    F32BE   :: 37152;
+
+    S16     :: 32784;
+    S32     :: 32800;
+    F32     :: 33056;
+
+    SDL_AUDIO_UNKNOWN :: UNKNOWN;
+    SDL_AUDIO_U8      :: U8;
+
+    SDL_AUDIO_S8      :: S8;
+
+    SDL_AUDIO_S16LE   :: S16LE;
+
+    SDL_AUDIO_S16BE   :: S16BE;
+
+    SDL_AUDIO_S32LE   :: S32LE;
+
+    SDL_AUDIO_S32BE   :: S32BE;
+
+    SDL_AUDIO_F32LE   :: F32LE;
+
+    SDL_AUDIO_F32BE   :: F32BE;
+
+    SDL_AUDIO_S16     :: S16;
+    SDL_AUDIO_S32     :: S32;
+    SDL_AUDIO_F32     :: F32;
+}
+
+/**
+* SDL Audio Device instance IDs.
+*
+* Zero is used to signify an invalid/null device.
+*
+* \since This datatype is available since SDL 3.2.0.
+*/
+SDL_AudioDeviceID :: Uint32;
+
+/**
+* Format specifier for audio data.
+*
+* \since This struct is available since SDL 3.2.0.
+*
+* \sa SDL_AudioFormat
+*/
+SDL_AudioSpec :: struct {
+    format:   SDL_AudioFormat; /**< Audio data format */
+    channels: s32; /**< Number of channels: 1 mono, 2 stereo, etc */
+    freq:     s32; /**< sample rate: sample frames per second */
+}
+
+SDL_AudioStream :: struct {}
+
+/**
+* Use this function to get the number of built-in audio drivers.
+*
+* This function returns a hardcoded number. This never returns a negative
+* value; if there are no drivers compiled into this build of SDL, this
+* function returns zero. The presence of a driver in this list does not mean
+* it will function, it just means SDL is capable of interacting with that
+* interface. For example, a build of SDL might have esound support, but if
+* there's no esound server available, SDL's esound driver would fail if used.
+*
+* By default, SDL tries all drivers, in its preferred order, until one is
+* found to be usable.
+*
+* \returns the number of built-in audio drivers.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_GetAudioDriver
+*/
+SDL_GetNumAudioDrivers :: () -> s32 #foreign libsdl3;
+
+/**
+* Use this function to get the name of a built in audio driver.
+*
+* The list of audio drivers is given in the order that they are normally
+* initialized by default; the drivers that seem more reasonable to choose
+* first (as far as the SDL developers believe) are earlier in the list.
+*
+* The names of drivers are all simple, low-ASCII identifiers, like "alsa",
+* "coreaudio" or "wasapi". These never have Unicode characters, and are not
+* meant to be proper names.
+*
+* \param index the index of the audio driver; the value ranges from 0 to
+*              SDL_GetNumAudioDrivers() - 1.
+* \returns the name of the audio driver at the requested index, or NULL if an
+*          invalid index was specified.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_GetNumAudioDrivers
+*/
+SDL_GetAudioDriver :: (index: s32) -> *u8 #foreign libsdl3;
+
+/**
+* Get the name of the current audio driver.
+*
+* The names of drivers are all simple, low-ASCII identifiers, like "alsa",
+* "coreaudio" or "wasapi". These never have Unicode characters, and are not
+* meant to be proper names.
+*
+* \returns the name of the current audio driver or NULL if no driver has been
+*          initialized.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*/
+SDL_GetCurrentAudioDriver :: () -> *u8 #foreign libsdl3;
+
+/**
+* Get a list of currently-connected audio playback devices.
+*
+* This returns of list of available devices that play sound, perhaps to
+* speakers or headphones ("playback" devices). If you want devices that
+* record audio, like a microphone ("recording" devices), use
+* SDL_GetAudioRecordingDevices() instead.
+*
+* This only returns a list of physical devices; it will not have any device
+* IDs returned by SDL_OpenAudioDevice().
+*
+* If this function returns NULL, to signify an error, `*count` will be set to
+* zero.
+*
+* \param count a pointer filled in with the number of devices returned, may
+*              be NULL.
+* \returns a 0 terminated array of device instance IDs or NULL on error; call
+*          SDL_GetError() for more information. This should be freed with
+*          SDL_free() when it is no longer needed.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_OpenAudioDevice
+* \sa SDL_GetAudioRecordingDevices
+*/
+SDL_GetAudioPlaybackDevices :: (count: *s32) -> *SDL_AudioDeviceID #foreign libsdl3;
+
+/**
+* Get a list of currently-connected audio recording devices.
+*
+* This returns of list of available devices that record audio, like a
+* microphone ("recording" devices). If you want devices that play sound,
+* perhaps to speakers or headphones ("playback" devices), use
+* SDL_GetAudioPlaybackDevices() instead.
+*
+* This only returns a list of physical devices; it will not have any device
+* IDs returned by SDL_OpenAudioDevice().
+*
+* If this function returns NULL, to signify an error, `*count` will be set to
+* zero.
+*
+* \param count a pointer filled in with the number of devices returned, may
+*              be NULL.
+* \returns a 0 terminated array of device instance IDs, or NULL on failure;
+*          call SDL_GetError() for more information. This should be freed
+*          with SDL_free() when it is no longer needed.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_OpenAudioDevice
+* \sa SDL_GetAudioPlaybackDevices
+*/
+SDL_GetAudioRecordingDevices :: (count: *s32) -> *SDL_AudioDeviceID #foreign libsdl3;
+
+/**
+* Get the human-readable name of a specific audio device.
+*
+* **WARNING**: this function will work with SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK
+* and SDL_AUDIO_DEVICE_DEFAULT_RECORDING, returning the current default
+* physical devices' names. However, as the default device may change at any
+* time, it is likely better to show a generic name to the user, like "System
+* default audio device" or perhaps "default [currently %s]". Do not store
+* this name to disk to reidentify the device in a later run of the program,
+* as the default might change in general, and the string will be the name of
+* a specific device and not the abstract system default.
+*
+* \param devid the instance ID of the device to query.
+* \returns the name of the audio device, or NULL on failure; call
+*          SDL_GetError() for more information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_GetAudioPlaybackDevices
+* \sa SDL_GetAudioRecordingDevices
+*/
+SDL_GetAudioDeviceName :: (devid: SDL_AudioDeviceID) -> *u8 #foreign libsdl3;
+
+/**
+* Get the current audio format of a specific audio device.
+*
+* For an opened device, this will report the format the device is currently
+* using. If the device isn't yet opened, this will report the device's
+* preferred format (or a reasonable default if this can't be determined).
+*
+* You may also specify SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK or
+* SDL_AUDIO_DEVICE_DEFAULT_RECORDING here, which is useful for getting a
+* reasonable recommendation before opening the system-recommended default
+* device.
+*
+* You can also use this to request the current device buffer size. This is
+* specified in sample frames and represents the amount of data SDL will feed
+* to the physical hardware in each chunk. This can be converted to
+* milliseconds of audio with the following equation:
+*
+* `ms = (int) ((((Sint64) frames) * 1000) / spec.freq);`
+*
+* Buffer size is only important if you need low-level control over the audio
+* playback timing. Most apps do not need this.
+*
+* \param devid the instance ID of the device to query.
+* \param spec on return, will be filled with device details.
+* \param sample_frames pointer to store device buffer size, in sample frames.
+*                      Can be NULL.
+* \returns true on success or false on failure; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*/
+SDL_GetAudioDeviceFormat :: (devid: SDL_AudioDeviceID, spec: *SDL_AudioSpec, sample_frames: *s32) -> bool #foreign libsdl3;
+
+/**
+* Get the current channel map of an audio device.
+*
+* Channel maps are optional; most things do not need them, instead passing
+* data in the [order that SDL expects](CategoryAudio#channel-layouts).
+*
+* Audio devices usually have no remapping applied. This is represented by
+* returning NULL, and does not signify an error.
+*
+* \param devid the instance ID of the device to query.
+* \param count On output, set to number of channels in the map. Can be NULL.
+* \returns an array of the current channel mapping, with as many elements as
+*          the current output spec's channels, or NULL if default. This
+*          should be freed with SDL_free() when it is no longer needed.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_SetAudioStreamInputChannelMap
+*/
+SDL_GetAudioDeviceChannelMap :: (devid: SDL_AudioDeviceID, count: *s32) -> *s32 #foreign libsdl3;
+
+/**
+* Open a specific audio device.
+*
+* You can open both playback and recording devices through this function.
+* Playback devices will take data from bound audio streams, mix it, and send
+* it to the hardware. Recording devices will feed any bound audio streams
+* with a copy of any incoming data.
+*
+* An opened audio device starts out with no audio streams bound. To start
+* audio playing, bind a stream and supply audio data to it. Unlike SDL2,
+* there is no audio callback; you only bind audio streams and make sure they
+* have data flowing into them (however, you can simulate SDL2's semantics
+* fairly closely by using SDL_OpenAudioDeviceStream instead of this
+* function).
+*
+* If you don't care about opening a specific device, pass a `devid` of either
+* `SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK` or
+* `SDL_AUDIO_DEVICE_DEFAULT_RECORDING`. In this case, SDL will try to pick
+* the most reasonable default, and may also switch between physical devices
+* seamlessly later, if the most reasonable default changes during the
+* lifetime of this opened device (user changed the default in the OS's system
+* preferences, the default got unplugged so the system jumped to a new
+* default, the user plugged in headphones on a mobile device, etc). Unless
+* you have a good reason to choose a specific device, this is probably what
+* you want.
+*
+* You may request a specific format for the audio device, but there is no
+* promise the device will honor that request for several reasons. As such,
+* it's only meant to be a hint as to what data your app will provide. Audio
+* streams will accept data in whatever format you specify and manage
+* conversion for you as appropriate. SDL_GetAudioDeviceFormat can tell you
+* the preferred format for the device before opening and the actual format
+* the device is using after opening.
+*
+* It's legal to open the same device ID more than once; each successful open
+* will generate a new logical SDL_AudioDeviceID that is managed separately
+* from others on the same physical device. This allows libraries to open a
+* device separately from the main app and bind its own streams without
+* conflicting.
+*
+* It is also legal to open a device ID returned by a previous call to this
+* function; doing so just creates another logical device on the same physical
+* device. This may be useful for making logical groupings of audio streams.
+*
+* This function returns the opened device ID on success. This is a new,
+* unique SDL_AudioDeviceID that represents a logical device.
+*
+* Some backends might offer arbitrary devices (for example, a networked audio
+* protocol that can connect to an arbitrary server). For these, as a change
+* from SDL2, you should open a default device ID and use an SDL hint to
+* specify the target if you care, or otherwise let the backend figure out a
+* reasonable default. Most backends don't offer anything like this, and often
+* this would be an end user setting an environment variable for their custom
+* need, and not something an application should specifically manage.
+*
+* When done with an audio device, possibly at the end of the app's life, one
+* should call SDL_CloseAudioDevice() on the returned device id.
+*
+* \param devid the device instance id to open, or
+*              SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK or
+*              SDL_AUDIO_DEVICE_DEFAULT_RECORDING for the most reasonable
+*              default device.
+* \param spec the requested device configuration. Can be NULL to use
+*             reasonable defaults.
+* \returns the device ID on success or 0 on failure; call SDL_GetError() for
+*          more information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_CloseAudioDevice
+* \sa SDL_GetAudioDeviceFormat
+*/
+SDL_OpenAudioDevice :: (devid: SDL_AudioDeviceID, spec: *SDL_AudioSpec) -> SDL_AudioDeviceID #foreign libsdl3;
+
+/**
+* Determine if an audio device is physical (instead of logical).
+*
+* An SDL_AudioDeviceID that represents physical hardware is a physical
+* device; there is one for each piece of hardware that SDL can see. Logical
+* devices are created by calling SDL_OpenAudioDevice or
+* SDL_OpenAudioDeviceStream, and while each is associated with a physical
+* device, there can be any number of logical devices on one physical device.
+*
+* For the most part, logical and physical IDs are interchangeable--if you try
+* to open a logical device, SDL understands to assign that effort to the
+* underlying physical device, etc. However, it might be useful to know if an
+* arbitrary device ID is physical or logical. This function reports which.
+*
+* This function may return either true or false for invalid device IDs.
+*
+* \param devid the device ID to query.
+* \returns true if devid is a physical device, false if it is logical.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*/
+SDL_IsAudioDevicePhysical :: (devid: SDL_AudioDeviceID) -> bool #foreign libsdl3;
+
+/**
+* Determine if an audio device is a playback device (instead of recording).
+*
+* This function may return either true or false for invalid device IDs.
+*
+* \param devid the device ID to query.
+* \returns true if devid is a playback device, false if it is recording.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*/
+SDL_IsAudioDevicePlayback :: (devid: SDL_AudioDeviceID) -> bool #foreign libsdl3;
+
+/**
+* Use this function to pause audio playback on a specified device.
+*
+* This function pauses audio processing for a given device. Any bound audio
+* streams will not progress, and no audio will be generated. Pausing one
+* device does not prevent other unpaused devices from running.
+*
+* Unlike in SDL2, audio devices start in an _unpaused_ state, since an app
+* has to bind a stream before any audio will flow. Pausing a paused device is
+* a legal no-op.
+*
+* Pausing a device can be useful to halt all audio without unbinding all the
+* audio streams. This might be useful while a game is paused, or a level is
+* loading, etc.
+*
+* Physical devices can not be paused or unpaused, only logical devices
+* created through SDL_OpenAudioDevice() can be.
+*
+* \param devid a device opened by SDL_OpenAudioDevice().
+* \returns true on success or false on failure; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_ResumeAudioDevice
+* \sa SDL_AudioDevicePaused
+*/
+SDL_PauseAudioDevice :: (devid: SDL_AudioDeviceID) -> bool #foreign libsdl3;
+
+/**
+* Use this function to unpause audio playback on a specified device.
+*
+* This function unpauses audio processing for a given device that has
+* previously been paused with SDL_PauseAudioDevice(). Once unpaused, any
+* bound audio streams will begin to progress again, and audio can be
+* generated.
+*
+* Unlike in SDL2, audio devices start in an _unpaused_ state, since an app
+* has to bind a stream before any audio will flow. Unpausing an unpaused
+* device is a legal no-op.
+*
+* Physical devices can not be paused or unpaused, only logical devices
+* created through SDL_OpenAudioDevice() can be.
+*
+* \param devid a device opened by SDL_OpenAudioDevice().
+* \returns true on success or false on failure; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_AudioDevicePaused
+* \sa SDL_PauseAudioDevice
+*/
+SDL_ResumeAudioDevice :: (devid: SDL_AudioDeviceID) -> bool #foreign libsdl3;
+
+/**
+* Use this function to query if an audio device is paused.
+*
+* Unlike in SDL2, audio devices start in an _unpaused_ state, since an app
+* has to bind a stream before any audio will flow.
+*
+* Physical devices can not be paused or unpaused, only logical devices
+* created through SDL_OpenAudioDevice() can be. Physical and invalid device
+* IDs will report themselves as unpaused here.
+*
+* \param devid a device opened by SDL_OpenAudioDevice().
+* \returns true if device is valid and paused, false otherwise.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_PauseAudioDevice
+* \sa SDL_ResumeAudioDevice
+*/
+SDL_AudioDevicePaused :: (devid: SDL_AudioDeviceID) -> bool #foreign libsdl3;
+
+/**
+* Get the gain of an audio device.
+*
+* The gain of a device is its volume; a larger gain means a louder output,
+* with a gain of zero being silence.
+*
+* Audio devices default to a gain of 1.0f (no change in output).
+*
+* Physical devices may not have their gain changed, only logical devices, and
+* this function will always return -1.0f when used on physical devices.
+*
+* \param devid the audio device to query.
+* \returns the gain of the device or -1.0f on failure; call SDL_GetError()
+*          for more information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_SetAudioDeviceGain
+*/
+SDL_GetAudioDeviceGain :: (devid: SDL_AudioDeviceID) -> float #foreign libsdl3;
+
+/**
+* Change the gain of an audio device.
+*
+* The gain of a device is its volume; a larger gain means a louder output,
+* with a gain of zero being silence.
+*
+* Audio devices default to a gain of 1.0f (no change in output).
+*
+* Physical devices may not have their gain changed, only logical devices, and
+* this function will always return false when used on physical devices. While
+* it might seem attractive to adjust several logical devices at once in this
+* way, it would allow an app or library to interfere with another portion of
+* the program's otherwise-isolated devices.
+*
+* This is applied, along with any per-audiostream gain, during playback to
+* the hardware, and can be continuously changed to create various effects. On
+* recording devices, this will adjust the gain before passing the data into
+* an audiostream; that recording audiostream can then adjust its gain further
+* when outputting the data elsewhere, if it likes, but that second gain is
+* not applied until the data leaves the audiostream again.
+*
+* \param devid the audio device on which to change gain.
+* \param gain the gain. 1.0f is no change, 0.0f is silence.
+* \returns true on success or false on failure; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety It is safe to call this function from any thread, as it holds
+*               a stream-specific mutex while running.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_GetAudioDeviceGain
+*/
+SDL_SetAudioDeviceGain :: (devid: SDL_AudioDeviceID, gain: float) -> bool #foreign libsdl3;
+
+/**
+* Close a previously-opened audio device.
+*
+* The application should close open audio devices once they are no longer
+* needed.
+*
+* This function may block briefly while pending audio data is played by the
+* hardware, so that applications don't drop the last buffer of data they
+* supplied if terminating immediately afterwards.
+*
+* \param devid an audio device id previously returned by
+*              SDL_OpenAudioDevice().
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_OpenAudioDevice
+*/
+SDL_CloseAudioDevice :: (devid: SDL_AudioDeviceID) -> void #foreign libsdl3;
+
+/**
+* Bind a list of audio streams to an audio device.
+*
+* Audio data will flow through any bound streams. For a playback device, data
+* for all bound streams will be mixed together and fed to the device. For a
+* recording device, a copy of recorded data will be provided to each bound
+* stream.
+*
+* Audio streams can only be bound to an open device. This operation is
+* atomic--all streams bound in the same call will start processing at the
+* same time, so they can stay in sync. Also: either all streams will be bound
+* or none of them will be.
+*
+* It is an error to bind an already-bound stream; it must be explicitly
+* unbound first.
+*
+* Binding a stream to a device will set its output format for playback
+* devices, and its input format for recording devices, so they match the
+* device's settings. The caller is welcome to change the other end of the
+* stream's format at any time with SDL_SetAudioStreamFormat(). If the other
+* end of the stream's format has never been set (the audio stream was created
+* with a NULL audio spec), this function will set it to match the device
+* end's format.
+*
+* \param devid an audio device to bind a stream to.
+* \param streams an array of audio streams to bind.
+* \param num_streams number streams listed in the `streams` array.
+* \returns true on success or false on failure; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_BindAudioStreams
+* \sa SDL_UnbindAudioStream
+* \sa SDL_GetAudioStreamDevice
+*/
+SDL_BindAudioStreams :: (devid: SDL_AudioDeviceID, streams: **SDL_AudioStream, num_streams: s32) -> bool #foreign libsdl3;
+
+/**
+* Bind a single audio stream to an audio device.
+*
+* This is a convenience function, equivalent to calling
+* `SDL_BindAudioStreams(devid, &stream, 1)`.
+*
+* \param devid an audio device to bind a stream to.
+* \param stream an audio stream to bind to a device.
+* \returns true on success or false on failure; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_BindAudioStreams
+* \sa SDL_UnbindAudioStream
+* \sa SDL_GetAudioStreamDevice
+*/
+SDL_BindAudioStream :: (devid: SDL_AudioDeviceID, stream: *SDL_AudioStream) -> bool #foreign libsdl3;
+
+/**
+* Unbind a list of audio streams from their audio devices.
+*
+* The streams being unbound do not all have to be on the same device. All
+* streams on the same device will be unbound atomically (data will stop
+* flowing through all unbound streams on the same device at the same time).
+*
+* Unbinding a stream that isn't bound to a device is a legal no-op.
+*
+* \param streams an array of audio streams to unbind. Can be NULL or contain
+*                NULL.
+* \param num_streams number streams listed in the `streams` array.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_BindAudioStreams
+*/
+SDL_UnbindAudioStreams :: (streams: **SDL_AudioStream, num_streams: s32) -> void #foreign libsdl3;
+
+/**
+* Unbind a single audio stream from its audio device.
+*
+* This is a convenience function, equivalent to calling
+* `SDL_UnbindAudioStreams(&stream, 1)`.
+*
+* \param stream an audio stream to unbind from a device. Can be NULL.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_BindAudioStream
+*/
+SDL_UnbindAudioStream :: (stream: *SDL_AudioStream) -> void #foreign libsdl3;
+
+/**
+* Query an audio stream for its currently-bound device.
+*
+* This reports the logical audio device that an audio stream is currently
+* bound to.
+*
+* If not bound, or invalid, this returns zero, which is not a valid device
+* ID.
+*
+* \param stream the audio stream to query.
+* \returns the bound audio device, or 0 if not bound or invalid.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_BindAudioStream
+* \sa SDL_BindAudioStreams
+*/
+SDL_GetAudioStreamDevice :: (stream: *SDL_AudioStream) -> SDL_AudioDeviceID #foreign libsdl3;
+
+/**
+* Create a new audio stream.
+*
+* \param src_spec the format details of the input audio.
+* \param dst_spec the format details of the output audio.
+* \returns a new audio stream on success or NULL on failure; call
+*          SDL_GetError() for more information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_PutAudioStreamData
+* \sa SDL_GetAudioStreamData
+* \sa SDL_GetAudioStreamAvailable
+* \sa SDL_FlushAudioStream
+* \sa SDL_ClearAudioStream
+* \sa SDL_SetAudioStreamFormat
+* \sa SDL_DestroyAudioStream
+*/
+SDL_CreateAudioStream :: (src_spec: *SDL_AudioSpec, dst_spec: *SDL_AudioSpec) -> *SDL_AudioStream #foreign libsdl3;
+
+/**
+* Get the properties associated with an audio stream.
+*
+* The application can hang any data it wants here, but the following
+* properties are understood by SDL:
+*
+* - `SDL_PROP_AUDIOSTREAM_AUTO_CLEANUP_BOOLEAN`: if true (the default), the
+*   stream be automatically cleaned up when the audio subsystem quits. If set
+*   to false, the streams will persist beyond that. This property is ignored
+*   for streams created through SDL_OpenAudioDeviceStream(), and will always
+*   be cleaned up. Streams that are not cleaned up will still be unbound from
+*   devices when the audio subsystem quits. This property was added in SDL
+*   3.4.0.
+*
+* \param stream the SDL_AudioStream to query.
+* \returns a valid property ID on success or 0 on failure; call
+*          SDL_GetError() for more information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*/
+SDL_GetAudioStreamProperties :: (stream: *SDL_AudioStream) -> SDL_PropertiesID #foreign libsdl3;
+
+/**
+* Query the current format of an audio stream.
+*
+* \param stream the SDL_AudioStream to query.
+* \param src_spec where to store the input audio format; ignored if NULL.
+* \param dst_spec where to store the output audio format; ignored if NULL.
+* \returns true on success or false on failure; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety It is safe to call this function from any thread, as it holds
+*               a stream-specific mutex while running.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_SetAudioStreamFormat
+*/
+SDL_GetAudioStreamFormat :: (stream: *SDL_AudioStream, src_spec: *SDL_AudioSpec, dst_spec: *SDL_AudioSpec) -> bool #foreign libsdl3;
+
+/**
+* Change the input and output formats of an audio stream.
+*
+* Future calls to and SDL_GetAudioStreamAvailable and SDL_GetAudioStreamData
+* will reflect the new format, and future calls to SDL_PutAudioStreamData
+* must provide data in the new input formats.
+*
+* Data that was previously queued in the stream will still be operated on in
+* the format that was current when it was added, which is to say you can put
+* the end of a sound file in one format to a stream, change formats for the
+* next sound file, and start putting that new data while the previous sound
+* file is still queued, and everything will still play back correctly.
+*
+* If a stream is bound to a device, then the format of the side of the stream
+* bound to a device cannot be changed (src_spec for recording devices,
+* dst_spec for playback devices). Attempts to make a change to this side will
+* be ignored, but this will not report an error. The other side's format can
+* be changed.
+*
+* \param stream the stream the format is being changed.
+* \param src_spec the new format of the audio input; if NULL, it is not
+*                 changed.
+* \param dst_spec the new format of the audio output; if NULL, it is not
+*                 changed.
+* \returns true on success or false on failure; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety It is safe to call this function from any thread, as it holds
+*               a stream-specific mutex while running.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_GetAudioStreamFormat
+* \sa SDL_SetAudioStreamFrequencyRatio
+*/
+SDL_SetAudioStreamFormat :: (stream: *SDL_AudioStream, src_spec: *SDL_AudioSpec, dst_spec: *SDL_AudioSpec) -> bool #foreign libsdl3;
+
+/**
+* Get the frequency ratio of an audio stream.
+*
+* \param stream the SDL_AudioStream to query.
+* \returns the frequency ratio of the stream or 0.0 on failure; call
+*          SDL_GetError() for more information.
+*
+* \threadsafety It is safe to call this function from any thread, as it holds
+*               a stream-specific mutex while running.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_SetAudioStreamFrequencyRatio
+*/
+SDL_GetAudioStreamFrequencyRatio :: (stream: *SDL_AudioStream) -> float #foreign libsdl3;
+
+/**
+* Change the frequency ratio of an audio stream.
+*
+* The frequency ratio is used to adjust the rate at which input data is
+* consumed. Changing this effectively modifies the speed and pitch of the
+* audio. A value greater than 1.0f will play the audio faster, and at a
+* higher pitch. A value less than 1.0f will play the audio slower, and at a
+* lower pitch. 1.0f means play at normal speed.
+*
+* This is applied during SDL_GetAudioStreamData, and can be continuously
+* changed to create various effects.
+*
+* \param stream the stream on which the frequency ratio is being changed.
+* \param ratio the frequency ratio. 1.0 is normal speed. Must be between 0.01
+*              and 100.
+* \returns true on success or false on failure; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety It is safe to call this function from any thread, as it holds
+*               a stream-specific mutex while running.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_GetAudioStreamFrequencyRatio
+* \sa SDL_SetAudioStreamFormat
+*/
+SDL_SetAudioStreamFrequencyRatio :: (stream: *SDL_AudioStream, ratio: float) -> bool #foreign libsdl3;
+
+/**
+* Get the gain of an audio stream.
+*
+* The gain of a stream is its volume; a larger gain means a louder output,
+* with a gain of zero being silence.
+*
+* Audio streams default to a gain of 1.0f (no change in output).
+*
+* \param stream the SDL_AudioStream to query.
+* \returns the gain of the stream or -1.0f on failure; call SDL_GetError()
+*          for more information.
+*
+* \threadsafety It is safe to call this function from any thread, as it holds
+*               a stream-specific mutex while running.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_SetAudioStreamGain
+*/
+SDL_GetAudioStreamGain :: (stream: *SDL_AudioStream) -> float #foreign libsdl3;
+
+/**
+* Change the gain of an audio stream.
+*
+* The gain of a stream is its volume; a larger gain means a louder output,
+* with a gain of zero being silence.
+*
+* Audio streams default to a gain of 1.0f (no change in output).
+*
+* This is applied during SDL_GetAudioStreamData, and can be continuously
+* changed to create various effects.
+*
+* \param stream the stream on which the gain is being changed.
+* \param gain the gain. 1.0f is no change, 0.0f is silence.
+* \returns true on success or false on failure; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety It is safe to call this function from any thread, as it holds
+*               a stream-specific mutex while running.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_GetAudioStreamGain
+*/
+SDL_SetAudioStreamGain :: (stream: *SDL_AudioStream, gain: float) -> bool #foreign libsdl3;
+
+/**
+* Get the current input channel map of an audio stream.
+*
+* Channel maps are optional; most things do not need them, instead passing
+* data in the [order that SDL expects](CategoryAudio#channel-layouts).
+*
+* Audio streams default to no remapping applied. This is represented by
+* returning NULL, and does not signify an error.
+*
+* \param stream the SDL_AudioStream to query.
+* \param count On output, set to number of channels in the map. Can be NULL.
+* \returns an array of the current channel mapping, with as many elements as
+*          the current output spec's channels, or NULL if default. This
+*          should be freed with SDL_free() when it is no longer needed.
+*
+* \threadsafety It is safe to call this function from any thread, as it holds
+*               a stream-specific mutex while running.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_SetAudioStreamInputChannelMap
+*/
+SDL_GetAudioStreamInputChannelMap :: (stream: *SDL_AudioStream, count: *s32) -> *s32 #foreign libsdl3;
+
+/**
+* Get the current output channel map of an audio stream.
+*
+* Channel maps are optional; most things do not need them, instead passing
+* data in the [order that SDL expects](CategoryAudio#channel-layouts).
+*
+* Audio streams default to no remapping applied. This is represented by
+* returning NULL, and does not signify an error.
+*
+* \param stream the SDL_AudioStream to query.
+* \param count On output, set to number of channels in the map. Can be NULL.
+* \returns an array of the current channel mapping, with as many elements as
+*          the current output spec's channels, or NULL if default. This
+*          should be freed with SDL_free() when it is no longer needed.
+*
+* \threadsafety It is safe to call this function from any thread, as it holds
+*               a stream-specific mutex while running.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_SetAudioStreamInputChannelMap
+*/
+SDL_GetAudioStreamOutputChannelMap :: (stream: *SDL_AudioStream, count: *s32) -> *s32 #foreign libsdl3;
+
+/**
+* Set the current input channel map of an audio stream.
+*
+* Channel maps are optional; most things do not need them, instead passing
+* data in the [order that SDL expects](CategoryAudio#channel-layouts).
+*
+* The input channel map reorders data that is added to a stream via
+* SDL_PutAudioStreamData. Future calls to SDL_PutAudioStreamData must provide
+* data in the new channel order.
+*
+* Each item in the array represents an input channel, and its value is the
+* channel that it should be remapped to. To reverse a stereo signal's left
+* and right values, you'd have an array of `{ 1, 0 }`. It is legal to remap
+* multiple channels to the same thing, so `{ 1, 1 }` would duplicate the
+* right channel to both channels of a stereo signal. An element in the
+* channel map set to -1 instead of a valid channel will mute that channel,
+* setting it to a silence value.
+*
+* You cannot change the number of channels through a channel map, just
+* reorder/mute them.
+*
+* Data that was previously queued in the stream will still be operated on in
+* the order that was current when it was added, which is to say you can put
+* the end of a sound file in one order to a stream, change orders for the
+* next sound file, and start putting that new data while the previous sound
+* file is still queued, and everything will still play back correctly.
+*
+* Audio streams default to no remapping applied. Passing a NULL channel map
+* is legal, and turns off remapping.
+*
+* SDL will copy the channel map; the caller does not have to save this array
+* after this call.
+*
+* If `count` is not equal to the current number of channels in the audio
+* stream's format, this will fail. This is a safety measure to make sure a
+* race condition hasn't changed the format while this call is setting the
+* channel map.
+*
+* Unlike attempting to change the stream's format, the input channel map on a
+* stream bound to a recording device is permitted to change at any time; any
+* data added to the stream from the device after this call will have the new
+* mapping, but previously-added data will still have the prior mapping.
+*
+* \param stream the SDL_AudioStream to change.
+* \param chmap the new channel map, NULL to reset to default.
+* \param count The number of channels in the map.
+* \returns true on success or false on failure; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety It is safe to call this function from any thread, as it holds
+*               a stream-specific mutex while running. Don't change the
+*               stream's format to have a different number of channels from a
+*               different thread at the same time, though!
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_SetAudioStreamOutputChannelMap
+*/
+SDL_SetAudioStreamInputChannelMap :: (stream: *SDL_AudioStream, chmap: *s32, count: s32) -> bool #foreign libsdl3;
+
+/**
+* Set the current output channel map of an audio stream.
+*
+* Channel maps are optional; most things do not need them, instead passing
+* data in the [order that SDL expects](CategoryAudio#channel-layouts).
+*
+* The output channel map reorders data that is leaving a stream via
+* SDL_GetAudioStreamData.
+*
+* Each item in the array represents an input channel, and its value is the
+* channel that it should be remapped to. To reverse a stereo signal's left
+* and right values, you'd have an array of `{ 1, 0 }`. It is legal to remap
+* multiple channels to the same thing, so `{ 1, 1 }` would duplicate the
+* right channel to both channels of a stereo signal. An element in the
+* channel map set to -1 instead of a valid channel will mute that channel,
+* setting it to a silence value.
+*
+* You cannot change the number of channels through a channel map, just
+* reorder/mute them.
+*
+* The output channel map can be changed at any time, as output remapping is
+* applied during SDL_GetAudioStreamData.
+*
+* Audio streams default to no remapping applied. Passing a NULL channel map
+* is legal, and turns off remapping.
+*
+* SDL will copy the channel map; the caller does not have to save this array
+* after this call.
+*
+* If `count` is not equal to the current number of channels in the audio
+* stream's format, this will fail. This is a safety measure to make sure a
+* race condition hasn't changed the format while this call is setting the
+* channel map.
+*
+* Unlike attempting to change the stream's format, the output channel map on
+* a stream bound to a recording device is permitted to change at any time;
+* any data added to the stream after this call will have the new mapping, but
+* previously-added data will still have the prior mapping. When the channel
+* map doesn't match the hardware's channel layout, SDL will convert the data
+* before feeding it to the device for playback.
+*
+* \param stream the SDL_AudioStream to change.
+* \param chmap the new channel map, NULL to reset to default.
+* \param count The number of channels in the map.
+* \returns true on success or false on failure; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety It is safe to call this function from any thread, as it holds
+*               a stream-specific mutex while running. Don't change the
+*               stream's format to have a different number of channels from a
+*               a different thread at the same time, though!
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_SetAudioStreamInputChannelMap
+*/
+SDL_SetAudioStreamOutputChannelMap :: (stream: *SDL_AudioStream, chmap: *s32, count: s32) -> bool #foreign libsdl3;
+
+/**
+* Add data to the stream.
+*
+* This data must match the format/channels/samplerate specified in the latest
+* call to SDL_SetAudioStreamFormat, or the format specified when creating the
+* stream if it hasn't been changed.
+*
+* Note that this call simply copies the unconverted data for later. This is
+* different than SDL2, where data was converted during the Put call and the
+* Get call would just dequeue the previously-converted data.
+*
+* \param stream the stream the audio data is being added to.
+* \param buf a pointer to the audio data to add.
+* \param len the number of bytes to write to the stream.
+* \returns true on success or false on failure; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety It is safe to call this function from any thread, but if the
+*               stream has a callback set, the caller might need to manage
+*               extra locking.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_ClearAudioStream
+* \sa SDL_FlushAudioStream
+* \sa SDL_GetAudioStreamData
+* \sa SDL_GetAudioStreamQueued
+*/
+SDL_PutAudioStreamData :: (stream: *SDL_AudioStream, buf: *void, len: s32) -> bool #foreign libsdl3;
+
+/**
+* A callback that fires for completed SDL_PutAudioStreamDataNoCopy() data.
+*
+* When using SDL_PutAudioStreamDataNoCopy() to provide data to an
+* SDL_AudioStream, it's not safe to dispose of the data until the stream has
+* completely consumed it. Often times it's difficult to know exactly when
+* this has happened.
+*
+* This callback fires once when the stream no longer needs the buffer,
+* allowing the app to easily free or reuse it.
+*
+* \param userdata an opaque pointer provided by the app for their personal
+*                 use.
+* \param buf the pointer provided to SDL_PutAudioStreamDataNoCopy().
+* \param buflen the size of buffer, in bytes, provided to
+*               SDL_PutAudioStreamDataNoCopy().
+*
+* \threadsafety This callbacks may run from any thread, so if you need to
+*               protect shared data, you should use SDL_LockAudioStream to
+*               serialize access; this lock will be held before your callback
+*               is called, so your callback does not need to manage the lock
+*               explicitly.
+*
+* \since This datatype is available since SDL 3.4.0.
+*
+* \sa SDL_SetAudioStreamGetCallback
+* \sa SDL_SetAudioStreamPutCallback
+*/
+SDL_AudioStreamDataCompleteCallback :: #type (userdata: *void, buf: *void, buflen: s32) -> void #c_call;
+
+/**
+* Add external data to an audio stream without copying it.
+*
+* Unlike SDL_PutAudioStreamData(), this function does not make a copy of the
+* provided data, instead storing the provided pointer. This means that the
+* put operation does not need to allocate and copy the data, but the original
+* data must remain available until the stream is done with it, either by
+* being read from the stream in its entirety, or a call to
+* SDL_ClearAudioStream() or SDL_DestroyAudioStream().
+*
+* The data must match the format/channels/samplerate specified in the latest
+* call to SDL_SetAudioStreamFormat, or the format specified when creating the
+* stream if it hasn't been changed.
+*
+* An optional callback may be provided, which is called when the stream no
+* longer needs the data. Once this callback fires, the stream will not access
+* the data again. This callback will fire for any reason the data is no
+* longer needed, including clearing or destroying the stream.
+*
+* Note that there is still an allocation to store tracking information, so
+* this function is more efficient for larger blocks of data. If you're
+* planning to put a few samples at a time, it will be more efficient to use
+* SDL_PutAudioStreamData(), which allocates and buffers in blocks.
+*
+* \param stream the stream the audio data is being added to.
+* \param buf a pointer to the audio data to add.
+* \param len the number of bytes to add to the stream.
+* \param callback the callback function to call when the data is no longer
+*                 needed by the stream. May be NULL.
+* \param userdata an opaque pointer provided to the callback for its own
+*                 personal use.
+* \returns true on success or false on failure; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety It is safe to call this function from any thread, but if the
+*               stream has a callback set, the caller might need to manage
+*               extra locking.
+*
+* \since This function is available since SDL 3.4.0.
+*
+* \sa SDL_ClearAudioStream
+* \sa SDL_FlushAudioStream
+* \sa SDL_GetAudioStreamData
+* \sa SDL_GetAudioStreamQueued
+*/
+SDL_PutAudioStreamDataNoCopy :: (stream: *SDL_AudioStream, buf: *void, len: s32, callback: SDL_AudioStreamDataCompleteCallback, userdata: *void) -> bool #foreign libsdl3;
+
+/**
+* Add data to the stream with each channel in a separate array.
+*
+* This data must match the format/channels/samplerate specified in the latest
+* call to SDL_SetAudioStreamFormat, or the format specified when creating the
+* stream if it hasn't been changed.
+*
+* The data will be interleaved and queued. Note that SDL_AudioStream only
+* operates on interleaved data, so this is simply a convenience function for
+* easily queueing data from sources that provide separate arrays. There is no
+* equivalent function to retrieve planar data.
+*
+* The arrays in `channel_buffers` are ordered as they are to be interleaved;
+* the first array will be the first sample in the interleaved data. Any
+* individual array may be NULL; in this case, silence will be interleaved for
+* that channel.
+*
+* `num_channels` specifies how many arrays are in `channel_buffers`. This can
+* be used as a safety to prevent overflow, in case the stream format has
+* changed elsewhere. If more channels are specified than the current input
+* spec, they are ignored. If less channels are specified, the missing arrays
+* are treated as if they are NULL (silence is written to those channels). If
+* the count is -1, SDL will assume the array count matches the current input
+* spec.
+*
+* Note that `num_samples` is the number of _samples per array_. This can also
+* be thought of as the number of _sample frames_ to be queued. A value of 1
+* with stereo arrays will queue two samples to the stream. This is different
+* than SDL_PutAudioStreamData, which wants the size of a single array in
+* bytes.
+*
+* \param stream the stream the audio data is being added to.
+* \param channel_buffers a pointer to an array of arrays, one array per
+*                        channel.
+* \param num_channels the number of arrays in `channel_buffers` or -1.
+* \param num_samples the number of _samples_ per array to write to the
+*                    stream.
+* \returns true on success or false on failure; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety It is safe to call this function from any thread, but if the
+*               stream has a callback set, the caller might need to manage
+*               extra locking.
+*
+* \since This function is available since SDL 3.4.0.
+*
+* \sa SDL_ClearAudioStream
+* \sa SDL_FlushAudioStream
+* \sa SDL_GetAudioStreamData
+* \sa SDL_GetAudioStreamQueued
+*/
+SDL_PutAudioStreamPlanarData :: (stream: *SDL_AudioStream, channel_buffers: **void, num_channels: s32, num_samples: s32) -> bool #foreign libsdl3;
+
+/**
+* Get converted/resampled data from the stream.
+*
+* The input/output data format/channels/samplerate is specified when creating
+* the stream, and can be changed after creation by calling
+* SDL_SetAudioStreamFormat.
+*
+* Note that any conversion and resampling necessary is done during this call,
+* and SDL_PutAudioStreamData simply queues unconverted data for later. This
+* is different than SDL2, where that work was done while inputting new data
+* to the stream and requesting the output just copied the converted data.
+*
+* \param stream the stream the audio is being requested from.
+* \param buf a buffer to fill with audio data.
+* \param len the maximum number of bytes to fill.
+* \returns the number of bytes read from the stream or -1 on failure; call
+*          SDL_GetError() for more information.
+*
+* \threadsafety It is safe to call this function from any thread, but if the
+*               stream has a callback set, the caller might need to manage
+*               extra locking.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_ClearAudioStream
+* \sa SDL_GetAudioStreamAvailable
+* \sa SDL_PutAudioStreamData
+*/
+SDL_GetAudioStreamData :: (stream: *SDL_AudioStream, buf: *void, len: s32) -> s32 #foreign libsdl3;
+
+/**
+* Get the number of converted/resampled bytes available.
+*
+* The stream may be buffering data behind the scenes until it has enough to
+* resample correctly, so this number might be lower than what you expect, or
+* even be zero. Add more data or flush the stream if you need the data now.
+*
+* If the stream has so much data that it would overflow an int, the return
+* value is clamped to a maximum value, but no queued data is lost; if there
+* are gigabytes of data queued, the app might need to read some of it with
+* SDL_GetAudioStreamData before this function's return value is no longer
+* clamped.
+*
+* \param stream the audio stream to query.
+* \returns the number of converted/resampled bytes available or -1 on
+*          failure; call SDL_GetError() for more information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_GetAudioStreamData
+* \sa SDL_PutAudioStreamData
+*/
+SDL_GetAudioStreamAvailable :: (stream: *SDL_AudioStream) -> s32 #foreign libsdl3;
+
+/**
+* Get the number of bytes currently queued.
+*
+* This is the number of bytes put into a stream as input, not the number that
+* can be retrieved as output. Because of several details, it's not possible
+* to calculate one number directly from the other. If you need to know how
+* much usable data can be retrieved right now, you should use
+* SDL_GetAudioStreamAvailable() and not this function.
+*
+* Note that audio streams can change their input format at any time, even if
+* there is still data queued in a different format, so the returned byte
+* count will not necessarily match the number of _sample frames_ available.
+* Users of this API should be aware of format changes they make when feeding
+* a stream and plan accordingly.
+*
+* Queued data is not converted until it is consumed by
+* SDL_GetAudioStreamData, so this value should be representative of the exact
+* data that was put into the stream.
+*
+* If the stream has so much data that it would overflow an int, the return
+* value is clamped to a maximum value, but no queued data is lost; if there
+* are gigabytes of data queued, the app might need to read some of it with
+* SDL_GetAudioStreamData before this function's return value is no longer
+* clamped.
+*
+* \param stream the audio stream to query.
+* \returns the number of bytes queued or -1 on failure; call SDL_GetError()
+*          for more information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_PutAudioStreamData
+* \sa SDL_ClearAudioStream
+*/
+SDL_GetAudioStreamQueued :: (stream: *SDL_AudioStream) -> s32 #foreign libsdl3;
+
+/**
+* Tell the stream that you're done sending data, and anything being buffered
+* should be converted/resampled and made available immediately.
+*
+* It is legal to add more data to a stream after flushing, but there may be
+* audio gaps in the output. Generally this is intended to signal the end of
+* input, so the complete output becomes available.
+*
+* \param stream the audio stream to flush.
+* \returns true on success or false on failure; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_PutAudioStreamData
+*/
+SDL_FlushAudioStream :: (stream: *SDL_AudioStream) -> bool #foreign libsdl3;
+
+/**
+* Clear any pending data in the stream.
+*
+* This drops any queued data, so there will be nothing to read from the
+* stream until more is added.
+*
+* \param stream the audio stream to clear.
+* \returns true on success or false on failure; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_GetAudioStreamAvailable
+* \sa SDL_GetAudioStreamData
+* \sa SDL_GetAudioStreamQueued
+* \sa SDL_PutAudioStreamData
+*/
+SDL_ClearAudioStream :: (stream: *SDL_AudioStream) -> bool #foreign libsdl3;
+
+/**
+* Use this function to pause audio playback on the audio device associated
+* with an audio stream.
+*
+* This function pauses audio processing for a given device. Any bound audio
+* streams will not progress, and no audio will be generated. Pausing one
+* device does not prevent other unpaused devices from running.
+*
+* Pausing a device can be useful to halt all audio without unbinding all the
+* audio streams. This might be useful while a game is paused, or a level is
+* loading, etc.
+*
+* \param stream the audio stream associated with the audio device to pause.
+* \returns true on success or false on failure; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_ResumeAudioStreamDevice
+*/
+SDL_PauseAudioStreamDevice :: (stream: *SDL_AudioStream) -> bool #foreign libsdl3;
+
+/**
+* Use this function to unpause audio playback on the audio device associated
+* with an audio stream.
+*
+* This function unpauses audio processing for a given device that has
+* previously been paused. Once unpaused, any bound audio streams will begin
+* to progress again, and audio can be generated.
+*
+* SDL_OpenAudioDeviceStream opens audio devices in a paused state, so this
+* function call is required for audio playback to begin on such devices.
+*
+* \param stream the audio stream associated with the audio device to resume.
+* \returns true on success or false on failure; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_PauseAudioStreamDevice
+*/
+SDL_ResumeAudioStreamDevice :: (stream: *SDL_AudioStream) -> bool #foreign libsdl3;
+
+/**
+* Use this function to query if an audio device associated with a stream is
+* paused.
+*
+* Unlike in SDL2, audio devices start in an _unpaused_ state, since an app
+* has to bind a stream before any audio will flow.
+*
+* \param stream the audio stream associated with the audio device to query.
+* \returns true if device is valid and paused, false otherwise.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_PauseAudioStreamDevice
+* \sa SDL_ResumeAudioStreamDevice
+*/
+SDL_AudioStreamDevicePaused :: (stream: *SDL_AudioStream) -> bool #foreign libsdl3;
+
+/**
+* Lock an audio stream for serialized access.
+*
+* Each SDL_AudioStream has an internal mutex it uses to protect its data
+* structures from threading conflicts. This function allows an app to lock
+* that mutex, which could be useful if registering callbacks on this stream.
+*
+* One does not need to lock a stream to use in it most cases, as the stream
+* manages this lock internally. However, this lock is held during callbacks,
+* which may run from arbitrary threads at any time, so if an app needs to
+* protect shared data during those callbacks, locking the stream guarantees
+* that the callback is not running while the lock is held.
+*
+* As this is just a wrapper over SDL_LockMutex for an internal lock; it has
+* all the same attributes (recursive locks are allowed, etc).
+*
+* \param stream the audio stream to lock.
+* \returns true on success or false on failure; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_UnlockAudioStream
+*/
+SDL_LockAudioStream :: (stream: *SDL_AudioStream) -> bool #foreign libsdl3;
+
+/**
+* Unlock an audio stream for serialized access.
+*
+* This unlocks an audio stream after a call to SDL_LockAudioStream.
+*
+* \param stream the audio stream to unlock.
+* \returns true on success or false on failure; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety You should only call this from the same thread that
+*               previously called SDL_LockAudioStream.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_LockAudioStream
+*/
+SDL_UnlockAudioStream :: (stream: *SDL_AudioStream) -> bool #foreign libsdl3;
+
+/**
+* A callback that fires when data passes through an SDL_AudioStream.
+*
+* Apps can (optionally) register a callback with an audio stream that is
+* called when data is added with SDL_PutAudioStreamData, or requested with
+* SDL_GetAudioStreamData.
+*
+* Two values are offered here: one is the amount of additional data needed to
+* satisfy the immediate request (which might be zero if the stream already
+* has enough data queued) and the other is the total amount being requested.
+* In a Get call triggering a Put callback, these values can be different. In
+* a Put call triggering a Get callback, these values are always the same.
+*
+* Byte counts might be slightly overestimated due to buffering or resampling,
+* and may change from call to call.
+*
+* This callback is not required to do anything. Generally this is useful for
+* adding/reading data on demand, and the app will often put/get data as
+* appropriate, but the system goes on with the data currently available to it
+* if this callback does nothing.
+*
+* \param stream the SDL audio stream associated with this callback.
+* \param additional_amount the amount of data, in bytes, that is needed right
+*                          now.
+* \param total_amount the total amount of data requested, in bytes, that is
+*                     requested or available.
+* \param userdata an opaque pointer provided by the app for their personal
+*                 use.
+*
+* \threadsafety This callbacks may run from any thread, so if you need to
+*               protect shared data, you should use SDL_LockAudioStream to
+*               serialize access; this lock will be held before your callback
+*               is called, so your callback does not need to manage the lock
+*               explicitly.
+*
+* \since This datatype is available since SDL 3.2.0.
+*
+* \sa SDL_SetAudioStreamGetCallback
+* \sa SDL_SetAudioStreamPutCallback
+*/
+SDL_AudioStreamCallback :: #type (userdata: *void, stream: *SDL_AudioStream, additional_amount: s32, total_amount: s32) -> void #c_call;
+
+/**
+* Set a callback that runs when data is requested from an audio stream.
+*
+* This callback is called _before_ data is obtained from the stream, giving
+* the callback the chance to add more on-demand.
+*
+* The callback can (optionally) call SDL_PutAudioStreamData() to add more
+* audio to the stream during this call; if needed, the request that triggered
+* this callback will obtain the new data immediately.
+*
+* The callback's `additional_amount` argument is roughly how many bytes of
+* _unconverted_ data (in the stream's input format) is needed by the caller,
+* although this may overestimate a little for safety. This takes into account
+* how much is already in the stream and only asks for any extra necessary to
+* resolve the request, which means the callback may be asked for zero bytes,
+* and a different amount on each call.
+*
+* The callback is not required to supply exact amounts; it is allowed to
+* supply too much or too little or none at all. The caller will get what's
+* available, up to the amount they requested, regardless of this callback's
+* outcome.
+*
+* Clearing or flushing an audio stream does not call this callback.
+*
+* This function obtains the stream's lock, which means any existing callback
+* (get or put) in progress will finish running before setting the new
+* callback.
+*
+* Setting a NULL function turns off the callback.
+*
+* \param stream the audio stream to set the new callback on.
+* \param callback the new callback function to call when data is requested
+*                 from the stream.
+* \param userdata an opaque pointer provided to the callback for its own
+*                 personal use.
+* \returns true on success or false on failure; call SDL_GetError() for more
+*          information. This only fails if `stream` is NULL.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_SetAudioStreamPutCallback
+*/
+SDL_SetAudioStreamGetCallback :: (stream: *SDL_AudioStream, callback: SDL_AudioStreamCallback, userdata: *void) -> bool #foreign libsdl3;
+
+/**
+* Set a callback that runs when data is added to an audio stream.
+*
+* This callback is called _after_ the data is added to the stream, giving the
+* callback the chance to obtain it immediately.
+*
+* The callback can (optionally) call SDL_GetAudioStreamData() to obtain audio
+* from the stream during this call.
+*
+* The callback's `additional_amount` argument is how many bytes of
+* _converted_ data (in the stream's output format) was provided by the
+* caller, although this may underestimate a little for safety. This value
+* might be less than what is currently available in the stream, if data was
+* already there, and might be less than the caller provided if the stream
+* needs to keep a buffer to aid in resampling. Which means the callback may
+* be provided with zero bytes, and a different amount on each call.
+*
+* The callback may call SDL_GetAudioStreamAvailable to see the total amount
+* currently available to read from the stream, instead of the total provided
+* by the current call.
+*
+* The callback is not required to obtain all data. It is allowed to read less
+* or none at all. Anything not read now simply remains in the stream for
+* later access.
+*
+* Clearing or flushing an audio stream does not call this callback.
+*
+* This function obtains the stream's lock, which means any existing callback
+* (get or put) in progress will finish running before setting the new
+* callback.
+*
+* Setting a NULL function turns off the callback.
+*
+* \param stream the audio stream to set the new callback on.
+* \param callback the new callback function to call when data is added to the
+*                 stream.
+* \param userdata an opaque pointer provided to the callback for its own
+*                 personal use.
+* \returns true on success or false on failure; call SDL_GetError() for more
+*          information. This only fails if `stream` is NULL.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_SetAudioStreamGetCallback
+*/
+SDL_SetAudioStreamPutCallback :: (stream: *SDL_AudioStream, callback: SDL_AudioStreamCallback, userdata: *void) -> bool #foreign libsdl3;
+
+/**
+* Free an audio stream.
+*
+* This will release all allocated data, including any audio that is still
+* queued. You do not need to manually clear the stream first.
+*
+* If this stream was bound to an audio device, it is unbound during this
+* call. If this stream was created with SDL_OpenAudioDeviceStream, the audio
+* device that was opened alongside this stream's creation will be closed,
+* too.
+*
+* \param stream the audio stream to destroy.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_CreateAudioStream
+*/
+SDL_DestroyAudioStream :: (stream: *SDL_AudioStream) -> void #foreign libsdl3;
+
+/**
+* Convenience function for straightforward audio init for the common case.
+*
+* If all your app intends to do is provide a single source of PCM audio, this
+* function allows you to do all your audio setup in a single call.
+*
+* This is also intended to be a clean means to migrate apps from SDL2.
+*
+* This function will open an audio device, create a stream and bind it.
+* Unlike other methods of setup, the audio device will be closed when this
+* stream is destroyed, so the app can treat the returned SDL_AudioStream as
+* the only object needed to manage audio playback.
+*
+* Also unlike other functions, the audio device begins paused. This is to map
+* more closely to SDL2-style behavior, since there is no extra step here to
+* bind a stream to begin audio flowing. The audio device should be resumed
+* with SDL_ResumeAudioStreamDevice().
+*
+* This function works with both playback and recording devices.
+*
+* The `spec` parameter represents the app's side of the audio stream. That
+* is, for recording audio, this will be the output format, and for playing
+* audio, this will be the input format. If spec is NULL, the system will
+* choose the format, and the app can use SDL_GetAudioStreamFormat() to obtain
+* this information later.
+*
+* If you don't care about opening a specific audio device, you can (and
+* probably _should_), use SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK for playback and
+* SDL_AUDIO_DEVICE_DEFAULT_RECORDING for recording.
+*
+* One can optionally provide a callback function; if NULL, the app is
+* expected to queue audio data for playback (or unqueue audio data if
+* capturing). Otherwise, the callback will begin to fire once the device is
+* unpaused.
+*
+* Destroying the returned stream with SDL_DestroyAudioStream will also close
+* the audio device associated with this stream.
+*
+* \param devid an audio device to open, or SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK
+*              or SDL_AUDIO_DEVICE_DEFAULT_RECORDING.
+* \param spec the audio stream's data format. Can be NULL.
+* \param callback a callback where the app will provide new data for
+*                 playback, or receive new data for recording. Can be NULL,
+*                 in which case the app will need to call
+*                 SDL_PutAudioStreamData or SDL_GetAudioStreamData as
+*                 necessary.
+* \param userdata app-controlled pointer passed to callback. Can be NULL.
+*                 Ignored if callback is NULL.
+* \returns an audio stream on success, ready to use, or NULL on failure; call
+*          SDL_GetError() for more information. When done with this stream,
+*          call SDL_DestroyAudioStream to free resources and close the
+*          device.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_GetAudioStreamDevice
+* \sa SDL_ResumeAudioStreamDevice
+*/
+SDL_OpenAudioDeviceStream :: (devid: SDL_AudioDeviceID, spec: *SDL_AudioSpec, callback: SDL_AudioStreamCallback, userdata: *void) -> *SDL_AudioStream #foreign libsdl3;
+
+/**
+* A callback that fires when data is about to be fed to an audio device.
+*
+* This is useful for accessing the final mix, perhaps for writing a
+* visualizer or applying a final effect to the audio data before playback.
+*
+* This callback should run as quickly as possible and not block for any
+* significant time, as this callback delays submission of data to the audio
+* device, which can cause audio playback problems.
+*
+* The postmix callback _must_ be able to handle any audio data format
+* specified in `spec`, which can change between callbacks if the audio device
+* changed. However, this only covers frequency and channel count; data is
+* always provided here in SDL_AUDIO_F32 format.
+*
+* The postmix callback runs _after_ logical device gain and audiostream gain
+* have been applied, which is to say you can make the output data louder at
+* this point than the gain settings would suggest.
+*
+* \param userdata a pointer provided by the app through
+*                 SDL_SetAudioPostmixCallback, for its own use.
+* \param spec the current format of audio that is to be submitted to the
+*             audio device.
+* \param buffer the buffer of audio samples to be submitted. The callback can
+*               inspect and/or modify this data.
+* \param buflen the size of `buffer` in bytes.
+*
+* \threadsafety This will run from a background thread owned by SDL. The
+*               application is responsible for locking resources the callback
+*               touches that need to be protected.
+*
+* \since This datatype is available since SDL 3.2.0.
+*
+* \sa SDL_SetAudioPostmixCallback
+*/
+SDL_AudioPostmixCallback :: #type (userdata: *void, spec: *SDL_AudioSpec, buffer: *float, buflen: s32) -> void #c_call;
+
+/**
+* Set a callback that fires when data is about to be fed to an audio device.
+*
+* This is useful for accessing the final mix, perhaps for writing a
+* visualizer or applying a final effect to the audio data before playback.
+*
+* The buffer is the final mix of all bound audio streams on an opened device;
+* this callback will fire regularly for any device that is both opened and
+* unpaused. If there is no new data to mix, either because no streams are
+* bound to the device or all the streams are empty, this callback will still
+* fire with the entire buffer set to silence.
+*
+* This callback is allowed to make changes to the data; the contents of the
+* buffer after this call is what is ultimately passed along to the hardware.
+*
+* The callback is always provided the data in float format (values from -1.0f
+* to 1.0f), but the number of channels or sample rate may be different than
+* the format the app requested when opening the device; SDL might have had to
+* manage a conversion behind the scenes, or the playback might have jumped to
+* new physical hardware when a system default changed, etc. These details may
+* change between calls. Accordingly, the size of the buffer might change
+* between calls as well.
+*
+* This callback can run at any time, and from any thread; if you need to
+* serialize access to your app's data, you should provide and use a mutex or
+* other synchronization device.
+*
+* All of this to say: there are specific needs this callback can fulfill, but
+* it is not the simplest interface. Apps should generally provide audio in
+* their preferred format through an SDL_AudioStream and let SDL handle the
+* difference.
+*
+* This function is extremely time-sensitive; the callback should do the least
+* amount of work possible and return as quickly as it can. The longer the
+* callback runs, the higher the risk of audio dropouts or other problems.
+*
+* This function will block until the audio device is in between iterations,
+* so any existing callback that might be running will finish before this
+* function sets the new callback and returns.
+*
+* Setting a NULL callback function disables any previously-set callback.
+*
+* \param devid the ID of an opened audio device.
+* \param callback a callback function to be called. Can be NULL.
+* \param userdata app-controlled pointer passed to callback. Can be NULL.
+* \returns true on success or false on failure; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*/
+SDL_SetAudioPostmixCallback :: (devid: SDL_AudioDeviceID, callback: SDL_AudioPostmixCallback, userdata: *void) -> bool #foreign libsdl3;
+
+/**
+* Load the audio data of a WAVE file into memory.
+*
+* Loading a WAVE file requires `src`, `spec`, `audio_buf` and `audio_len` to
+* be valid pointers. The entire data portion of the file is then loaded into
+* memory and decoded if necessary.
+*
+* Supported formats are RIFF WAVE files with the formats PCM (8, 16, 24, and
+* 32 bits), IEEE Float (32 bits), Microsoft ADPCM and IMA ADPCM (4 bits), and
+* A-law and mu-law (8 bits). Other formats are currently unsupported and
+* cause an error.
+*
+* If this function succeeds, the return value is zero and the pointer to the
+* audio data allocated by the function is written to `audio_buf` and its
+* length in bytes to `audio_len`. The SDL_AudioSpec members `freq`,
+* `channels`, and `format` are set to the values of the audio data in the
+* buffer.
+*
+* It's necessary to use SDL_free() to free the audio data returned in
+* `audio_buf` when it is no longer used.
+*
+* Because of the underspecification of the .WAV format, there are many
+* problematic files in the wild that cause issues with strict decoders. To
+* provide compatibility with these files, this decoder is lenient in regards
+* to the truncation of the file, the fact chunk, and the size of the RIFF
+* chunk. The hints `SDL_HINT_WAVE_RIFF_CHUNK_SIZE`,
+* `SDL_HINT_WAVE_TRUNCATION`, and `SDL_HINT_WAVE_FACT_CHUNK` can be used to
+* tune the behavior of the loading process.
+*
+* Any file that is invalid (due to truncation, corruption, or wrong values in
+* the headers), too big, or unsupported causes an error. Additionally, any
+* critical I/O error from the data source will terminate the loading process
+* with an error. The function returns NULL on error and in all cases (with
+* the exception of `src` being NULL), an appropriate error message will be
+* set.
+*
+* It is required that the data source supports seeking.
+*
+* Example:
+*
+* ```c
+* SDL_LoadWAV_IO(SDL_IOFromFile("sample.wav", "rb"), true, &spec, &buf, &len);
+* ```
+*
+* Note that the SDL_LoadWAV function does this same thing for you, but in a
+* less messy way:
+*
+* ```c
+* SDL_LoadWAV("sample.wav", &spec, &buf, &len);
+* ```
+*
+* \param src the data source for the WAVE data.
+* \param closeio if true, calls SDL_CloseIO() on `src` before returning, even
+*                in the case of an error.
+* \param spec a pointer to an SDL_AudioSpec that will be set to the WAVE
+*             data's format details on successful return.
+* \param audio_buf a pointer filled with the audio data, allocated by the
+*                  function.
+* \param audio_len a pointer filled with the length of the audio data buffer
+*                  in bytes.
+* \returns true on success. `audio_buf` will be filled with a pointer to an
+*          allocated buffer containing the audio data, and `audio_len` is
+*          filled with the length of that audio buffer in bytes.
+*
+*          This function returns false if the .WAV file cannot be opened,
+*          uses an unknown data format, or is corrupt; call SDL_GetError()
+*          for more information.
+*
+*          When the application is done with the data returned in
+*          `audio_buf`, it should call SDL_free() to dispose of it.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_free
+* \sa SDL_LoadWAV
+*/
+SDL_LoadWAV_IO :: (src: *SDL_IOStream, closeio: bool, spec: *SDL_AudioSpec, audio_buf: **Uint8, audio_len: *Uint32) -> bool #foreign libsdl3;
+
+/**
+* Loads a WAV from a file path.
+*
+* This is a convenience function that is effectively the same as:
+*
+* ```c
+* SDL_LoadWAV_IO(SDL_IOFromFile(path, "rb"), true, spec, audio_buf, audio_len);
+* ```
+*
+* \param path the file path of the WAV file to open.
+* \param spec a pointer to an SDL_AudioSpec that will be set to the WAVE
+*             data's format details on successful return.
+* \param audio_buf a pointer filled with the audio data, allocated by the
+*                  function.
+* \param audio_len a pointer filled with the length of the audio data buffer
+*                  in bytes.
+* \returns true on success. `audio_buf` will be filled with a pointer to an
+*          allocated buffer containing the audio data, and `audio_len` is
+*          filled with the length of that audio buffer in bytes.
+*
+*          This function returns false if the .WAV file cannot be opened,
+*          uses an unknown data format, or is corrupt; call SDL_GetError()
+*          for more information.
+*
+*          When the application is done with the data returned in
+*          `audio_buf`, it should call SDL_free() to dispose of it.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_free
+* \sa SDL_LoadWAV_IO
+*/
+SDL_LoadWAV :: (path: *u8, spec: *SDL_AudioSpec, audio_buf: **Uint8, audio_len: *Uint32) -> bool #foreign libsdl3;
+
+/**
+* Mix audio data in a specified format.
+*
+* This takes an audio buffer `src` of `len` bytes of `format` data and mixes
+* it into `dst`, performing addition, volume adjustment, and overflow
+* clipping. The buffer pointed to by `dst` must also be `len` bytes of
+* `format` data.
+*
+* This is provided for convenience -- you can mix your own audio data.
+*
+* Do not use this function for mixing together more than two streams of
+* sample data. The output from repeated application of this function may be
+* distorted by clipping, because there is no accumulator with greater range
+* than the input (not to mention this being an inefficient way of doing it).
+*
+* It is a common misconception that this function is required to write audio
+* data to an output stream in an audio callback. While you can do that,
+* SDL_MixAudio() is really only needed when you're mixing a single audio
+* stream with a volume adjustment.
+*
+* \param dst the destination for the mixed audio.
+* \param src the source audio buffer to be mixed.
+* \param format the SDL_AudioFormat structure representing the desired audio
+*               format.
+* \param len the length of the audio buffer in bytes.
+* \param volume ranges from 0.0 - 1.0, and should be set to 1.0 for full
+*               audio volume.
+* \returns true on success or false on failure; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*/
+SDL_MixAudio :: (dst: *Uint8, src: *Uint8, format: SDL_AudioFormat, len: Uint32, volume: float) -> bool #foreign libsdl3;
+
+/**
+* Convert some audio data of one format to another format.
+*
+* Please note that this function is for convenience, but should not be used
+* to resample audio in blocks, as it will introduce audio artifacts on the
+* boundaries. You should only use this function if you are converting audio
+* data in its entirety in one call. If you want to convert audio in smaller
+* chunks, use an SDL_AudioStream, which is designed for this situation.
+*
+* Internally, this function creates and destroys an SDL_AudioStream on each
+* use, so it's also less efficient than using one directly, if you need to
+* convert multiple times.
+*
+* \param src_spec the format details of the input audio.
+* \param src_data the audio data to be converted.
+* \param src_len the len of src_data.
+* \param dst_spec the format details of the output audio.
+* \param dst_data will be filled with a pointer to converted audio data,
+*                 which should be freed with SDL_free(). On error, it will be
+*                 NULL.
+* \param dst_len will be filled with the len of dst_data.
+* \returns true on success or false on failure; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*/
+SDL_ConvertAudioSamples :: (src_spec: *SDL_AudioSpec, src_data: *Uint8, src_len: s32, dst_spec: *SDL_AudioSpec, dst_data: **Uint8, dst_len: *s32) -> bool #foreign libsdl3;
+
+/**
+* Get the human readable name of an audio format.
+*
+* \param format the audio format to query.
+* \returns the human readable name of the specified audio format or
+*          "SDL_AUDIO_UNKNOWN" if the format isn't recognized.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*/
+SDL_GetAudioFormatName :: (format: SDL_AudioFormat) -> *u8 #foreign libsdl3;
+
+/**
+* Get the appropriate memset value for silencing an audio format.
+*
+* The value returned by this function can be used as the second argument to
+* memset (or SDL_memset) to set an audio buffer in a specific format to
+* silence.
+*
+* \param format the audio data format to query.
+* \returns a byte value that can be passed to memset.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*/
+SDL_GetSilenceValueForFormat :: (format: SDL_AudioFormat) -> s32 #foreign libsdl3;
+
+/**
+* This is a unique ID for a camera device for the time it is connected to the
+* system, and is never reused for the lifetime of the application.
+*
+* If the device is disconnected and reconnected, it will get a new ID.
+*
+* The value 0 is an invalid ID.
+*
+* \since This datatype is available since SDL 3.2.0.
+*
+* \sa SDL_GetCameras
+*/
+SDL_CameraID :: Uint32;
+
+SDL_Camera :: struct {}
+
+/**
+* The details of an output format for a camera device.
+*
+* Cameras often support multiple formats; each one will be encapsulated in
+* this struct.
+*
+* \since This struct is available since SDL 3.2.0.
+*
+* \sa SDL_GetCameraSupportedFormats
+* \sa SDL_GetCameraFormat
+*/
+SDL_CameraSpec :: struct {
+    format:                SDL_PixelFormat; /**< Frame format */
+    colorspace:            SDL_Colorspace; /**< Frame colorspace */
+    width:                 s32; /**< Frame width */
+    height:                s32; /**< Frame height */
+    framerate_numerator:   s32; /**< Frame rate numerator ((num / denom) == FPS, (denom / num) == duration in seconds) */
+    framerate_denominator: s32; /**< Frame rate denominator ((num / denom) == FPS, (denom / num) == duration in seconds) */
+}
+
+/**
+* The position of camera in relation to system device.
+*
+* \since This enum is available since SDL 3.2.0.
+*
+* \sa SDL_GetCameraPosition
+*/
+SDL_CameraPosition :: enum u32 {
+    UNKNOWN      :: 0;
+    FRONT_FACING :: 1;
+    BACK_FACING  :: 2;
+
+    SDL_CAMERA_POSITION_UNKNOWN      :: UNKNOWN;
+    SDL_CAMERA_POSITION_FRONT_FACING :: FRONT_FACING;
+    SDL_CAMERA_POSITION_BACK_FACING  :: BACK_FACING;
+}
+
+/**
+* The current state of a request for camera access.
+*
+* \since This enum is available since SDL 3.4.0.
+*
+* \sa SDL_GetCameraPermissionState
+*/
+SDL_CameraPermissionState :: enum s32 {
+    DENIED   :: -1;
+    PENDING  :: 0;
+    APPROVED :: 1;
+
+    SDL_CAMERA_PERMISSION_STATE_DENIED   :: DENIED;
+    SDL_CAMERA_PERMISSION_STATE_PENDING  :: PENDING;
+    SDL_CAMERA_PERMISSION_STATE_APPROVED :: APPROVED;
+}
+
+/**
+* Use this function to get the number of built-in camera drivers.
+*
+* This function returns a hardcoded number. This never returns a negative
+* value; if there are no drivers compiled into this build of SDL, this
+* function returns zero. The presence of a driver in this list does not mean
+* it will function, it just means SDL is capable of interacting with that
+* interface. For example, a build of SDL might have v4l2 support, but if
+* there's no kernel support available, SDL's v4l2 driver would fail if used.
+*
+* By default, SDL tries all drivers, in its preferred order, until one is
+* found to be usable.
+*
+* \returns the number of built-in camera drivers.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_GetCameraDriver
+*/
+SDL_GetNumCameraDrivers :: () -> s32 #foreign libsdl3;
+
+/**
+* Use this function to get the name of a built in camera driver.
+*
+* The list of camera drivers is given in the order that they are normally
+* initialized by default; the drivers that seem more reasonable to choose
+* first (as far as the SDL developers believe) are earlier in the list.
+*
+* The names of drivers are all simple, low-ASCII identifiers, like "v4l2",
+* "coremedia" or "android". These never have Unicode characters, and are not
+* meant to be proper names.
+*
+* \param index the index of the camera driver; the value ranges from 0 to
+*              SDL_GetNumCameraDrivers() - 1.
+* \returns the name of the camera driver at the requested index, or NULL if
+*          an invalid index was specified.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_GetNumCameraDrivers
+*/
+SDL_GetCameraDriver :: (index: s32) -> *u8 #foreign libsdl3;
+
+/**
+* Get the name of the current camera driver.
+*
+* The names of drivers are all simple, low-ASCII identifiers, like "v4l2",
+* "coremedia" or "android". These never have Unicode characters, and are not
+* meant to be proper names.
+*
+* \returns the name of the current camera driver or NULL if no driver has
+*          been initialized.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*/
+SDL_GetCurrentCameraDriver :: () -> *u8 #foreign libsdl3;
+
+/**
+* Get a list of currently connected camera devices.
+*
+* \param count a pointer filled in with the number of cameras returned, may
+*              be NULL.
+* \returns a 0 terminated array of camera instance IDs or NULL on failure;
+*          call SDL_GetError() for more information. This should be freed
+*          with SDL_free() when it is no longer needed.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_OpenCamera
+*/
+SDL_GetCameras :: (count: *s32) -> *SDL_CameraID #foreign libsdl3;
+
+/**
+* Get the list of native formats/sizes a camera supports.
+*
+* This returns a list of all formats and frame sizes that a specific camera
+* can offer. This is useful if your app can accept a variety of image formats
+* and sizes and so want to find the optimal spec that doesn't require
+* conversion.
+*
+* This function isn't strictly required; if you call SDL_OpenCamera with a
+* NULL spec, SDL will choose a native format for you, and if you instead
+* specify a desired format, it will transparently convert to the requested
+* format on your behalf.
+*
+* If `count` is not NULL, it will be filled with the number of elements in
+* the returned array.
+*
+* Note that it's legal for a camera to supply an empty list. This is what
+* will happen on Emscripten builds, since that platform won't tell _anything_
+* about available cameras until you've opened one, and won't even tell if
+* there _is_ a camera until the user has given you permission to check
+* through a scary warning popup.
+*
+* \param instance_id the camera device instance ID.
+* \param count a pointer filled in with the number of elements in the list,
+*              may be NULL.
+* \returns a NULL terminated array of pointers to SDL_CameraSpec or NULL on
+*          failure; call SDL_GetError() for more information. This is a
+*          single allocation that should be freed with SDL_free() when it is
+*          no longer needed.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_GetCameras
+* \sa SDL_OpenCamera
+*/
+SDL_GetCameraSupportedFormats :: (instance_id: SDL_CameraID, count: *s32) -> **SDL_CameraSpec #foreign libsdl3;
+
+/**
+* Get the human-readable device name for a camera.
+*
+* \param instance_id the camera device instance ID.
+* \returns a human-readable device name or NULL on failure; call
+*          SDL_GetError() for more information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_GetCameras
+*/
+SDL_GetCameraName :: (instance_id: SDL_CameraID) -> *u8 #foreign libsdl3;
+
+/**
+* Get the position of the camera in relation to the system.
+*
+* Most platforms will report UNKNOWN, but mobile devices, like phones, can
+* often make a distinction between cameras on the front of the device (that
+* points towards the user, for taking "selfies") and cameras on the back (for
+* filming in the direction the user is facing).
+*
+* \param instance_id the camera device instance ID.
+* \returns the position of the camera on the system hardware.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_GetCameras
+*/
+SDL_GetCameraPosition :: (instance_id: SDL_CameraID) -> SDL_CameraPosition #foreign libsdl3;
+
+/**
+* Open a video recording device (a "camera").
+*
+* You can open the device with any reasonable spec, and if the hardware can't
+* directly support it, it will convert data seamlessly to the requested
+* format. This might incur overhead, including scaling of image data.
+*
+* If you would rather accept whatever format the device offers, you can pass
+* a NULL spec here and it will choose one for you (and you can use
+* SDL_Surface's conversion/scaling functions directly if necessary).
+*
+* You can call SDL_GetCameraFormat() to get the actual data format if passing
+* a NULL spec here. You can see the exact specs a device can support without
+* conversion with SDL_GetCameraSupportedFormats().
+*
+* SDL will not attempt to emulate framerate; it will try to set the hardware
+* to the rate closest to the requested speed, but it won't attempt to limit
+* or duplicate frames artificially; call SDL_GetCameraFormat() to see the
+* actual framerate of the opened the device, and check your timestamps if
+* this is crucial to your app!
+*
+* Note that the camera is not usable until the user approves its use! On some
+* platforms, the operating system will prompt the user to permit access to
+* the camera, and they can choose Yes or No at that point. Until they do, the
+* camera will not be usable. The app should either wait for an
+* SDL_EVENT_CAMERA_DEVICE_APPROVED (or SDL_EVENT_CAMERA_DEVICE_DENIED) event,
+* or poll SDL_GetCameraPermissionState() occasionally until it returns
+* non-zero. On platforms that don't require explicit user approval (and
+* perhaps in places where the user previously permitted access), the approval
+* event might come immediately, but it might come seconds, minutes, or hours
+* later!
+*
+* \param instance_id the camera device instance ID.
+* \param spec the desired format for data the device will provide. Can be
+*             NULL.
+* \returns an SDL_Camera object or NULL on failure; call SDL_GetError() for
+*          more information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_GetCameras
+* \sa SDL_GetCameraFormat
+*/
+SDL_OpenCamera :: (instance_id: SDL_CameraID, spec: *SDL_CameraSpec) -> *SDL_Camera #foreign libsdl3;
+
+/**
+* Query if camera access has been approved by the user.
+*
+* Cameras will not function between when the device is opened by the app and
+* when the user permits access to the hardware. On some platforms, this
+* presents as a popup dialog where the user has to explicitly approve access;
+* on others the approval might be implicit and not alert the user at all.
+*
+* This function can be used to check the status of that approval. It will
+* return SDL_CAMERA_PERMISSION_STATE_PENDING if waiting for user response,
+* SDL_CAMERA_PERMISSION_STATE_APPROVED if the camera is approved for use, and
+* SDL_CAMERA_PERMISSION_STATE_DENIED if the user denied access.
+*
+* Instead of polling with this function, you can wait for a
+* SDL_EVENT_CAMERA_DEVICE_APPROVED (or SDL_EVENT_CAMERA_DEVICE_DENIED) event
+* in the standard SDL event loop, which is guaranteed to be sent once when
+* permission to use the camera is decided.
+*
+* If a camera is declined, there's nothing to be done but call
+* SDL_CloseCamera() to dispose of it.
+*
+* \param camera the opened camera device to query.
+* \returns an SDL_CameraPermissionState value indicating if access is
+*          granted, or `SDL_CAMERA_PERMISSION_STATE_PENDING` if the decision
+*          is still pending.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_OpenCamera
+* \sa SDL_CloseCamera
+*/
+SDL_GetCameraPermissionState :: (camera: *SDL_Camera) -> SDL_CameraPermissionState #foreign libsdl3;
+
+/**
+* Get the instance ID of an opened camera.
+*
+* \param camera an SDL_Camera to query.
+* \returns the instance ID of the specified camera on success or 0 on
+*          failure; call SDL_GetError() for more information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_OpenCamera
+*/
+SDL_GetCameraID :: (camera: *SDL_Camera) -> SDL_CameraID #foreign libsdl3;
+
+/**
+* Get the properties associated with an opened camera.
+*
+* \param camera the SDL_Camera obtained from SDL_OpenCamera().
+* \returns a valid property ID on success or 0 on failure; call
+*          SDL_GetError() for more information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*/
+SDL_GetCameraProperties :: (camera: *SDL_Camera) -> SDL_PropertiesID #foreign libsdl3;
+
+/**
+* Get the spec that a camera is using when generating images.
+*
+* Note that this might not be the native format of the hardware, as SDL might
+* be converting to this format behind the scenes.
+*
+* If the system is waiting for the user to approve access to the camera, as
+* some platforms require, this will return false, but this isn't necessarily
+* a fatal error; you should either wait for an
+* SDL_EVENT_CAMERA_DEVICE_APPROVED (or SDL_EVENT_CAMERA_DEVICE_DENIED) event,
+* or poll SDL_GetCameraPermissionState() occasionally until it returns
+* non-zero.
+*
+* \param camera opened camera device.
+* \param spec the SDL_CameraSpec to be initialized by this function.
+* \returns true on success or false on failure; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_OpenCamera
+*/
+SDL_GetCameraFormat :: (camera: *SDL_Camera, spec: *SDL_CameraSpec) -> bool #foreign libsdl3;
+
+/**
+* Acquire a frame.
+*
+* The frame is a memory pointer to the image data, whose size and format are
+* given by the spec requested when opening the device.
+*
+* This is a non blocking API. If there is a frame available, a non-NULL
+* surface is returned, and timestampNS will be filled with a non-zero value.
+*
+* Note that an error case can also return NULL, but a NULL by itself is
+* normal and just signifies that a new frame is not yet available. Note that
+* even if a camera device fails outright (a USB camera is unplugged while in
+* use, etc), SDL will send an event separately to notify the app, but
+* continue to provide blank frames at ongoing intervals until
+* SDL_CloseCamera() is called, so real failure here is almost always an out
+* of memory condition.
+*
+* After use, the frame should be released with SDL_ReleaseCameraFrame(). If
+* you don't do this, the system may stop providing more video!
+*
+* Do not call SDL_DestroySurface() on the returned surface! It must be given
+* back to the camera subsystem with SDL_ReleaseCameraFrame!
+*
+* If the system is waiting for the user to approve access to the camera, as
+* some platforms require, this will return NULL (no frames available); you
+* should either wait for an SDL_EVENT_CAMERA_DEVICE_APPROVED (or
+* SDL_EVENT_CAMERA_DEVICE_DENIED) event, or poll
+* SDL_GetCameraPermissionState() occasionally until it returns non-zero.
+*
+* \param camera opened camera device.
+* \param timestampNS a pointer filled in with the frame's timestamp, or 0 on
+*                    error. Can be NULL.
+* \returns a new frame of video on success, NULL if none is currently
+*          available.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_ReleaseCameraFrame
+*/
+SDL_AcquireCameraFrame :: (camera: *SDL_Camera, timestampNS: *Uint64) -> *SDL_Surface #foreign libsdl3;
+
+/**
+* Release a frame of video acquired from a camera.
+*
+* Let the back-end re-use the internal buffer for camera.
+*
+* This function _must_ be called only on surface objects returned by
+* SDL_AcquireCameraFrame(). This function should be called as quickly as
+* possible after acquisition, as SDL keeps a small FIFO queue of surfaces for
+* video frames; if surfaces aren't released in a timely manner, SDL may drop
+* upcoming video frames from the camera.
+*
+* If the app needs to keep the surface for a significant time, they should
+* make a copy of it and release the original.
+*
+* The app should not use the surface again after calling this function;
+* assume the surface is freed and the pointer is invalid.
+*
+* \param camera opened camera device.
+* \param frame the video frame surface to release.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_AcquireCameraFrame
+*/
+SDL_ReleaseCameraFrame :: (camera: *SDL_Camera, frame: *SDL_Surface) -> void #foreign libsdl3;
+
+/**
+* Use this function to shut down camera processing and close the camera
+* device.
+*
+* \param camera opened camera device.
+*
+* \threadsafety It is safe to call this function from any thread, but no
+*               thread may reference `device` once this function is called.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_OpenCamera
+*/
+SDL_CloseCamera :: (camera: *SDL_Camera) -> void #foreign libsdl3;
+
+/**
+* Put UTF-8 text into the clipboard.
+*
+* \param text the text to store in the clipboard.
+* \returns true on success or false on failure; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety This function should only be called on the main thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_GetClipboardText
+* \sa SDL_HasClipboardText
+*/
+SDL_SetClipboardText :: (text: *u8) -> bool #foreign libsdl3;
+
+/**
+* Get UTF-8 text from the clipboard.
+*
+* This function returns an empty string if there is not enough memory left
+* for a copy of the clipboard's content.
+*
+* \returns the clipboard text on success or an empty string on failure; call
+*          SDL_GetError() for more information. This should be freed with
+*          SDL_free() when it is no longer needed.
+*
+* \threadsafety This function should only be called on the main thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_HasClipboardText
+* \sa SDL_SetClipboardText
+*/
+SDL_GetClipboardText :: () -> *u8 #foreign libsdl3;
+
+/**
+* Query whether the clipboard exists and contains a non-empty text string.
+*
+* \returns true if the clipboard has text, or false if it does not.
+*
+* \threadsafety This function should only be called on the main thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_GetClipboardText
+* \sa SDL_SetClipboardText
+*/
+SDL_HasClipboardText :: () -> bool #foreign libsdl3;
+
+/**
+* Put UTF-8 text into the primary selection.
+*
+* \param text the text to store in the primary selection.
+* \returns true on success or false on failure; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety This function should only be called on the main thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_GetPrimarySelectionText
+* \sa SDL_HasPrimarySelectionText
+*/
+SDL_SetPrimarySelectionText :: (text: *u8) -> bool #foreign libsdl3;
+
+/**
+* Get UTF-8 text from the primary selection.
+*
+* This function returns an empty string if there is not enough memory left
+* for a copy of the primary selection's content.
+*
+* \returns the primary selection text on success or an empty string on
+*          failure; call SDL_GetError() for more information. This should be
+*          freed with SDL_free() when it is no longer needed.
+*
+* \threadsafety This function should only be called on the main thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_HasPrimarySelectionText
+* \sa SDL_SetPrimarySelectionText
+*/
+SDL_GetPrimarySelectionText :: () -> *u8 #foreign libsdl3;
+
+/**
+* Query whether the primary selection exists and contains a non-empty text
+* string.
+*
+* \returns true if the primary selection has text, or false if it does not.
+*
+* \threadsafety This function should only be called on the main thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_GetPrimarySelectionText
+* \sa SDL_SetPrimarySelectionText
+*/
+SDL_HasPrimarySelectionText :: () -> bool #foreign libsdl3;
+
+/**
+* Callback function that will be called when data for the specified mime-type
+* is requested by the OS.
+*
+* The callback function is called with NULL as the mime_type when the
+* clipboard is cleared or new data is set. The clipboard is automatically
+* cleared in SDL_Quit().
+*
+* \param userdata a pointer to the provided user data.
+* \param mime_type the requested mime-type.
+* \param size a pointer filled in with the length of the returned data.
+* \returns a pointer to the data for the provided mime-type. Returning NULL
+*          or setting the length to 0 will cause zero length data to be sent
+*          to the "receiver", which should be able to handle this. The
+*          returned data will not be freed, so it needs to be retained and
+*          dealt with internally.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_SetClipboardData
+*/
+SDL_ClipboardDataCallback :: #type (userdata: *void, mime_type: *u8, size: *u64) -> *void #c_call;
+
+/**
+* Callback function that will be called when the clipboard is cleared, or
+* when new data is set.
+*
+* \param userdata a pointer to the provided user data.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_SetClipboardData
+*/
+SDL_ClipboardCleanupCallback :: #type (userdata: *void) -> void #c_call;
+
+/**
+* Offer clipboard data to the OS.
+*
+* Tell the operating system that the application is offering clipboard data
+* for each of the provided mime-types. Once another application requests the
+* data the callback function will be called, allowing it to generate and
+* respond with the data for the requested mime-type.
+*
+* The size of text data does not include any terminator, and the text does
+* not need to be null-terminated (e.g., you can directly copy a portion of a
+* document).
+*
+* \param callback a function pointer to the function that provides the
+*                 clipboard data.
+* \param cleanup a function pointer to the function that cleans up the
+*                clipboard data.
+* \param userdata an opaque pointer that will be forwarded to the callbacks.
+* \param mime_types a list of mime-types that are being offered. SDL copies
+*                   the given list.
+* \param num_mime_types the number of mime-types in the mime_types list.
+* \returns true on success or false on failure; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety This function should only be called on the main thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_ClearClipboardData
+* \sa SDL_GetClipboardData
+* \sa SDL_HasClipboardData
+*/
+SDL_SetClipboardData :: (callback: SDL_ClipboardDataCallback, cleanup: SDL_ClipboardCleanupCallback, userdata: *void, mime_types: **u8, num_mime_types: u64) -> bool #foreign libsdl3;
+
+/**
+* Clear the clipboard data.
+*
+* \returns true on success or false on failure; call SDL_GetError() for more
+*          information.
+*
+* \threadsafety This function should only be called on the main thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_SetClipboardData
+*/
+SDL_ClearClipboardData :: () -> bool #foreign libsdl3;
+
+/**
+* Get the data from the clipboard for a given mime type.
+*
+* The size of text data does not include the terminator, but the text is
+* guaranteed to be null-terminated.
+*
+* \param mime_type the mime type to read from the clipboard.
+* \param size a pointer filled in with the length of the returned data.
+* \returns the retrieved data buffer or NULL on failure; call SDL_GetError()
+*          for more information. This should be freed with SDL_free() when it
+*          is no longer needed.
+*
+* \threadsafety This function should only be called on the main thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_HasClipboardData
+* \sa SDL_SetClipboardData
+*/
+SDL_GetClipboardData :: (mime_type: *u8, size: *u64) -> *void #foreign libsdl3;
+
+/**
+* Query whether there is data in the clipboard for the provided mime type.
+*
+* \param mime_type the mime type to check for data.
+* \returns true if data exists in the clipboard for the provided mime type,
+*          false if it does not.
+*
+* \threadsafety This function should only be called on the main thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_SetClipboardData
+* \sa SDL_GetClipboardData
+*/
+SDL_HasClipboardData :: (mime_type: *u8) -> bool #foreign libsdl3;
+
+/**
+* Retrieve the list of mime types available in the clipboard.
+*
+* \param num_mime_types a pointer filled with the number of mime types, may
+*                       be NULL.
+* \returns a null-terminated array of strings with mime types, or NULL on
+*          failure; call SDL_GetError() for more information. This should be
+*          freed with SDL_free() when it is no longer needed.
+*
+* \threadsafety This function should only be called on the main thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_SetClipboardData
+*/
+SDL_GetClipboardMimeTypes :: (num_mime_types: *u64) -> **u8 #foreign libsdl3;
+
+/**
+* Get the number of logical CPU cores available.
+*
+* \returns the total number of logical CPU cores. On CPUs that include
+*          technologies such as hyperthreading, the number of logical cores
+*          may be more than the number of physical cores.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*/
+SDL_GetNumLogicalCPUCores :: () -> s32 #foreign libsdl3;
+
+/**
+* Determine the L1 cache line size of the CPU.
+*
+* This is useful for determining multi-threaded structure padding or SIMD
+* prefetch sizes.
+*
+* \returns the L1 cache line size of the CPU, in bytes.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*/
+SDL_GetCPUCacheLineSize :: () -> s32 #foreign libsdl3;
+
+/**
+* Determine whether the CPU has AltiVec features.
+*
+* This always returns false on CPUs that aren't using PowerPC instruction
+* sets.
+*
+* \returns true if the CPU has AltiVec features or false if not.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*/
+SDL_HasAltiVec :: () -> bool #foreign libsdl3;
+
+/**
+* Determine whether the CPU has MMX features.
+*
+* This always returns false on CPUs that aren't using Intel instruction sets.
+*
+* \returns true if the CPU has MMX features or false if not.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*/
+SDL_HasMMX :: () -> bool #foreign libsdl3;
+
+/**
+* Determine whether the CPU has SSE features.
+*
+* This always returns false on CPUs that aren't using Intel instruction sets.
+*
+* \returns true if the CPU has SSE features or false if not.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_HasSSE2
+* \sa SDL_HasSSE3
+* \sa SDL_HasSSE41
+* \sa SDL_HasSSE42
+*/
+SDL_HasSSE :: () -> bool #foreign libsdl3;
+
+/**
+* Determine whether the CPU has SSE2 features.
+*
+* This always returns false on CPUs that aren't using Intel instruction sets.
+*
+* \returns true if the CPU has SSE2 features or false if not.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_HasSSE
+* \sa SDL_HasSSE3
+* \sa SDL_HasSSE41
+* \sa SDL_HasSSE42
+*/
+SDL_HasSSE2 :: () -> bool #foreign libsdl3;
+
+/**
+* Determine whether the CPU has SSE3 features.
+*
+* This always returns false on CPUs that aren't using Intel instruction sets.
+*
+* \returns true if the CPU has SSE3 features or false if not.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_HasSSE
+* \sa SDL_HasSSE2
+* \sa SDL_HasSSE41
+* \sa SDL_HasSSE42
+*/
+SDL_HasSSE3 :: () -> bool #foreign libsdl3;
+
+/**
+* Determine whether the CPU has SSE4.1 features.
+*
+* This always returns false on CPUs that aren't using Intel instruction sets.
+*
+* \returns true if the CPU has SSE4.1 features or false if not.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_HasSSE
+* \sa SDL_HasSSE2
+* \sa SDL_HasSSE3
+* \sa SDL_HasSSE42
+*/
+SDL_HasSSE41 :: () -> bool #foreign libsdl3;
+
+/**
+* Determine whether the CPU has SSE4.2 features.
+*
+* This always returns false on CPUs that aren't using Intel instruction sets.
+*
+* \returns true if the CPU has SSE4.2 features or false if not.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_HasSSE
+* \sa SDL_HasSSE2
+* \sa SDL_HasSSE3
+* \sa SDL_HasSSE41
+*/
+SDL_HasSSE42 :: () -> bool #foreign libsdl3;
+
+/**
+* Determine whether the CPU has AVX features.
+*
+* This always returns false on CPUs that aren't using Intel instruction sets.
+*
+* \returns true if the CPU has AVX features or false if not.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_HasAVX2
+* \sa SDL_HasAVX512F
+*/
+SDL_HasAVX :: () -> bool #foreign libsdl3;
+
+/**
+* Determine whether the CPU has AVX2 features.
+*
+* This always returns false on CPUs that aren't using Intel instruction sets.
+*
+* \returns true if the CPU has AVX2 features or false if not.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_HasAVX
+* \sa SDL_HasAVX512F
+*/
+SDL_HasAVX2 :: () -> bool #foreign libsdl3;
+
+/**
+* Determine whether the CPU has AVX-512F (foundation) features.
+*
+* This always returns false on CPUs that aren't using Intel instruction sets.
+*
+* \returns true if the CPU has AVX-512F features or false if not.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_HasAVX
+* \sa SDL_HasAVX2
+*/
+SDL_HasAVX512F :: () -> bool #foreign libsdl3;
+
+/**
+* Determine whether the CPU has ARM SIMD (ARMv6) features.
+*
+* This is different from ARM NEON, which is a different instruction set.
+*
+* This always returns false on CPUs that aren't using ARM instruction sets.
+*
+* \returns true if the CPU has ARM SIMD features or false if not.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_HasNEON
+*/
+SDL_HasARMSIMD :: () -> bool #foreign libsdl3;
+
+/**
+* Determine whether the CPU has NEON (ARM SIMD) features.
+*
+* This always returns false on CPUs that aren't using ARM instruction sets.
+*
+* \returns true if the CPU has ARM NEON features or false if not.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*/
+SDL_HasNEON :: () -> bool #foreign libsdl3;
+
+/**
+* Determine whether the CPU has LSX (LOONGARCH SIMD) features.
+*
+* This always returns false on CPUs that aren't using LOONGARCH instruction
+* sets.
+*
+* \returns true if the CPU has LOONGARCH LSX features or false if not.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*/
+SDL_HasLSX :: () -> bool #foreign libsdl3;
+
+/**
+* Determine whether the CPU has LASX (LOONGARCH SIMD) features.
+*
+* This always returns false on CPUs that aren't using LOONGARCH instruction
+* sets.
+*
+* \returns true if the CPU has LOONGARCH LASX features or false if not.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*/
+SDL_HasLASX :: () -> bool #foreign libsdl3;
+
+/**
+* Get the amount of RAM configured in the system.
+*
+* \returns the amount of RAM configured in the system in MiB.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*/
+SDL_GetSystemRAM :: () -> s32 #foreign libsdl3;
+
+/**
+* Report the alignment this system needs for SIMD allocations.
+*
+* This will return the minimum number of bytes to which a pointer must be
+* aligned to be compatible with SIMD instructions on the current machine. For
+* example, if the machine supports SSE only, it will return 16, but if it
+* supports AVX-512F, it'll return 64 (etc). This only reports values for
+* instruction sets SDL knows about, so if your SDL build doesn't have
+* SDL_HasAVX512F(), then it might return 16 for the SSE support it sees and
+* not 64 for the AVX-512 instructions that exist but SDL doesn't know about.
+* Plan accordingly.
+*
+* \returns the alignment in bytes needed for available, known SIMD
+*          instructions.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.2.0.
+*
+* \sa SDL_aligned_alloc
+* \sa SDL_aligned_free
+*/
+SDL_GetSIMDAlignment :: () -> u64 #foreign libsdl3;
+
+/**
+* Report the size of a page of memory.
+*
+* Different platforms might have different memory page sizes. In current
+* times, 4 kilobytes is not unusual, but newer systems are moving to larger
+* page sizes, and esoteric platforms might have any unexpected size.
+*
+* Note that this function can return 0, which means SDL can't determine the
+* page size on this platform. It will _not_ set an error string to be
+* retrieved with SDL_GetError() in this case! In this case, defaulting to
+* 4096 is often a reasonable option.
+*
+* \returns the size of a single page of memory, in bytes, or 0 if SDL can't
+*          determine this information.
+*
+* \threadsafety It is safe to call this function from any thread.
+*
+* \since This function is available since SDL 3.4.0.
+*/
+SDL_GetSystemPageSize :: () -> s32 #foreign libsdl3;
 
 /**
 * An entry for filters for file dialogs.
@@ -33394,63 +33451,6 @@ SDL_ShowMessageBox :: (messageboxdata: *SDL_MessageBoxData, buttonid: *s32) -> b
 * \sa SDL_ShowMessageBox
 */
 SDL_ShowSimpleMessageBox :: (flags: SDL_MessageBoxFlags, title: *u8, message: *u8, window: *SDL_Window) -> bool #foreign libsdl3;
-
-/**
-* A handle to a CAMetalLayer-backed NSView (macOS) or UIView (iOS/tvOS).
-*
-* \since This datatype is available since SDL 3.2.0.
-*/
-SDL_MetalView :: *void;
-
-/**
-* Create a CAMetalLayer-backed NSView/UIView and attach it to the specified
-* window.
-*
-* On macOS, this does *not* associate a MTLDevice with the CAMetalLayer on
-* its own. It is up to user code to do that.
-*
-* The returned handle can be casted directly to a NSView or UIView. To access
-* the backing CAMetalLayer, call SDL_Metal_GetLayer().
-*
-* \param window the window.
-* \returns handle NSView or UIView.
-*
-* \threadsafety This function should only be called on the main thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_Metal_DestroyView
-* \sa SDL_Metal_GetLayer
-*/
-SDL_Metal_CreateView :: (window: *SDL_Window) -> SDL_MetalView #foreign libsdl3;
-
-/**
-* Destroy an existing SDL_MetalView object.
-*
-* This should be called before SDL_DestroyWindow, if SDL_Metal_CreateView was
-* called after SDL_CreateWindow.
-*
-* \param view the SDL_MetalView object.
-*
-* \threadsafety This function should only be called on the main thread.
-*
-* \since This function is available since SDL 3.2.0.
-*
-* \sa SDL_Metal_CreateView
-*/
-SDL_Metal_DestroyView :: (view: SDL_MetalView) -> void #foreign libsdl3;
-
-/**
-* Get a pointer to the backing CAMetalLayer for the given view.
-*
-* \param view the SDL_MetalView object.
-* \returns a pointer.
-*
-* \threadsafety This function should only be called on the main thread.
-*
-* \since This function is available since SDL 3.2.0.
-*/
-SDL_Metal_GetLayer :: (view: SDL_MetalView) -> *void #foreign libsdl3;
 
 /**
 * Open a URL/URI in the browser or other appropriate external application.
