@@ -27,14 +27,14 @@ generate_binding :: () {
     "-x", "objective-c",
     "-fno-objc-arc",
     "-fblocks",
-    "-fobjc-runtime=macosx-26.0",
-    "-mmacos-version-min=26.0",
+    "-fparse-all-comments",
     "-isysroot", to_c_string(sdk_path),
     to_c_string(tprint("-F%", framework_path)),
     ];
 
 
-    tu := clang_parseTranslationUnit(index, to_c_string(metal_path), args.data, xx args.count, null, 0, xx (CXTranslationUnit_Flags.DetailedPreprocessingRecord | CXTranslationUnit_Flags.Incomplete | CXTranslationUnit_Flags.KeepGoing));
+    tu := clang_parseTranslationUnit(index, to_c_string(metal_path), args.data, xx args.count, null, 0, xx (CXTranslationUnit_Flags.DetailedPreprocessingRecord // | CXTranslationUnit_Flags.Incomplete | CXTranslationUnit_Flags.KeepGoing
+    ));
 
     if !tu {
         log("Cannot parse tu");
@@ -57,8 +57,10 @@ generate_binding :: () {
 
     enum_sb: String_Builder;
     for metal_enum_table {
+        append(*enum_sb, it.comment);
         print_to_builder(*enum_sb, "% :: % % {\n", it.name, ifx it.is_enum_flag then "enum_flags" else "enum", it.type);
         for it.members {
+            append(*enum_sb, it.comment);
             print_to_builder(*enum_sb, "    % :: %;\n", it.key, it.value);
         }
         print_to_builder(*enum_sb, "}\n\n");
@@ -124,6 +126,7 @@ generate_binding :: () {
 Metal_Enum_Member :: struct {
     key: string;
     value: string;
+    comment: string;
 }
 
 Metal_Enum :: struct {
@@ -131,6 +134,7 @@ Metal_Enum :: struct {
     type: string;
     is_enum_flag: bool;
     members: [..] Metal_Enum_Member;
+    comment: string;
 }
 
 metal_enum_table : Table(string, Metal_Enum);
@@ -154,6 +158,13 @@ metal_visitor :: (cursor: CXCursor, parent: CXCursor, client_data: CXClientData)
         if begins_with(name, "MTL") {
             if kind ==  {
             case .EnumDecl;
+                c := get_cursor_raw_comment(cursor);
+                if c.count == 0 {
+                    log("no comment");
+                } else {
+                    log("%", c);
+                }
+
                 handle_enum(cursor);
             case .StructDecl;
                 metal_struct := Metal_Struct.{
@@ -366,6 +377,15 @@ get_type_string :: (type: CXType) -> string {
     spelling := clang_getTypeSpelling(type);
     defer clang_disposeString(spelling);
     str := to_string(clang_getCString(spelling));
+
+    return copy_string(str);
+}
+
+get_cursor_raw_comment :: (cursor: CXCursor) -> string {
+    comment := clang_Cursor_getRawCommentText(cursor);
+    defer clang_disposeString(comment);
+    cstr := clang_getCString(comment);
+    str := to_string(cstr);
 
     return copy_string(str);
 }
@@ -629,7 +649,28 @@ handle_enum :: (cursor: CXCursor) {
             case .FlagEnum;
                 metal_enum.is_enum_flag = true;
             case .EnumConstantDecl;
-                s := replace(name, parent_name, "");
+
+                s, occurences := replace(name, parent_name, "");
+                if occurences == 0 {
+                    if ends_with(parent_name, "s") {
+                        modified_parent_name := slice(parent_name, 0, parent_name.count - 1);
+                        s, occurences = replace(name, modified_parent_name, "");
+
+                        // Still is zero
+                        if occurences == 0 {
+                            // There is another case of
+                            // MTLBindingAccess, which we don't care
+                            // for now. Enum in Metal is a mess, some
+                            // of the enum member are put together in
+                            // a enum object where each of them has
+                            // different prefix.
+                            if parent_name == "MTLResourceOptions" {
+                                modified_parent_name = "MTLResource";
+                                s = replace(name, modified_parent_name, "");
+                            }
+                        }
+                    }
+                }
                 member: Metal_Enum_Member;
                 member.key = copy_string(s);
 
@@ -663,6 +704,7 @@ handle_enum :: (cursor: CXCursor) {
                     }
                 }
 
+                member.comment = get_cursor_raw_comment(cursor);
                 if !found array_add(*metal_enum.members, member);
             case;
                 assert(false, "unexpected enum member kind %", kind);
@@ -679,23 +721,14 @@ handle_enum :: (cursor: CXCursor) {
     metal_enum.name = copy_string(name);
     enum_type := clang_getEnumDeclIntegerType(cursor);
     metal_enum.type = to_jai_type(enum_type);
-    // type_name := get_type_string(enum_type);
-    // if type_name == {
-    // // Since the build-in Objective-C from Jai defines these
-    // // two, I don't think it is a good idea to define again.
-    // case "NSInteger";
-    //     ;
-    //     metal_enum.type = "NSInteger";
-    // case "NSUInteger";
-    //     ;
-    //     metal_enum.type = "NSUInteger";
-    // case "uint8_t";
-    //     metal_enum.type = "u8";
-    // case "uint32_t";
-    //     metal_enum.type = "u32";
-    // case;
-    //     assert(false, "unexpected typedef in enum %", type_name);
-    // }
+    comment := get_cursor_raw_comment(cursor);
+    log("enum %", name);
+    if comment.count > 0 {
+        log("%", comment);
+    }
+    if metal_enum.comment.count == 0 {
+        metal_enum.comment = comment;
+    }
     clang_visitChildren(cursor, enum_visitor, metal_enum);
 }
 

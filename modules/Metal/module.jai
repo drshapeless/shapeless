@@ -1,12 +1,12 @@
 #scope_export
-#load "metal_enum.jai";
-#load "metal_struct.jai";
-#load "metal_typedef.jai";
-#load "metal_func.jai";
-#load "metal_var.jai";
-#load "metal_selectors.jai";
-#load "metal_protocol.jai";
-#load "metal_interface.jai";
+#load "enum.jai";
+#load "struct.jai";
+#load "typedef.jai";
+#load "function.jai";
+#load "var.jai";
+#load "selectors.jai";
+#load "protocol.jai";
+#load "interface.jai";
 
 init_metal :: () {
     if __sel.layer return;
@@ -104,8 +104,6 @@ MTLIndirectCommandBufferExecutionRangeMake :: inline (location: u32, length: u32
 CGColorSpaceRef :: *void;
 CAEDRMetadata :: NSObject;
 IOSurfaceRef :: *void;
-MTLGPUAddress :: u64;
-MTLTimestamp :: u64;
 NSNumber :: NSObject;
 NSErrorDomain :: *NSString;
 NSErrorUserInfoKey :: *NSString;

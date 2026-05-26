@@ -1,4 +1,4 @@
-_Generated_Selectors :: struct {
+_Generated_Selectors :: struct #type_info_no_size_complaint {
     setViewports_count_: *void = ---;
     setLayer_atIndex_: *void = ---;
     resourceViewCount: *void = ---;

@@ -14,13 +14,14 @@ OUTPUT_EXECUTABLE_NAME := "generate_metal";
     array_add(*import_paths, "../");
 
     options.import_path = import_paths;
+    options.minimum_os_version = .{26, 0};
 
     compiler_add_library_search_directory("/opt/homebrew/opt/llvm/lib");
 
     set_build_options(options, w);
 
     compiler_begin_intercept(w);
-    add_build_file("generate.jai", w);
+    add_build_file("main.jai", w);
 
     while true {
         message := compiler_wait_for_message();
