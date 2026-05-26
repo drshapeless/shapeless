@@ -40,7 +40,7 @@ generate_bindings :: () -> bool {
 
     array_add(*library_search_paths, "/opt/homebrew/llvm/lib");
     array_add(*include_paths, ".");
-    array_add(*source_files,  tprint("%/Index.h", CLANG_PATH));
+    array_add(*source_files,  tprint("%/Index.h", CLANG_PATH), tprint("%/Documentation.h", CLANG_PATH));
     array_add(*extra_clang_arguments, "-x", "c");
     array_add(*libraries, .{filename="libclang"});
     mimic_spacing_flags = Mimic_Spacing_Flags.GLOBAL;
