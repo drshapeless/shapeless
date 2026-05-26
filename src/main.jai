@@ -14,7 +14,13 @@ main :: () {
 
     GPU.init();
     defer GPU.deinit();
+    GPU.init_swapchain(window);
+    defer GPU.deinit_swapchain();
+
+    allocation := GPU.alloc(1024);
+    log("%", allocation);
 }
 
 #import "SDL3";
 GPU :: #import "GPU";
+#import "Basic";
