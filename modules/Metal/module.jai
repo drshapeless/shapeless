@@ -72,7 +72,6 @@ MTL4BufferRangeMake :: inline (bufferAddress: MTLGPUAddress, length: u64) -> MTL
 
 // These structs are not auto-generated, they are in MTLAccelerationStructureTypes.h
 MTLPackedFloat3 :: Math.Vector3;
-// MTLPackedFloatQuaternion :: Math.Quaternion;
 MTLPackedFloat4x3 :: Math.Matrix4x3;
 
 MTLPackedFloat3Make :: inline (x: float, y: float, z: float) -> MTLPackedFloat3 {
@@ -87,14 +86,6 @@ MTLAxisAlignedBoundingBox :: struct {
     min: MTLPackedFloat3;
     max: MTLPackedFloat3;
 }
-
-// MTLComponentTransform :: struct {
-//     scale: MTLPackedFloat3;
-//     shear: MTLPackedFloat3;
-//     pivot: MTLPackedFloat3;
-//     rotation: MTLPackedFloatQuaternion;
-//     translation: MTLPackedFloat3;
-// }
 
 MTLIndirectCommandBufferExecutionRangeMake :: inline (location: u32, length: u32) -> MTLIndirectCommandBufferExecutionRange {
     return .{location, length};
