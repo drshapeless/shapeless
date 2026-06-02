@@ -697,8 +697,10 @@ handle_objc_interface :: (cursor: CXCursor) {
                 // property name. A objc property cannot be neither
                 // readable or writable. We store the thing here, and
                 // leave the hard work when writing to file.
+                getter_name := clang_Cursor_getObjCPropertyGetterName(cursor);
+                defer clang_disposeString(getter_name);
                 property := Objc_Property.{
-                    name = name,
+                    name = to_string(getter_name),
                     comment = get_raw_comment_string(cursor),
                 };
                 array_add(*i.properties, property);
@@ -734,8 +736,10 @@ handle_objc_protocol :: (cursor: CXCursor) {
                 ;
             case .ObjCPropertyDecl;
                 // Check out the same thing in interface handling.
+                getter_name := clang_Cursor_getObjCPropertyGetterName(cursor);
+                defer clang_disposeString(getter_name);
                 property := Objc_Property.{
-                    name = name,
+                    name = to_string(getter_name),
                     comment = get_raw_comment_string(cursor),
                 };
                 array_add(*protocol.properties, property);

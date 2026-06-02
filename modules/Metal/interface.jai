@@ -3029,6 +3029,7 @@ MTLDepthStencilDescriptor :: struct #type_info_no_size_complaint {
         return func(self, __sel.setDepthCompareFunction_, depthCompareFunction);
     }
 
+/* Defaults to NO, so no depth writes are performed */
     isDepthWriteEnabled :: (self: *MTLDepthStencilDescriptor) -> BOOL {
         func: #type (obj: *void, selector: *void) -> BOOL #c_call;
         func = xx objc_msgSend;
@@ -3837,6 +3838,7 @@ MTLRenderPipelineColorAttachmentDescriptor :: struct #type_info_no_size_complain
         return func(self, __sel.setPixelFormat_, pixelFormat);
     }
 
+/*! Enable blending.  Defaults to NO. */
     isBlendingEnabled :: (self: *MTLRenderPipelineColorAttachmentDescriptor) -> BOOL {
         func: #type (obj: *void, selector: *void) -> BOOL #c_call;
         func = xx objc_msgSend;
@@ -5058,6 +5060,11 @@ MTLMeshRenderPipelineDescriptor :: struct #type_info_no_size_complaint {
         return func(self, __sel.setRasterSampleCount_, rasterSampleCount);
     }
 
+/*!
+ @property alphaToCoverageEnabled
+ @abstract Whether the alpha value exported by the fragment shader for the first color attachment is converted to a sample mask, which is subsequently AND-ed with the fragments' sample mask
+ @discussion The default value is NO.
+ */
     isAlphaToCoverageEnabled :: (self: *MTLMeshRenderPipelineDescriptor) -> BOOL {
         func: #type (obj: *void, selector: *void) -> BOOL #c_call;
         func = xx objc_msgSend;
@@ -5070,6 +5077,11 @@ MTLMeshRenderPipelineDescriptor :: struct #type_info_no_size_complaint {
         return func(self, __sel.setAlphaToCoverageEnabled_, alphaToCoverageEnabled);
     }
 
+/*!
+ @property alphaToOneEnabled
+ @abstract Whether the alpha value exported by the fragment shader for all color attachments is modified to 1 (after evaluating alphaToCoverage).
+ @discussion The default value is NO.
+ */
     isAlphaToOneEnabled :: (self: *MTLMeshRenderPipelineDescriptor) -> BOOL {
         func: #type (obj: *void, selector: *void) -> BOOL #c_call;
         func = xx objc_msgSend;
@@ -5082,6 +5094,11 @@ MTLMeshRenderPipelineDescriptor :: struct #type_info_no_size_complaint {
         return func(self, __sel.setAlphaToOneEnabled_, alphaToOneEnabled);
     }
 
+/*!
+ @property rasterizationEnabled
+ @abstract Whether rasterization is disabled, all primitives are dropped prior to rasterization.
+ @discussion The default value is YES.
+ */
     isRasterizationEnabled :: (self: *MTLMeshRenderPipelineDescriptor) -> BOOL {
         func: #type (obj: *void, selector: *void) -> BOOL #c_call;
         func = xx objc_msgSend;
@@ -11558,6 +11575,11 @@ MTL4RenderPipelineDescriptor :: struct #type_info_no_size_complaint {
         return func(self, __sel.setAlphaToOneState_, alphaToOneState);
     }
 
+/// Determines whether the pipeline rasterizes primitives.
+///
+/// By default, this value is <doc://com.apple.documentation/documentation/swift/true>, specifying that this pipeline
+/// rasterizes primitives. Set this property to <doc://com.apple.documentation/documentation/swift/false> when you
+/// don't provide a fragment shader function via function ``fragmentFunctionDescriptor``.
     isRasterizationEnabled :: (self: *MTL4RenderPipelineDescriptor) -> BOOL {
         func: #type (obj: *void, selector: *void) -> BOOL #c_call;
         func = xx objc_msgSend;
@@ -12199,6 +12221,11 @@ MTL4MeshRenderPipelineDescriptor :: struct #type_info_no_size_complaint {
         return func(self, __sel.setAlphaToOneState_, alphaToOneState);
     }
 
+/// Determines whether the pipeline rasterizes primitives.
+///
+/// By default, this value is <doc://com.apple.documentation/documentation/swift/true>, specifying that this pipeline
+/// rasterizes primitives. Set this property to <doc://com.apple.documentation/documentation/swift/false> when you
+/// don't provide a fragment shader function via function ``fragmentFunctionDescriptor``.
     isRasterizationEnabled :: (self: *MTL4MeshRenderPipelineDescriptor) -> BOOL {
         func: #type (obj: *void, selector: *void) -> BOOL #c_call;
         func = xx objc_msgSend;

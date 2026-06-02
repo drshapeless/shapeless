@@ -796,12 +796,22 @@ MTLTexture :: struct #type_info_no_size_complaint {
         return func(self, __sel.usage);
     }
 
+/*!
+ @property shareable
+ @abstract If YES, this texture can be shared with other processes.
+ @discussion Texture can be shared across process addres space boundaries through use of sharedTextureHandle and XPC.
+ */
     isShareable :: (self: *MTLTexture) -> BOOL {
         func: #type (obj: *void, selector: *void) -> BOOL #c_call;
         func = xx objc_msgSend;
         return func(self, __sel.isShareable);
     }
 
+/*!
+ @property framebufferOnly
+ @abstract If YES, this texture can only be used with a MTLAttachmentDescriptor, and cannot be used as a texture argument for MTLRenderCommandEncoder, MTLBlitCommandEncoder, or MTLComputeCommandEncoder. Furthermore, when this property's value is YES, readPixels/writePixels may not be used with this texture.
+ @discussion Textures obtained from CAMetalDrawables may have this property set to YES, depending on the value of frameBufferOnly passed to their parent CAMetalLayer. Textures created directly by the application will not have any restrictions.
+ */
     isFramebufferOnly :: (self: *MTLTexture) -> BOOL {
         func: #type (obj: *void, selector: *void) -> BOOL #c_call;
         func = xx objc_msgSend;
@@ -1005,6 +1015,7 @@ MTLTextureBinding :: struct #type_info_no_size_complaint {
         return func(self, __sel.textureDataType);
     }
 
+// true for depth textures
     isDepthTexture :: (self: *MTLTextureBinding) -> BOOL {
         func: #type (obj: *void, selector: *void) -> BOOL #c_call;
         func = xx objc_msgSend;
@@ -3007,18 +3018,32 @@ MTLDevice :: struct #type_info_no_size_complaint {
         return func(self, __sel.maxThreadsPerThreadgroup);
     }
 
+/*!
+ @property lowPower
+ @abstract On systems that support automatic graphics switching, this will return YES for the the low power device.
+ */
     isLowPower :: (self: *MTLDevice) -> BOOL {
         func: #type (obj: *void, selector: *void) -> BOOL #c_call;
         func = xx objc_msgSend;
         return func(self, __sel.isLowPower);
     }
 
+/*!
+ @property headless
+ @abstract On systems that include more that one GPU, this will return YES for any device that does not support any displays.  Only available on Mac OS X.
+ */
     isHeadless :: (self: *MTLDevice) -> BOOL {
         func: #type (obj: *void, selector: *void) -> BOOL #c_call;
         func = xx objc_msgSend;
         return func(self, __sel.isHeadless);
     }
 
+/*!
+ @property removable
+ @abstract If this GPU is removable, this property will return YES.  
+ @discussion If a GPU is is removed without warning, APIs may fail even with good input, even before a notification can get posted informing
+ the application that the device has been removed.
+ */
     isRemovable :: (self: *MTLDevice) -> BOOL {
         func: #type (obj: *void, selector: *void) -> BOOL #c_call;
         func = xx objc_msgSend;
@@ -3085,6 +3110,10 @@ MTLDevice :: struct #type_info_no_size_complaint {
         return func(self, __sel.maxTransferRate);
     }
 
+/*!
+ @property depth24Stencil8PixelFormatSupported
+ @abstract If YES, device supports MTLPixelFormatDepth24Unorm_Stencil8.
+ */
     isDepth24Stencil8PixelFormatSupported :: (self: *MTLDevice) -> BOOL {
         func: #type (obj: *void, selector: *void) -> BOOL #c_call;
         func = xx objc_msgSend;
@@ -3113,6 +3142,11 @@ MTLDevice :: struct #type_info_no_size_complaint {
         return func(self, __sel.argumentBuffersSupport);
     }
 
+/*!
+ @property rasterOrderGroupsSupported
+ @abstract Query device for raster order groups support.
+ @return BOOL value. If YES, the device supports raster order groups. If NO, the device does not.
+ */
     areRasterOrderGroupsSupported :: (self: *MTLDevice) -> BOOL {
         func: #type (obj: *void, selector: *void) -> BOOL #c_call;
         func = xx objc_msgSend;
@@ -3174,6 +3208,11 @@ MTLDevice :: struct #type_info_no_size_complaint {
         return func(self, __sel.supportsPullModelInterpolation);
     }
 
+/*!
+ @property barycentricsSupported
+ @abstract Query device for Barycentric coordinates support; deprecated, use supportsShaderBarycentricCoordinates
+ @return BOOL value. If YES, the device barycentric coordinates
+ */
     areBarycentricCoordsSupported :: (self: *MTLDevice) -> BOOL {
         func: #type (obj: *void, selector: *void) -> BOOL #c_call;
         func = xx objc_msgSend;
@@ -3222,6 +3261,11 @@ MTLDevice :: struct #type_info_no_size_complaint {
         return func(self, __sel.maxArgumentBufferSamplerCount);
     }
 
+/*!
+ @property programmableSaplePositionsSupported
+ @abstract Query device for programmable sample position support.
+ @return BOOL value. If YES, the device supports programmable sample positions. If NO, the device does not.
+ */
     areProgrammableSamplePositionsSupported :: (self: *MTLDevice) -> BOOL {
         func: #type (obj: *void, selector: *void) -> BOOL #c_call;
         func = xx objc_msgSend;
