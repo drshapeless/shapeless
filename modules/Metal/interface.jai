@@ -1,7 +1,7 @@
 /// An array of length matching the rank, holding the dimensions of a tensor.
 ///
 /// Supports rank up to ``MTL_TENSOR_MAX_RANK``.
-MTLTensorExtents :: struct #type_info_none {
+MTLTensorExtents :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// Creates a new tensor extents with the rank and extent values you provide.
 ///
@@ -39,7 +39,7 @@ MTLTensorExtents :: struct #type_info_none {
 }
 
 /// A configuration type for creating new tensor instances.
-MTLTensorDescriptor :: struct #type_info_none {
+MTLTensorDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// An array of sizes, in elements, one for each dimension of the tensors you create with this descriptor.
 ///
@@ -168,7 +168,7 @@ MTLTensorDescriptor :: struct #type_info_none {
 
 }
 
-MTLSharedTextureHandle :: struct #type_info_none {
+MTLSharedTextureHandle :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*!
  @property device
@@ -193,7 +193,7 @@ MTLSharedTextureHandle :: struct #type_info_none {
 
 }
 
-MTLTextureDescriptor :: struct #type_info_none {
+MTLTextureDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*!
  @method texture2DDescriptorWithPixelFormat:width:height:mipmapped:
@@ -524,7 +524,7 @@ MTLTextureDescriptor :: struct #type_info_none {
 
 }
 
-MTLTextureViewDescriptor :: struct #type_info_none {
+MTLTextureViewDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*!
  @property pixelFormat
@@ -608,7 +608,7 @@ MTLTextureViewDescriptor :: struct #type_info_none {
 
 }
 
-MTLType :: struct #type_info_none {
+MTLType :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
     dataType :: (self: *MTLType) -> MTLDataType {
         func: #type (obj: *void, selector: *void) -> MTLDataType #c_call;
@@ -618,7 +618,7 @@ MTLType :: struct #type_info_none {
 
 }
 
-MTLStructMember :: struct #type_info_none {
+MTLStructMember :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
     structType :: (self: *MTLStructMember) -> *MTLStructType {
         func: #type (obj: *void, selector: *void) -> *MTLStructType #c_call;
@@ -679,7 +679,7 @@ MTLStructMember :: struct #type_info_none {
 
 }
 
-MTLStructType :: struct #type_info_none {
+MTLStructType :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
     memberByName_ :: (self: *MTLStructType, name: *NSString) -> *MTLStructMember {
         func: #type (obj: *void, selector: *void, name: *NSString) -> *MTLStructMember #c_call;
@@ -695,7 +695,7 @@ MTLStructType :: struct #type_info_none {
 
 }
 
-MTLArrayType :: struct #type_info_none {
+MTLArrayType :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
     elementStructType :: (self: *MTLArrayType) -> *MTLStructType {
         func: #type (obj: *void, selector: *void) -> *MTLStructType #c_call;
@@ -756,7 +756,7 @@ MTLArrayType :: struct #type_info_none {
 
 }
 
-MTLPointerType :: struct #type_info_none {
+MTLPointerType :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
     elementStructType :: (self: *MTLPointerType) -> *MTLStructType {
         func: #type (obj: *void, selector: *void) -> *MTLStructType #c_call;
@@ -805,7 +805,7 @@ MTLPointerType :: struct #type_info_none {
 
 }
 
-MTLTextureReferenceType :: struct #type_info_none {
+MTLTextureReferenceType :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 // half, float, int, or uint.
     textureDataType :: (self: *MTLTextureReferenceType) -> MTLDataType {
@@ -838,7 +838,7 @@ MTLTextureReferenceType :: struct #type_info_none {
 }
 
 /// An object that represents a tensor in the shading language in a struct or array.
-MTLTensorReferenceType :: struct #type_info_none {
+MTLTensorReferenceType :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// The underlying data format of the tensor.
     tensorDataType :: (self: *MTLTensorReferenceType) -> MTLTensorDataType {
@@ -875,7 +875,7 @@ MTLTensorReferenceType :: struct #type_info_none {
 /*!
  MTLArgument
 */
-MTLArgument :: struct #type_info_none {
+MTLArgument :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
     name :: (self: *MTLArgument) -> *NSString {
         func: #type (obj: *void, selector: *void) -> *NSString #c_call;
@@ -983,7 +983,7 @@ MTLArgument :: struct #type_info_none {
 
 }
 
-MTLFunctionConstantValues :: struct #type_info_none {
+MTLFunctionConstantValues :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 // using indices
     setConstantValue_type_atIndex_ :: (self: *MTLFunctionConstantValues, value: *void, type: MTLDataType, index: NSUInteger) -> void {
@@ -1014,7 +1014,7 @@ MTLFunctionConstantValues :: struct #type_info_none {
 
 }
 
-MTLFunctionDescriptor :: struct #type_info_none {
+MTLFunctionDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*!
  @method functionDescriptor
@@ -1109,11 +1109,11 @@ MTLFunctionDescriptor :: struct #type_info_none {
 
 }
 
-MTLIntersectionFunctionDescriptor :: struct #type_info_none {
+MTLIntersectionFunctionDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 }
 
-MTLVertexAttribute :: struct #type_info_none {
+MTLVertexAttribute :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
     name :: (self: *MTLVertexAttribute) -> *NSString {
         func: #type (obj: *void, selector: *void) -> *NSString #c_call;
@@ -1153,7 +1153,7 @@ MTLVertexAttribute :: struct #type_info_none {
 
 }
 
-MTLAttribute :: struct #type_info_none {
+MTLAttribute :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
     name :: (self: *MTLAttribute) -> *NSString {
         func: #type (obj: *void, selector: *void) -> *NSString #c_call;
@@ -1197,7 +1197,7 @@ MTLAttribute :: struct #type_info_none {
  @interface MTLFunctionConstant
  @abstract describe an uberShader constant used by the function
  */
-MTLFunctionConstant :: struct #type_info_none {
+MTLFunctionConstant :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
     name :: (self: *MTLFunctionConstant) -> *NSString {
         func: #type (obj: *void, selector: *void) -> *NSString #c_call;
@@ -1225,7 +1225,7 @@ MTLFunctionConstant :: struct #type_info_none {
 
 }
 
-MTLCompileOptions :: struct #type_info_none {
+MTLCompileOptions :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*!
  @property preprocessorNames
@@ -1489,7 +1489,7 @@ MTLCompileOptions :: struct #type_info_none {
 }
 
 /// Represents a reflection object containing information about a function in a Metal library.
-MTLFunctionReflection :: struct #type_info_none {
+MTLFunctionReflection :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// Provides a list of inputs and outputs of the function.
     bindings :: (self: *MTLFunctionReflection) -> *NSArray(*MTLBinding) {
@@ -1511,7 +1511,7 @@ MTLFunctionReflection :: struct #type_info_none {
  @interface MTLCounterSampleBufferDescriptor
  @abstract Object to represent the counter state.
  */
-MTLCounterSampleBufferDescriptor :: struct #type_info_none {
+MTLCounterSampleBufferDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*!
  @property counterSet The counterset to be sampled for this counter sample buffer
@@ -1578,7 +1578,7 @@ MTLCounterSampleBufferDescriptor :: struct #type_info_none {
 }
 
 /// Groups together properties for creating a compiler context.
-MTL4CompilerDescriptor :: struct #type_info_none {
+MTL4CompilerDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// Assigns an optional descriptor label to the compiler for debugging purposes.
     label :: (self: *MTL4CompilerDescriptor) -> *NSString {
@@ -1613,7 +1613,7 @@ MTL4CompilerDescriptor :: struct #type_info_none {
 /// You can configure task-specific settings that affect a compilation task by
 /// creating an instance of this class, setting its properties,
 /// and passing it to one of the applicable methods of an ``MTL4Compiler`` instance.
-MTL4CompilerTaskOptions :: struct #type_info_none {
+MTL4CompilerTaskOptions :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// An array of archive instances that can potentially accelerate a compilation task.
 ///
@@ -1640,7 +1640,7 @@ MTL4CompilerTaskOptions :: struct #type_info_none {
 }
 
 /// Groups together parameters for configuring a counter heap object at creation time.
-MTL4CounterHeapDescriptor :: struct #type_info_none {
+MTL4CounterHeapDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// Assigns the type of data that the heap contains.
     type :: (self: *MTL4CounterHeapDescriptor) -> MTL4CounterHeapType {
@@ -1676,7 +1676,7 @@ MTL4CounterHeapDescriptor :: struct #type_info_none {
  * @class MTLArgumentDescriptor
  * @abstract Represents a member of an argument buffer
  */
-MTLArgumentDescriptor :: struct #type_info_none {
+MTLArgumentDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*!
  * @method argumentDescriptor
@@ -1793,7 +1793,7 @@ MTLArgumentDescriptor :: struct #type_info_none {
  @class MTLArchitecture
  @abstract Contains information about the device's architecture
  */
-MTLArchitecture :: struct #type_info_none {
+MTLArchitecture :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*!
  @property name
@@ -1807,7 +1807,7 @@ MTLArchitecture :: struct #type_info_none {
 
 }
 
-MTLResourceStatePassSampleBufferAttachmentDescriptor :: struct #type_info_none {
+MTLResourceStatePassSampleBufferAttachmentDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*!
 @property sampleBuffer
@@ -1871,7 +1871,7 @@ will be taken for that action.
 
 }
 
-MTLResourceStatePassSampleBufferAttachmentDescriptorArray :: struct #type_info_none {
+MTLResourceStatePassSampleBufferAttachmentDescriptorArray :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /* Individual attachment state access */
     objectAtIndexedSubscript_ :: (self: *MTLResourceStatePassSampleBufferAttachmentDescriptorArray, attachmentIndex: NSUInteger) -> *MTLResourceStatePassSampleBufferAttachmentDescriptor {
@@ -1893,7 +1893,7 @@ MTLResourceStatePassSampleBufferAttachmentDescriptorArray :: struct #type_info_n
  @class MTLResourceStatePassDescriptor
  @abstract MTLResourceStatePassDescriptor represents a collection of attachments to be used to create a concrete resourceState command encoder
  */
-MTLResourceStatePassDescriptor :: struct #type_info_none {
+MTLResourceStatePassDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*!
  @method resourceStatePassDescriptor
@@ -1917,7 +1917,7 @@ MTLResourceStatePassDescriptor :: struct #type_info_none {
 
 }
 
-MTLRenderPassAttachmentDescriptor :: struct #type_info_none {
+MTLRenderPassAttachmentDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*!
  @property texture
@@ -2101,7 +2101,7 @@ MTLRenderPassAttachmentDescriptor :: struct #type_info_none {
 
 }
 
-MTLRenderPassColorAttachmentDescriptor :: struct #type_info_none {
+MTLRenderPassColorAttachmentDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*!
  @property clearColor
@@ -2121,7 +2121,7 @@ MTLRenderPassColorAttachmentDescriptor :: struct #type_info_none {
 
 }
 
-MTLRenderPassDepthAttachmentDescriptor :: struct #type_info_none {
+MTLRenderPassDepthAttachmentDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*!
  @property clearDepth
@@ -2157,7 +2157,7 @@ MTLRenderPassDepthAttachmentDescriptor :: struct #type_info_none {
 
 }
 
-MTLRenderPassStencilAttachmentDescriptor :: struct #type_info_none {
+MTLRenderPassStencilAttachmentDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*!
  @property clearStencil
@@ -2193,7 +2193,7 @@ MTLRenderPassStencilAttachmentDescriptor :: struct #type_info_none {
 
 }
 
-MTLRenderPassColorAttachmentDescriptorArray :: struct #type_info_none {
+MTLRenderPassColorAttachmentDescriptorArray :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /* Individual attachment state access */
     objectAtIndexedSubscript_ :: (self: *MTLRenderPassColorAttachmentDescriptorArray, attachmentIndex: NSUInteger) -> *MTLRenderPassColorAttachmentDescriptor {
@@ -2211,7 +2211,7 @@ MTLRenderPassColorAttachmentDescriptorArray :: struct #type_info_none {
 
 }
 
-MTLRenderPassSampleBufferAttachmentDescriptor :: struct #type_info_none {
+MTLRenderPassSampleBufferAttachmentDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*!
 @property sampleBuffer
@@ -2315,7 +2315,7 @@ will be taken for that action.
 
 }
 
-MTLRenderPassSampleBufferAttachmentDescriptorArray :: struct #type_info_none {
+MTLRenderPassSampleBufferAttachmentDescriptorArray :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /* Individual attachment state access */
     objectAtIndexedSubscript_ :: (self: *MTLRenderPassSampleBufferAttachmentDescriptorArray, attachmentIndex: NSUInteger) -> *MTLRenderPassSampleBufferAttachmentDescriptor {
@@ -2337,7 +2337,7 @@ MTLRenderPassSampleBufferAttachmentDescriptorArray :: struct #type_info_none {
  @class MTLRenderPassDescriptor
  @abstract MTLRenderPassDescriptor represents a collection of attachments to be used to create a concrete render command encoder
  */
-MTLRenderPassDescriptor :: struct #type_info_none {
+MTLRenderPassDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*!
  @method renderPassDescriptor
@@ -2607,7 +2607,7 @@ MTLRenderPassDescriptor :: struct #type_info_none {
 
 }
 
-MTLBlitPassSampleBufferAttachmentDescriptor :: struct #type_info_none {
+MTLBlitPassSampleBufferAttachmentDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*!
 @property sampleBuffer
@@ -2671,7 +2671,7 @@ will be taken for that action.
 
 }
 
-MTLBlitPassSampleBufferAttachmentDescriptorArray :: struct #type_info_none {
+MTLBlitPassSampleBufferAttachmentDescriptorArray :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /* Individual attachment state access */
     objectAtIndexedSubscript_ :: (self: *MTLBlitPassSampleBufferAttachmentDescriptorArray, attachmentIndex: NSUInteger) -> *MTLBlitPassSampleBufferAttachmentDescriptor {
@@ -2693,7 +2693,7 @@ MTLBlitPassSampleBufferAttachmentDescriptorArray :: struct #type_info_none {
  @class MTLBlitPassDescriptor
  @abstract MTLBlitPassDescriptor represents a collection of attachments to be used to create a concrete blit command encoder
  */
-MTLBlitPassDescriptor :: struct #type_info_none {
+MTLBlitPassDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*!
  @method blitPassDescriptor
@@ -2721,7 +2721,7 @@ MTLBlitPassDescriptor :: struct #type_info_none {
  @class MTLCommandBufferDescriptor
  @abstract An object that you use to configure new Metal command buffer objects.
 */
-MTLCommandBufferDescriptor :: struct #type_info_none {
+MTLCommandBufferDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*!
  @property retainedReferences
@@ -2773,7 +2773,7 @@ MTLCommandBufferDescriptor :: struct #type_info_none {
 
 }
 
-MTLComputePassSampleBufferAttachmentDescriptor :: struct #type_info_none {
+MTLComputePassSampleBufferAttachmentDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*!
 @property sampleBuffer
@@ -2837,7 +2837,7 @@ will be taken for that action.
 
 }
 
-MTLComputePassSampleBufferAttachmentDescriptorArray :: struct #type_info_none {
+MTLComputePassSampleBufferAttachmentDescriptorArray :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /* Individual attachment state access */
     objectAtIndexedSubscript_ :: (self: *MTLComputePassSampleBufferAttachmentDescriptorArray, attachmentIndex: NSUInteger) -> *MTLComputePassSampleBufferAttachmentDescriptor {
@@ -2859,7 +2859,7 @@ MTLComputePassSampleBufferAttachmentDescriptorArray :: struct #type_info_none {
  @class MTLComputePassDescriptor
  @abstract MTLComputePassDescriptor represents a collection of attachments to be used to create a concrete compute command encoder
  */
-MTLComputePassDescriptor :: struct #type_info_none {
+MTLComputePassDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*!
  @method computePassDescriptor
@@ -2899,7 +2899,7 @@ MTLComputePassDescriptor :: struct #type_info_none {
 
 }
 
-MTLCommandQueueDescriptor :: struct #type_info_none {
+MTLCommandQueueDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*!
  @property maxCommandBufferCount
@@ -2935,7 +2935,7 @@ MTLCommandQueueDescriptor :: struct #type_info_none {
 
 }
 
-MTLStencilDescriptor :: struct #type_info_none {
+MTLStencilDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
     stencilCompareFunction :: (self: *MTLStencilDescriptor) -> MTLCompareFunction {
         func: #type (obj: *void, selector: *void) -> MTLCompareFunction #c_call;
@@ -3014,7 +3014,7 @@ MTLStencilDescriptor :: struct #type_info_none {
 
 }
 
-MTLDepthStencilDescriptor :: struct #type_info_none {
+MTLDepthStencilDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /* Defaults to MTLCompareFuncAlways, which effectively skips the depth test */
     depthCompareFunction :: (self: *MTLDepthStencilDescriptor) -> MTLCompareFunction {
@@ -3084,7 +3084,7 @@ MTLDepthStencilDescriptor :: struct #type_info_none {
 
 }
 
-MTLVertexBufferLayoutDescriptor :: struct #type_info_none {
+MTLVertexBufferLayoutDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
     stride :: (self: *MTLVertexBufferLayoutDescriptor) -> NSUInteger {
         func: #type (obj: *void, selector: *void) -> NSUInteger #c_call;
@@ -3124,7 +3124,7 @@ MTLVertexBufferLayoutDescriptor :: struct #type_info_none {
 
 }
 
-MTLVertexBufferLayoutDescriptorArray :: struct #type_info_none {
+MTLVertexBufferLayoutDescriptorArray :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
     objectAtIndexedSubscript_ :: (self: *MTLVertexBufferLayoutDescriptorArray, index: NSUInteger) -> *MTLVertexBufferLayoutDescriptor {
         func: #type (obj: *void, selector: *void, index: NSUInteger) -> *MTLVertexBufferLayoutDescriptor #c_call;
@@ -3140,7 +3140,7 @@ MTLVertexBufferLayoutDescriptorArray :: struct #type_info_none {
 
 }
 
-MTLVertexAttributeDescriptor :: struct #type_info_none {
+MTLVertexAttributeDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
     format :: (self: *MTLVertexAttributeDescriptor) -> MTLVertexFormat {
         func: #type (obj: *void, selector: *void) -> MTLVertexFormat #c_call;
@@ -3180,7 +3180,7 @@ MTLVertexAttributeDescriptor :: struct #type_info_none {
 
 }
 
-MTLVertexAttributeDescriptorArray :: struct #type_info_none {
+MTLVertexAttributeDescriptorArray :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
     objectAtIndexedSubscript_ :: (self: *MTLVertexAttributeDescriptorArray, index: NSUInteger) -> *MTLVertexAttributeDescriptor {
         func: #type (obj: *void, selector: *void, index: NSUInteger) -> *MTLVertexAttributeDescriptor #c_call;
@@ -3199,7 +3199,7 @@ MTLVertexAttributeDescriptorArray :: struct #type_info_none {
 /*
  MTLVertexDescriptor
  */
-MTLVertexDescriptor :: struct #type_info_none {
+MTLVertexDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
     vertexDescriptor :: () -> *MTLVertexDescriptor {
         func: #type (obj: *void, selector: *void) -> *MTLVertexDescriptor #c_call;
@@ -3227,7 +3227,7 @@ MTLVertexDescriptor :: struct #type_info_none {
 
 }
 
-MTLBufferLayoutDescriptor :: struct #type_info_none {
+MTLBufferLayoutDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
     stride :: (self: *MTLBufferLayoutDescriptor) -> NSUInteger {
         func: #type (obj: *void, selector: *void) -> NSUInteger #c_call;
@@ -3267,7 +3267,7 @@ MTLBufferLayoutDescriptor :: struct #type_info_none {
 
 }
 
-MTLBufferLayoutDescriptorArray :: struct #type_info_none {
+MTLBufferLayoutDescriptorArray :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
     objectAtIndexedSubscript_ :: (self: *MTLBufferLayoutDescriptorArray, index: NSUInteger) -> *MTLBufferLayoutDescriptor {
         func: #type (obj: *void, selector: *void, index: NSUInteger) -> *MTLBufferLayoutDescriptor #c_call;
@@ -3283,7 +3283,7 @@ MTLBufferLayoutDescriptorArray :: struct #type_info_none {
 
 }
 
-MTLAttributeDescriptor :: struct #type_info_none {
+MTLAttributeDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
     format :: (self: *MTLAttributeDescriptor) -> MTLAttributeFormat {
         func: #type (obj: *void, selector: *void) -> MTLAttributeFormat #c_call;
@@ -3323,7 +3323,7 @@ MTLAttributeDescriptor :: struct #type_info_none {
 
 }
 
-MTLAttributeDescriptorArray :: struct #type_info_none {
+MTLAttributeDescriptorArray :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
     objectAtIndexedSubscript_ :: (self: *MTLAttributeDescriptorArray, index: NSUInteger) -> *MTLAttributeDescriptor {
         func: #type (obj: *void, selector: *void, index: NSUInteger) -> *MTLAttributeDescriptor #c_call;
@@ -3342,7 +3342,7 @@ MTLAttributeDescriptorArray :: struct #type_info_none {
 /*
  MTLStageInputOutputDescriptor
  */
-MTLStageInputOutputDescriptor :: struct #type_info_none {
+MTLStageInputOutputDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
     stageInputOutputDescriptor :: () -> *MTLStageInputOutputDescriptor {
         func: #type (obj: *void, selector: *void) -> *MTLStageInputOutputDescriptor #c_call;
@@ -3395,7 +3395,7 @@ MTLStageInputOutputDescriptor :: struct #type_info_none {
 
 }
 
-MTLPipelineBufferDescriptor :: struct #type_info_none {
+MTLPipelineBufferDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*! Buffer mutability. Defaults to MTLMutabilityDefault: mutable for standard buffers, immutable for argument buffers */
     mutability :: (self: *MTLPipelineBufferDescriptor) -> MTLMutability {
@@ -3412,7 +3412,7 @@ MTLPipelineBufferDescriptor :: struct #type_info_none {
 
 }
 
-MTLPipelineBufferDescriptorArray :: struct #type_info_none {
+MTLPipelineBufferDescriptorArray :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /* Individual buffer descriptor access */
     objectAtIndexedSubscript_ :: (self: *MTLPipelineBufferDescriptorArray, bufferIndex: NSUInteger) -> *MTLPipelineBufferDescriptor {
@@ -3435,7 +3435,7 @@ MTLPipelineBufferDescriptorArray :: struct #type_info_none {
  @abstract A class to set functions to be linked.
  @discussion All functions set on this object must have unique names.
  */
-MTLLinkedFunctions :: struct #type_info_none {
+MTLLinkedFunctions :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*!
  @method linkedFunctions
@@ -3515,7 +3515,7 @@ MTLLinkedFunctions :: struct #type_info_none {
 
 }
 
-MTLComputePipelineReflection :: struct #type_info_none {
+MTLComputePipelineReflection :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
     bindings :: (self: *MTLComputePipelineReflection) -> *NSArray(*MTLBinding) {
         func: #type (obj: *void, selector: *void) -> *NSArray(*MTLBinding) #c_call;
@@ -3531,7 +3531,7 @@ MTLComputePipelineReflection :: struct #type_info_none {
 
 }
 
-MTLComputePipelineDescriptor :: struct #type_info_none {
+MTLComputePipelineDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*!
  @method reset
@@ -3792,7 +3792,7 @@ MTLComputePipelineDescriptor :: struct #type_info_none {
 
 }
 
-MTLVisibleFunctionTableDescriptor :: struct #type_info_none {
+MTLVisibleFunctionTableDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*!
  @method visibleFunctionTableDescriptor
@@ -3822,7 +3822,7 @@ MTLVisibleFunctionTableDescriptor :: struct #type_info_none {
 
 }
 
-MTLRenderPipelineColorAttachmentDescriptor :: struct #type_info_none {
+MTLRenderPipelineColorAttachmentDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*! Pixel format.  Defaults to MTLPixelFormatInvalid */
     pixelFormat :: (self: *MTLRenderPipelineColorAttachmentDescriptor) -> MTLPixelFormat {
@@ -3943,7 +3943,7 @@ MTLRenderPipelineColorAttachmentDescriptor :: struct #type_info_none {
 }
 
 /// Allows you to easily specify color attachment remapping from logical to physical indices.
-MTLLogicalToPhysicalColorAttachmentMap :: struct #type_info_none {
+MTLLogicalToPhysicalColorAttachmentMap :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// Maps a physical color attachment index to a logical index.
 ///
@@ -3971,7 +3971,7 @@ MTLLogicalToPhysicalColorAttachmentMap :: struct #type_info_none {
 
 }
 
-MTLRenderPipelineReflection :: struct #type_info_none {
+MTLRenderPipelineReflection :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
     vertexBindings :: (self: *MTLRenderPipelineReflection) -> *NSArray(*MTLBinding) {
         func: #type (obj: *void, selector: *void) -> *NSArray(*MTLBinding) #c_call;
@@ -4023,7 +4023,7 @@ MTLRenderPipelineReflection :: struct #type_info_none {
 
 }
 
-MTLRenderPipelineDescriptor :: struct #type_info_none {
+MTLRenderPipelineDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*!
  @method reset
@@ -4481,7 +4481,7 @@ MTLRenderPipelineDescriptor :: struct #type_info_none {
 
 }
 
-MTLRenderPipelineFunctionsDescriptor :: struct #type_info_none {
+MTLRenderPipelineFunctionsDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*!
  @property vertexAdditionalBinaryFunctions
@@ -4533,7 +4533,7 @@ MTLRenderPipelineFunctionsDescriptor :: struct #type_info_none {
 
 }
 
-MTLRenderPipelineColorAttachmentDescriptorArray :: struct #type_info_none {
+MTLRenderPipelineColorAttachmentDescriptorArray :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /* Individual attachment state access */
     objectAtIndexedSubscript_ :: (self: *MTLRenderPipelineColorAttachmentDescriptorArray, attachmentIndex: NSUInteger) -> *MTLRenderPipelineColorAttachmentDescriptor {
@@ -4551,7 +4551,7 @@ MTLRenderPipelineColorAttachmentDescriptorArray :: struct #type_info_none {
 
 }
 
-MTLTileRenderPipelineColorAttachmentDescriptor :: struct #type_info_none {
+MTLTileRenderPipelineColorAttachmentDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*! Pixel format.  Defaults to MTLPixelFormatInvalid */
     pixelFormat :: (self: *MTLTileRenderPipelineColorAttachmentDescriptor) -> MTLPixelFormat {
@@ -4568,7 +4568,7 @@ MTLTileRenderPipelineColorAttachmentDescriptor :: struct #type_info_none {
 
 }
 
-MTLTileRenderPipelineColorAttachmentDescriptorArray :: struct #type_info_none {
+MTLTileRenderPipelineColorAttachmentDescriptorArray :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /* Individual tile attachment state access */
     objectAtIndexedSubscript_ :: (self: *MTLTileRenderPipelineColorAttachmentDescriptorArray, attachmentIndex: NSUInteger) -> *MTLTileRenderPipelineColorAttachmentDescriptor {
@@ -4586,7 +4586,7 @@ MTLTileRenderPipelineColorAttachmentDescriptorArray :: struct #type_info_none {
 
 }
 
-MTLTileRenderPipelineDescriptor :: struct #type_info_none {
+MTLTileRenderPipelineDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
     reset :: (self: *MTLTileRenderPipelineDescriptor) -> void {
         func: #type (obj: *void, selector: *void) -> void #c_call;
@@ -4814,7 +4814,7 @@ MTLTileRenderPipelineDescriptor :: struct #type_info_none {
  @class MTLMeshRenderPipelineDescriptor
  @discussion As an alternative to a vertex + fragment shader render pipeline, this render pipeline uses a (object +) mesh + fragment shader for rendering geometry.
  */
-MTLMeshRenderPipelineDescriptor :: struct #type_info_none {
+MTLMeshRenderPipelineDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*!
  @method reset
@@ -5298,7 +5298,7 @@ MTLMeshRenderPipelineDescriptor :: struct #type_info_none {
  @class MTLSamplerDescriptor
  @abstract A mutable descriptor used to configure a sampler.  When complete, this can be used to create an immutable MTLSamplerState.
  */
-MTLSamplerDescriptor :: struct #type_info_none {
+MTLSamplerDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*!
  @property minFilter
@@ -5590,7 +5590,7 @@ MTLSamplerDescriptor :: struct #type_info_none {
  * @brief Base class for acceleration structure descriptors. Do not use this class directly. Use
  * one of the derived classes instead.
  */
-MTLAccelerationStructureDescriptor :: struct #type_info_none {
+MTLAccelerationStructureDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
     usage :: (self: *MTLAccelerationStructureDescriptor) -> MTLAccelerationStructureUsage {
         func: #type (obj: *void, selector: *void) -> MTLAccelerationStructureUsage #c_call;
@@ -5610,7 +5610,7 @@ MTLAccelerationStructureDescriptor :: struct #type_info_none {
  * @brief Base class for all geometry descriptors. Do not use this class directly. Use one of the derived
  * classes instead.
  */
-MTLAccelerationStructureGeometryDescriptor :: struct #type_info_none {
+MTLAccelerationStructureGeometryDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
     intersectionFunctionTableOffset :: (self: *MTLAccelerationStructureGeometryDescriptor) -> NSUInteger {
         func: #type (obj: *void, selector: *void) -> NSUInteger #c_call;
@@ -5737,7 +5737,7 @@ MTLAccelerationStructureGeometryDescriptor :: struct #type_info_none {
 /**
  * @brief Descriptor for a primitive acceleration structure
  */
-MTLPrimitiveAccelerationStructureDescriptor :: struct #type_info_none {
+MTLPrimitiveAccelerationStructureDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
     descriptor :: () -> *MTLPrimitiveAccelerationStructureDescriptor {
         func: #type (obj: *void, selector: *void) -> *MTLPrimitiveAccelerationStructureDescriptor #c_call;
@@ -5843,7 +5843,7 @@ MTLPrimitiveAccelerationStructureDescriptor :: struct #type_info_none {
 /**
  * @brief Descriptor for triangle geometry
  */
-MTLAccelerationStructureTriangleGeometryDescriptor :: struct #type_info_none {
+MTLAccelerationStructureTriangleGeometryDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
     descriptor :: () -> *MTLAccelerationStructureTriangleGeometryDescriptor {
         func: #type (obj: *void, selector: *void) -> *MTLAccelerationStructureTriangleGeometryDescriptor #c_call;
@@ -6028,7 +6028,7 @@ MTLAccelerationStructureTriangleGeometryDescriptor :: struct #type_info_none {
 /**
  * @brief Descriptor for bounding box geometry
  */
-MTLAccelerationStructureBoundingBoxGeometryDescriptor :: struct #type_info_none {
+MTLAccelerationStructureBoundingBoxGeometryDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
     descriptor :: () -> *MTLAccelerationStructureBoundingBoxGeometryDescriptor {
         func: #type (obj: *void, selector: *void) -> *MTLAccelerationStructureBoundingBoxGeometryDescriptor #c_call;
@@ -6103,7 +6103,7 @@ MTLAccelerationStructureBoundingBoxGeometryDescriptor :: struct #type_info_none 
 /**
  * @brief MTLbuffer and description how the data is stored in it.
  */
-MTLMotionKeyframeData :: struct #type_info_none {
+MTLMotionKeyframeData :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
     data :: () -> *MTLMotionKeyframeData {
         func: #type (obj: *void, selector: *void) -> *MTLMotionKeyframeData #c_call;
@@ -6146,7 +6146,7 @@ MTLMotionKeyframeData :: struct #type_info_none {
 /**
  * @brief Descriptor for motion triangle geometry
  */
-MTLAccelerationStructureMotionTriangleGeometryDescriptor :: struct #type_info_none {
+MTLAccelerationStructureMotionTriangleGeometryDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
     descriptor :: () -> *MTLAccelerationStructureMotionTriangleGeometryDescriptor {
         func: #type (obj: *void, selector: *void) -> *MTLAccelerationStructureMotionTriangleGeometryDescriptor #c_call;
@@ -6315,7 +6315,7 @@ MTLAccelerationStructureMotionTriangleGeometryDescriptor :: struct #type_info_no
 /**
  * @brief Descriptor for motion bounding box geometry
  */
-MTLAccelerationStructureMotionBoundingBoxGeometryDescriptor :: struct #type_info_none {
+MTLAccelerationStructureMotionBoundingBoxGeometryDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
     descriptor :: () -> *MTLAccelerationStructureMotionBoundingBoxGeometryDescriptor {
         func: #type (obj: *void, selector: *void) -> *MTLAccelerationStructureMotionBoundingBoxGeometryDescriptor #c_call;
@@ -6375,7 +6375,7 @@ MTLAccelerationStructureMotionBoundingBoxGeometryDescriptor :: struct #type_info
  * @brief Acceleration structure geometry descriptor describing geometry
  * made of curve primitives
  */
-MTLAccelerationStructureCurveGeometryDescriptor :: struct #type_info_none {
+MTLAccelerationStructureCurveGeometryDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
     descriptor :: () -> *MTLAccelerationStructureCurveGeometryDescriptor {
         func: #type (obj: *void, selector: *void) -> *MTLAccelerationStructureCurveGeometryDescriptor #c_call;
@@ -6662,7 +6662,7 @@ MTLAccelerationStructureCurveGeometryDescriptor :: struct #type_info_none {
  * @brief Acceleration structure motion geometry descriptor describing
  * geometry made of curve primitives
  */
-MTLAccelerationStructureMotionCurveGeometryDescriptor :: struct #type_info_none {
+MTLAccelerationStructureMotionCurveGeometryDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
     descriptor :: () -> *MTLAccelerationStructureMotionCurveGeometryDescriptor {
         func: #type (obj: *void, selector: *void) -> *MTLAccelerationStructureMotionCurveGeometryDescriptor #c_call;
@@ -6919,7 +6919,7 @@ MTLAccelerationStructureMotionCurveGeometryDescriptor :: struct #type_info_none 
 /**
  * @brief Descriptor for an instance acceleration structure
  */
-MTLInstanceAccelerationStructureDescriptor :: struct #type_info_none {
+MTLInstanceAccelerationStructureDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
     descriptor :: () -> *MTLInstanceAccelerationStructureDescriptor {
         func: #type (obj: *void, selector: *void) -> *MTLInstanceAccelerationStructureDescriptor #c_call;
@@ -7120,7 +7120,7 @@ MTLInstanceAccelerationStructureDescriptor :: struct #type_info_none {
 /**
  * @brief Descriptor for an instance acceleration structure built with an indirected buffer of instances.
  */
-MTLIndirectInstanceAccelerationStructureDescriptor :: struct #type_info_none {
+MTLIndirectInstanceAccelerationStructureDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
     descriptor :: () -> *MTLIndirectInstanceAccelerationStructureDescriptor {
         func: #type (obj: *void, selector: *void) -> *MTLIndirectInstanceAccelerationStructureDescriptor #c_call;
@@ -7372,7 +7372,7 @@ MTLIndirectInstanceAccelerationStructureDescriptor :: struct #type_info_none {
 /*!
  @class MTLHeapDescriptor
  */
-MTLHeapDescriptor :: struct #type_info_none {
+MTLHeapDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*!
  @property size
@@ -7523,7 +7523,7 @@ MTLHeapDescriptor :: struct #type_info_none {
 }
 
 /// Options to configure a command buffer before encoding work into it.
-MTL4CommandBufferOptions :: struct #type_info_none {
+MTL4CommandBufferOptions :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// Contains information related to shader logging.
 ///
@@ -7549,7 +7549,7 @@ MTL4CommandBufferOptions :: struct #type_info_none {
  @class MTLSharedEventListener
  @abstract This class provides a simple interface for handling the dispatching of MTLSharedEvent notifications from Metal.
 */
-MTLSharedEventListener :: struct #type_info_none {
+MTLSharedEventListener :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 // A shared instance constructed with a standard serial dispatch queue.
 // This instance can be used for short-running notifications without QoS requirements.
@@ -7581,7 +7581,7 @@ MTLSharedEventListener :: struct #type_info_none {
 
 // MTLSharedEventHandle objects may be passed between processes via XPC connections and then used to recreate
 // a MTLSharedEvent via an existing MTLDevice.
-MTLSharedEventHandle :: struct #type_info_none {
+MTLSharedEventHandle :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
     label :: (self: *MTLSharedEventHandle) -> *NSString {
         func: #type (obj: *void, selector: *void) -> *NSString #c_call;
@@ -7597,7 +7597,7 @@ MTLSharedEventHandle :: struct #type_info_none {
 ///
 /// - Note Instances of this class are not thread-safe. If your app modifies a shared commit options instance from
 /// multiple threads simultaneously, you are responsible for providing external synchronization.
-MTL4CommitOptions :: struct #type_info_none {
+MTL4CommitOptions :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// Registers a commit feedback handler that Metal calls with feedback data when available.
 ///
@@ -7611,7 +7611,7 @@ MTL4CommitOptions :: struct #type_info_none {
 }
 
 /// Groups together parameters for the creation of a new command queue.
-MTL4CommandQueueDescriptor :: struct #type_info_none {
+MTL4CommandQueueDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// Assigns an optional label to the command queue instance for debugging purposes.
     label :: (self: *MTL4CommandQueueDescriptor) -> *NSString {
@@ -7646,7 +7646,7 @@ MTL4CommandQueueDescriptor :: struct #type_info_none {
 
 }
 
-MTLCaptureDescriptor :: struct #type_info_none {
+MTLCaptureDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /**
     @brief The object that is captured.
@@ -7700,7 +7700,7 @@ MTLCaptureDescriptor :: struct #type_info_none {
 
 }
 
-MTLCaptureManager :: struct #type_info_none {
+MTLCaptureManager :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /** Retrieves the shared capture manager for this process. There is only one capture manager per process.
     The capture manager allows the user to create capture scopes and trigger captures from code.
@@ -7813,7 +7813,7 @@ MTLCaptureManager :: struct #type_info_none {
  @abstract
  Describes the limits and features that can be used in an indirect command
  */
-MTLIndirectCommandBufferDescriptor :: struct #type_info_none {
+MTLIndirectCommandBufferDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*!
  @abstract
@@ -8120,7 +8120,7 @@ MTLIndirectCommandBufferDescriptor :: struct #type_info_none {
 
 }
 
-MTLAccelerationStructurePassSampleBufferAttachmentDescriptor :: struct #type_info_none {
+MTLAccelerationStructurePassSampleBufferAttachmentDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*!
 @property sampleBuffer
@@ -8186,7 +8186,7 @@ will be taken for that action.
 
 }
 
-MTLAccelerationStructurePassSampleBufferAttachmentDescriptorArray :: struct #type_info_none {
+MTLAccelerationStructurePassSampleBufferAttachmentDescriptorArray :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /* Individual attachment state access */
     objectAtIndexedSubscript_ :: (self: *MTLAccelerationStructurePassSampleBufferAttachmentDescriptorArray, attachmentIndex: NSUInteger) -> *MTLAccelerationStructurePassSampleBufferAttachmentDescriptor {
@@ -8208,7 +8208,7 @@ MTLAccelerationStructurePassSampleBufferAttachmentDescriptorArray :: struct #typ
  @class MTLAccelerationStructurePassDescriptor
  @abstract MTLAccelerationStructurePassDescriptor represents a collection of attachments to be used to create a concrete acceleration structure encoder.
  */
-MTLAccelerationStructurePassDescriptor :: struct #type_info_none {
+MTLAccelerationStructurePassDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*!
  @method accelerationStructurePassDescriptor
@@ -8236,7 +8236,7 @@ MTLAccelerationStructurePassDescriptor :: struct #type_info_none {
  @interface MTLRasterizationRateSampleArray
  @abstract A helper object for convient access to samples stored in an array.
  */
-MTLRasterizationRateSampleArray :: struct #type_info_none {
+MTLRasterizationRateSampleArray :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*!
  @method objectAtIndexedSubscript:
@@ -8273,7 +8273,7 @@ MTLRasterizationRateSampleArray :: struct #type_info_none {
  MTLRasterizationRateLayerDescriptor instances will be stored inside a MTLRasterizationRateMapDescriptor which in turn is compiled by MTLDevice into a MTLRasterizationRateMap.
  Because MTLDevice may not support the requested granularity, the provided samples may be rounded up (towards higher quality) during compilation.
  */
-MTLRasterizationRateLayerDescriptor :: struct #type_info_none {
+MTLRasterizationRateLayerDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*!
  @method init
@@ -8383,7 +8383,7 @@ MTLRasterizationRateLayerDescriptor :: struct #type_info_none {
  @interface MTLRasterizationRateLayerArray
  @abstract Mutable array of MTLRasterizationRateLayerDescriptor
  */
-MTLRasterizationRateLayerArray :: struct #type_info_none {
+MTLRasterizationRateLayerArray :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*!
  @method objectAtIndexedSubscript:
@@ -8414,7 +8414,7 @@ MTLRasterizationRateLayerArray :: struct #type_info_none {
  @abstract Describes a MTLRasterizationRateMap containing an arbitrary number of MTLRasterizationRateLayerDescriptor instances.
  @discussion An MTLRasterizationRateMapDescriptor is compiled into an MTLRasterizationRateMap using MTLDevice.
  */
-MTLRasterizationRateMapDescriptor :: struct #type_info_none {
+MTLRasterizationRateMapDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*!
  @method rasterizationRateMapDescriptorWithScreenSize:
@@ -8541,7 +8541,7 @@ MTLRasterizationRateMapDescriptor :: struct #type_info_none {
 
 }
 
-MTLLogStateDescriptor :: struct #type_info_none {
+MTLLogStateDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*!
 @abstract level indicates the minimum level of the logs that will be printed.
@@ -8580,7 +8580,7 @@ MTLLogStateDescriptor :: struct #type_info_none {
  @class MTLBinaryArchiveDescriptor
  @abstract A class used to indicate how an archive should be created
  */
-MTLBinaryArchiveDescriptor :: struct #type_info_none {
+MTLBinaryArchiveDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*!
  @property url
@@ -8600,7 +8600,7 @@ MTLBinaryArchiveDescriptor :: struct #type_info_none {
 
 }
 
-MTLIntersectionFunctionTableDescriptor :: struct #type_info_none {
+MTLIntersectionFunctionTableDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*!
  @method intersectionFunctionTableDescriptor
@@ -8634,7 +8634,7 @@ MTLIntersectionFunctionTableDescriptor :: struct #type_info_none {
  @interface MTLFunctionStitchingAttributeAlwaysInline
  @abstract Applies the `__attribute__((always_inline))` attribute to the produced stitched function.
  */
-MTLFunctionStitchingAttributeAlwaysInline :: struct #type_info_none {
+MTLFunctionStitchingAttributeAlwaysInline :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 }
 
@@ -8642,7 +8642,7 @@ MTLFunctionStitchingAttributeAlwaysInline :: struct #type_info_none {
  @interface MTLFunctionStitchingInputNode
  @abstract An indexed input node of the produced stitched function.
  */
-MTLFunctionStitchingInputNode :: struct #type_info_none {
+MTLFunctionStitchingInputNode :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
     initWithArgumentIndex_ :: (self: *MTLFunctionStitchingInputNode, argument: NSUInteger) -> *MTLFunctionStitchingInputNode {
         func: #type (obj: *void, selector: *void, argument: NSUInteger) -> *MTLFunctionStitchingInputNode #c_call;
@@ -8668,7 +8668,7 @@ MTLFunctionStitchingInputNode :: struct #type_info_none {
  @interface MTLFunctionStitchingFunctionNode
  @abstract A function node that calls the specified function with arguments and ordering determined by data and control dependencies.
  */
-MTLFunctionStitchingFunctionNode :: struct #type_info_none {
+MTLFunctionStitchingFunctionNode :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
     initWithName_arguments_controlDependencies_ :: (self: *MTLFunctionStitchingFunctionNode, name: *NSString, arguments: *NSArray(*MTLFunctionStitchingNode), controlDependencies: *NSArray(*MTLFunctionStitchingFunctionNode)) -> *MTLFunctionStitchingFunctionNode {
         func: #type (obj: *void, selector: *void, name: *NSString, arguments: *NSArray(*MTLFunctionStitchingNode), controlDependencies: *NSArray(*MTLFunctionStitchingFunctionNode)) -> *MTLFunctionStitchingFunctionNode #c_call;
@@ -8719,7 +8719,7 @@ MTLFunctionStitchingFunctionNode :: struct #type_info_none {
  @abstract A function graph that describes a directed acyclic graph.
  @discussion The return value of the output node will be used as the return value for the final stitched graph.
  */
-MTLFunctionStitchingGraph :: struct #type_info_none {
+MTLFunctionStitchingGraph :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
     initWithFunctionName_nodes_outputNode_attributes_ :: (self: *MTLFunctionStitchingGraph, functionName: *NSString, nodes: *NSArray(*MTLFunctionStitchingFunctionNode), outputNode: *MTLFunctionStitchingFunctionNode, attributes: *NSArray(*MTLFunctionStitchingAttribute)) -> *MTLFunctionStitchingGraph {
         func: #type (obj: *void, selector: *void, functionName: *NSString, nodes: *NSArray(*MTLFunctionStitchingFunctionNode), outputNode: *MTLFunctionStitchingFunctionNode, attributes: *NSArray(*MTLFunctionStitchingAttribute)) -> *MTLFunctionStitchingGraph #c_call;
@@ -8781,7 +8781,7 @@ MTLFunctionStitchingGraph :: struct #type_info_none {
  @interface MTLStitchedLibraryDescriptor
  @abstract A container for the graphs and functions needed to create the stitched functions described by the graphs.
  */
-MTLStitchedLibraryDescriptor :: struct #type_info_none {
+MTLStitchedLibraryDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
     functionGraphs :: (self: *MTLStitchedLibraryDescriptor) -> *NSArray(*MTLFunctionStitchingGraph) {
         func: #type (obj: *void, selector: *void) -> *NSArray(*MTLFunctionStitchingGraph) #c_call;
@@ -8846,7 +8846,7 @@ MTLStitchedLibraryDescriptor :: struct #type_info_none {
  @interface MTLIOCommandQueueDescriptor
  @abstract Represents a descriptor to create a MTLIOCommandQueue.
  */
-MTLIOCommandQueueDescriptor :: struct #type_info_none {
+MTLIOCommandQueueDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*!
  @property maxCommandBufferCount
@@ -8938,7 +8938,7 @@ MTLIOCommandQueueDescriptor :: struct #type_info_none {
  @interface MTLResidencySetDescriptor
  @abstract Specifies the parameters for MTLResidencySet creation.
  */
-MTLResidencySetDescriptor :: struct #type_info_none {
+MTLResidencySetDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /*!
  @property label
@@ -8975,7 +8975,7 @@ MTLResidencySetDescriptor :: struct #type_info_none {
 }
 
 /// Provides parameters for creating a resource view pool.
-MTLResourceViewPoolDescriptor :: struct #type_info_none {
+MTLResourceViewPoolDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// Configures the number of resource views with which Metal creates the resource view pool.
     resourceViewCount :: (self: *MTLResourceViewPoolDescriptor) -> NSUInteger {
@@ -9008,7 +9008,7 @@ MTLResourceViewPoolDescriptor :: struct #type_info_none {
 /// Groups parameters for the creation of a Metal argument table.
 ///
 /// Argument tables provide resource bindings to your Metal pipeline states.
-MTL4ArgumentTableDescriptor :: struct #type_info_none {
+MTL4ArgumentTableDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// Determines the number of buffer-binding slots for the argument table.
 ///
@@ -9104,7 +9104,7 @@ MTL4ArgumentTableDescriptor :: struct #type_info_none {
 }
 
 /// Groups together parameters for creating a command allocator.
-MTL4CommandAllocatorDescriptor :: struct #type_info_none {
+MTL4CommandAllocatorDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// An optional label you can assign to the command allocator to aid debugging.
     label :: (self: *MTL4CommandAllocatorDescriptor) -> *NSString {
@@ -9130,7 +9130,7 @@ MTL4CommandAllocatorDescriptor :: struct #type_info_none {
 /// The ``MTL4CommandBuffer/renderCommandEncoderWithDescriptor:options:`` variant of this method allows you to specify
 /// additional options to encode a render pass in parallel from multiple CPU cores by creating *suspending* and *resuming*
 /// render passes.
-MTL4RenderPassDescriptor :: struct #type_info_none {
+MTL4RenderPassDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// Configures the custom sample positions to use in MSAA rendering.
 ///
@@ -9383,14 +9383,14 @@ MTL4RenderPassDescriptor :: struct #type_info_none {
 /// Base class for Metal 4 acceleration structure descriptors.
 ///
 /// Don't use this class directly. Use one of its subclasses instead.
-MTL4AccelerationStructureDescriptor :: struct #type_info_none {
+MTL4AccelerationStructureDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 }
 
 /// Base class for all Metal 4 acceleration structure geometry descriptors.
 ///
 /// Don't use this class directly. Use one of the derived classes instead.
-MTL4AccelerationStructureGeometryDescriptor :: struct #type_info_none {
+MTL4AccelerationStructureGeometryDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// Sets the offset that this geometry contributes to determining the intersection function to invoke when a ray intersects it.
 ///
@@ -9513,7 +9513,7 @@ MTL4AccelerationStructureGeometryDescriptor :: struct #type_info_none {
 
 /// Descriptor for a primitive acceleration structure that directly references geometric shapes, such as triangles and
 /// bounding boxes.
-MTL4PrimitiveAccelerationStructureDescriptor :: struct #type_info_none {
+MTL4PrimitiveAccelerationStructureDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// Associates the array of geometry descriptors that comprise this primitive acceleration structure.
 ///
@@ -9621,7 +9621,7 @@ MTL4PrimitiveAccelerationStructureDescriptor :: struct #type_info_none {
 ///
 /// Use a ``MTLResidencySet`` to mark residency of all buffers this descriptor references when you build this
 /// acceleration structure.
-MTL4AccelerationStructureTriangleGeometryDescriptor :: struct #type_info_none {
+MTL4AccelerationStructureTriangleGeometryDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// Associates a vertex buffer containing triangle vertices.
 ///
@@ -9761,7 +9761,7 @@ MTL4AccelerationStructureTriangleGeometryDescriptor :: struct #type_info_none {
 ///
 /// Use a ``MTLResidencySet`` to mark residency of all buffers this descriptor references when you build this
 /// acceleration structure.
-MTL4AccelerationStructureBoundingBoxGeometryDescriptor :: struct #type_info_none {
+MTL4AccelerationStructureBoundingBoxGeometryDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// References a buffer containing bounding box data in `MTLAxisAlignedBoundingBoxes` format.
 ///
@@ -9814,7 +9814,7 @@ MTL4AccelerationStructureBoundingBoxGeometryDescriptor :: struct #type_info_none
 ///
 /// Use a ``MTLResidencySet`` to mark residency of all buffers this descriptor references when you build this
 /// acceleration structure.
-MTL4AccelerationStructureMotionTriangleGeometryDescriptor :: struct #type_info_none {
+MTL4AccelerationStructureMotionTriangleGeometryDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// Assigns a buffer where each entry contains a reference to a vertex buffer.
 ///
@@ -9963,7 +9963,7 @@ MTL4AccelerationStructureMotionTriangleGeometryDescriptor :: struct #type_info_n
 ///
 /// Use a ``MTLResidencySet`` to mark residency of all buffers this descriptor references when you build this
 /// acceleration structure.
-MTL4AccelerationStructureMotionBoundingBoxGeometryDescriptor :: struct #type_info_none {
+MTL4AccelerationStructureMotionBoundingBoxGeometryDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// Configures a reference to a buffer where each entry contains a reference to a buffer of bounding boxes.
 ///
@@ -10026,7 +10026,7 @@ MTL4AccelerationStructureMotionBoundingBoxGeometryDescriptor :: struct #type_inf
 ///
 /// Use a ``MTLResidencySet`` to mark residency of all buffers this descriptor references when you build this
 /// acceleration structure.
-MTL4AccelerationStructureCurveGeometryDescriptor :: struct #type_info_none {
+MTL4AccelerationStructureCurveGeometryDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// References a buffer containing curve control points.
 ///
@@ -10250,7 +10250,7 @@ MTL4AccelerationStructureCurveGeometryDescriptor :: struct #type_info_none {
 ///
 /// Use a ``MTLResidencySet`` to mark residency of all buffers this descriptor references when you build this
 /// acceleration structure.
-MTL4AccelerationStructureMotionCurveGeometryDescriptor :: struct #type_info_none {
+MTL4AccelerationStructureMotionCurveGeometryDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// Assigns a reference to a buffer where each entry contains a reference to a buffer of control points.
 ///
@@ -10497,7 +10497,7 @@ MTL4AccelerationStructureMotionCurveGeometryDescriptor :: struct #type_info_none
 ///
 /// Use a ``MTLResidencySet`` to mark residency of all buffers and acceleration structures this descriptor references
 /// when you build this acceleration structure.
-MTL4InstanceAccelerationStructureDescriptor :: struct #type_info_none {
+MTL4InstanceAccelerationStructureDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// Assigns a reference to a buffer containing instance descriptors for acceleration structures to reference.
 ///
@@ -10667,7 +10667,7 @@ MTL4InstanceAccelerationStructureDescriptor :: struct #type_info_none {
 ///
 /// Use a ``MTLResidencySet`` to mark residency of all buffers and acceleration structures this descriptor references
 /// when you build this acceleration structure.
-MTL4IndirectInstanceAccelerationStructureDescriptor :: struct #type_info_none {
+MTL4IndirectInstanceAccelerationStructureDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// Assigns a reference to a buffer containing instance descriptors for acceleration structures to reference.
 ///
@@ -10860,7 +10860,7 @@ MTL4IndirectInstanceAccelerationStructureDescriptor :: struct #type_info_none {
 }
 
 /// Serves as the base descriptor for creating a Metal library.
-MTL4LibraryDescriptor :: struct #type_info_none {
+MTL4LibraryDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// Assigns an optional string containing the source code of the shader language program to compile into a
 /// Metal library.
@@ -10905,12 +10905,12 @@ MTL4LibraryDescriptor :: struct #type_info_none {
 }
 
 /// Base interface for describing a Metal 4 shader function.
-MTL4FunctionDescriptor :: struct #type_info_none {
+MTL4FunctionDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 }
 
 /// Describes a shader function from a Metal library.
-MTL4LibraryFunctionDescriptor :: struct #type_info_none {
+MTL4LibraryFunctionDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// Assigns a name to the function.
     name :: (self: *MTL4LibraryFunctionDescriptor) -> *NSString {
@@ -10944,7 +10944,7 @@ MTL4LibraryFunctionDescriptor :: struct #type_info_none {
 ///
 /// You can pass an instance of this class to any methods that accept a ``MTL4FunctionDescriptor`` parameter to
 /// provide extra configuration, such as function constants or a name.
-MTL4SpecializedFunctionDescriptor :: struct #type_info_none {
+MTL4SpecializedFunctionDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// Provides a descriptor that corresponds to a base function that the specialization applies to.
     functionDescriptor :: (self: *MTL4SpecializedFunctionDescriptor) -> *MTL4FunctionDescriptor {
@@ -10988,7 +10988,7 @@ MTL4SpecializedFunctionDescriptor :: struct #type_info_none {
 }
 
 /// Groups together properties that describe a shader function suitable for stitching.
-MTL4StitchedFunctionDescriptor :: struct #type_info_none {
+MTL4StitchedFunctionDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// Sets the graph representing how to stitch functions together.
     functionGraph :: (self: *MTL4StitchedFunctionDescriptor) -> *MTLFunctionStitchingGraph {
@@ -11021,7 +11021,7 @@ MTL4StitchedFunctionDescriptor :: struct #type_info_none {
 /// Provides options controlling how to compile a pipeline state.
 ///
 /// You provide these options through the ``MTL4PipelineDescriptor`` class at compilation time.
-MTL4PipelineOptions :: struct #type_info_none {
+MTL4PipelineOptions :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// Controls whether to enable or disable Metal Shader Validation for the pipeline.
     shaderValidation :: (self: *MTL4PipelineOptions) -> MTLShaderValidation {
@@ -11052,7 +11052,7 @@ MTL4PipelineOptions :: struct #type_info_none {
 }
 
 /// Base type for descriptors you use for building pipeline state objects.
-MTL4PipelineDescriptor :: struct #type_info_none {
+MTL4PipelineDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// Assigns an optional string that uniquely identifies a pipeline descriptor.
 ///
@@ -11085,7 +11085,7 @@ MTL4PipelineDescriptor :: struct #type_info_none {
 }
 
 /// Describes a compute pipeline state.
-MTL4ComputePipelineDescriptor :: struct #type_info_none {
+MTL4ComputePipelineDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// Resets the descriptor to its default values.
     reset :: (self: *MTL4ComputePipelineDescriptor) -> void {
@@ -11201,7 +11201,7 @@ MTL4ComputePipelineDescriptor :: struct #type_info_none {
 }
 
 // Groups together properties of a color attachment for a ``MTL4RenderPipeline``.
-MTL4RenderPipelineColorAttachmentDescriptor :: struct #type_info_none {
+MTL4RenderPipelineColorAttachmentDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// Resets this descriptor to its default state.
     reset :: (self: *MTL4RenderPipelineColorAttachmentDescriptor) -> void {
@@ -11348,7 +11348,7 @@ MTL4RenderPipelineColorAttachmentDescriptor :: struct #type_info_none {
 }
 
 /// An array of color attachment descriptions for a render pipeline.
-MTL4RenderPipelineColorAttachmentDescriptorArray :: struct #type_info_none {
+MTL4RenderPipelineColorAttachmentDescriptorArray :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// Accesses a color attachment at a specific index.
 ///
@@ -11385,7 +11385,7 @@ MTL4RenderPipelineColorAttachmentDescriptorArray :: struct #type_info_none {
 }
 
 /// Allows you to specify additional binary functions to link to each stage of a render pipeline.
-MTL4RenderPipelineBinaryFunctionsDescriptor :: struct #type_info_none {
+MTL4RenderPipelineBinaryFunctionsDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// Resets this descriptor to its default state.
     reset :: (self: *MTL4RenderPipelineBinaryFunctionsDescriptor) -> void {
@@ -11465,7 +11465,7 @@ MTL4RenderPipelineBinaryFunctionsDescriptor :: struct #type_info_none {
 ///
 /// Compared to ``MTLRenderPipelineDescriptor``, this interface doesn't offer a mechanism to hint to Metal mutability of
 /// vertex and fragment buffers. Additionally, using this descriptor, you don't specify binary archives.
-MTL4RenderPipelineDescriptor :: struct #type_info_none {
+MTL4RenderPipelineDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// Resets this descriptor to its default state.
     reset :: (self: *MTL4RenderPipelineDescriptor) -> void {
@@ -11696,7 +11696,7 @@ MTL4RenderPipelineDescriptor :: struct #type_info_none {
 }
 
 /// Description for a machine learning pipeline state.
-MTL4MachineLearningPipelineDescriptor :: struct #type_info_none {
+MTL4MachineLearningPipelineDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// Sets the dimension of an input tensor at a buffer index.
 ///
@@ -11772,7 +11772,7 @@ MTL4MachineLearningPipelineDescriptor :: struct #type_info_none {
 }
 
 /// Represents reflection information for a machine learning pipeline state.
-MTL4MachineLearningPipelineReflection :: struct #type_info_none {
+MTL4MachineLearningPipelineReflection :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// Describes every input and output of the pipeline.
     bindings :: (self: *MTL4MachineLearningPipelineReflection) -> *NSArray(*MTLBinding) {
@@ -11784,7 +11784,7 @@ MTL4MachineLearningPipelineReflection :: struct #type_info_none {
 }
 
 /// Groups together properties you use to create a tile render pipeline state object.
-MTL4TileRenderPipelineDescriptor :: struct #type_info_none {
+MTL4TileRenderPipelineDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// Resets the descriptor to the default state.
     reset :: (self: *MTL4TileRenderPipelineDescriptor) -> void {
@@ -11907,7 +11907,7 @@ MTL4TileRenderPipelineDescriptor :: struct #type_info_none {
 ///
 /// Compared to ``MTLMeshRenderPipelineDescriptor``, this interface doesn't offer a mechanism to hint to Metal mutability
 /// of object, mesh, or fragment buffers. Additionally, when you use this descriptor, you don't specify binary archives.
-MTL4MeshRenderPipelineDescriptor :: struct #type_info_none {
+MTL4MeshRenderPipelineDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// Resets this descriptor to its default state.
     reset :: (self: *MTL4MeshRenderPipelineDescriptor) -> void {
@@ -12353,7 +12353,7 @@ MTL4MeshRenderPipelineDescriptor :: struct #type_info_none {
 }
 
 /// Groups together properties to create a pipeline data set serializer.
-MTL4PipelineDataSetSerializerDescriptor :: struct #type_info_none {
+MTL4PipelineDataSetSerializerDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// Specifies the configuration of the serialization process.
 ///
@@ -12379,7 +12379,7 @@ MTL4PipelineDataSetSerializerDescriptor :: struct #type_info_none {
 }
 
 /// Base interface for other function-derived interfaces.
-MTL4BinaryFunctionDescriptor :: struct #type_info_none {
+MTL4BinaryFunctionDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// Associates a string that uniquely identifies a binary function.
 ///
@@ -12425,7 +12425,7 @@ MTL4BinaryFunctionDescriptor :: struct #type_info_none {
 }
 
 /// Groups together properties to drive a static linking process.
-MTL4StaticLinkingDescriptor :: struct #type_info_none {
+MTL4StaticLinkingDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// Provides an array of functions to link at the Metal IR level.
     functionDescriptors :: (self: *MTL4StaticLinkingDescriptor) -> *NSArray(*MTL4FunctionDescriptor) {
@@ -12474,7 +12474,7 @@ MTL4StaticLinkingDescriptor :: struct #type_info_none {
 }
 
 /// Groups together properties to drive the dynamic linking process of a pipeline stage.
-MTL4PipelineStageDynamicLinkingDescriptor :: struct #type_info_none {
+MTL4PipelineStageDynamicLinkingDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// Limits the maximum depth of the call stack for indirect function calls in the pipeline stage function.
     maxCallStackDepth :: (self: *MTL4PipelineStageDynamicLinkingDescriptor) -> NSUInteger {
@@ -12521,7 +12521,7 @@ MTL4PipelineStageDynamicLinkingDescriptor :: struct #type_info_none {
 }
 
 /// Groups together properties that provide linking properties for render pipelines.
-MTL4RenderPipelineDynamicLinkingDescriptor :: struct #type_info_none {
+MTL4RenderPipelineDynamicLinkingDescriptor :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /// Controls properties for linking the vertex stage of the render pipeline.
     vertexLinkingDescriptor :: (self: *MTL4RenderPipelineDynamicLinkingDescriptor) -> *MTL4PipelineStageDynamicLinkingDescriptor {
@@ -12560,7 +12560,7 @@ MTL4RenderPipelineDynamicLinkingDescriptor :: struct #type_info_none {
 
 }
 
-CAMetalLayer :: struct #type_info_none {
+CAMetalLayer :: struct #type_info_no_size_complaint {
     nsobject: *NSObject;
 /* Get the swap queue's next available drawable. Always blocks until a drawable
  * is available. Can return nil under the following conditions:

@@ -2,7 +2,7 @@
  @protocol MTLCommandEncoder
  @abstract MTLCommandEncoder is the common interface for objects that write commands into MTLCommandBuffers.
  */
-MTLCommandEncoder :: struct #type_info_none {
+MTLCommandEncoder :: struct #type_info_no_size_complaint {
 /*!
  @method endEncoding
  @abstract Declare that all command generation from this encoder is complete, and detach from the MTLCommandBuffer.
@@ -103,7 +103,7 @@ MTLCommandEncoder :: struct #type_info_none {
 /// ``MTLResidencySet/addAllocation:`` to add a Metal resource allocation to a residency set.
 ///
 /// <doc:simplifying-gpu-resource-management-with-residency-sets.md>
-MTLAllocation :: struct #type_info_none {
+MTLAllocation :: struct #type_info_no_size_complaint {
     allocatedSize :: (self: *MTLAllocation) -> NSUInteger {
         func: #type (obj: *void, selector: *void) -> NSUInteger #c_call;
         func = xx objc_msgSend;
@@ -116,7 +116,7 @@ MTLAllocation :: struct #type_info_none {
  @protocol MTLResource
  @abstract Common APIs available for MTLBuffer and MTLTexture instances
  */
-MTLResource :: struct #type_info_none {
+MTLResource :: struct #type_info_no_size_complaint {
 /*!
  @method setPurgeableState
  @abstract Set (or query) the purgeability state of a resource
@@ -270,7 +270,7 @@ MTLResource :: struct #type_info_none {
 }
 
 /// A resource representing a multi-dimensional array that you can use with machine learning workloads.
-MTLTensor :: struct #type_info_none {
+MTLTensor :: struct #type_info_no_size_complaint {
 /// Replaces the contents of a slice of this tensor with data you provide.
 ///
 /// - Parameters:
@@ -366,7 +366,7 @@ MTLTensor :: struct #type_info_none {
  The contents become undefined if both the CPU and GPU write to the same buffer without a synchronizing action between those writes.
  This is true even when the regions written do not overlap.
  */
-MTLBuffer :: struct #type_info_none {
+MTLBuffer :: struct #type_info_no_size_complaint {
 /*!
  @method contents
  @abstract Returns the data pointer of this buffer's shared copy.
@@ -510,7 +510,7 @@ MTLBuffer :: struct #type_info_none {
  
  Most APIs that operate on individual images in a texture address those images via a tuple of a Slice, and Mipmap Level within that slice.
  */
-MTLTexture :: struct #type_info_none {
+MTLTexture :: struct #type_info_no_size_complaint {
 /*!
  @method getBytes:bytesPerRow:bytesPerImage:fromRegion:mipmapLevel:slice:
  @abstract Copies a block of pixels from a texture slice into the application's memory.
@@ -899,7 +899,7 @@ MTLTexture :: struct #type_info_none {
 
 }
 
-MTLBinding :: struct #type_info_none {
+MTLBinding :: struct #type_info_no_size_complaint {
     name :: (self: *MTLBinding) -> *NSString {
         func: #type (obj: *void, selector: *void) -> *NSString #c_call;
         func = xx objc_msgSend;
@@ -938,7 +938,7 @@ MTLBinding :: struct #type_info_none {
 
 }
 
-MTLBufferBinding :: struct #type_info_none {
+MTLBufferBinding :: struct #type_info_no_size_complaint {
 // min alignment of starting offset in the buffer
     bufferAlignment :: (self: *MTLBufferBinding) -> NSUInteger {
         func: #type (obj: *void, selector: *void) -> NSUInteger #c_call;
@@ -974,7 +974,7 @@ MTLBufferBinding :: struct #type_info_none {
 
 }
 
-MTLThreadgroupBinding :: struct #type_info_none {
+MTLThreadgroupBinding :: struct #type_info_no_size_complaint {
     threadgroupMemoryAlignment :: (self: *MTLThreadgroupBinding) -> NSUInteger {
         func: #type (obj: *void, selector: *void) -> NSUInteger #c_call;
         func = xx objc_msgSend;
@@ -990,7 +990,7 @@ MTLThreadgroupBinding :: struct #type_info_none {
 
 }
 
-MTLTextureBinding :: struct #type_info_none {
+MTLTextureBinding :: struct #type_info_no_size_complaint {
 // texture1D, texture2D...
     textureType :: (self: *MTLTextureBinding) -> MTLTextureType {
         func: #type (obj: *void, selector: *void) -> MTLTextureType #c_call;
@@ -1019,7 +1019,7 @@ MTLTextureBinding :: struct #type_info_none {
 
 }
 
-MTLObjectPayloadBinding :: struct #type_info_none {
+MTLObjectPayloadBinding :: struct #type_info_no_size_complaint {
 // min alignment of starting offset in the buffer
     objectPayloadAlignment :: (self: *MTLObjectPayloadBinding) -> NSUInteger {
         func: #type (obj: *void, selector: *void) -> NSUInteger #c_call;
@@ -1037,7 +1037,7 @@ MTLObjectPayloadBinding :: struct #type_info_none {
 }
 
 /// An object that represents a tensor bound to a graphics or compute function or a machine learning function.
-MTLTensorBinding :: struct #type_info_none {
+MTLTensorBinding :: struct #type_info_no_size_complaint {
 /// The underlying data format of this tensor.
     tensorDataType :: (self: *MTLTensorBinding) -> MTLTensorDataType {
         func: #type (obj: *void, selector: *void) -> MTLTensorDataType #c_call;
@@ -1069,7 +1069,7 @@ MTLTensorBinding :: struct #type_info_none {
  @abstract A handle to intermediate code used as inputs for either a MTLComputePipelineState or a MTLRenderPipelineState.
  @discussion MTLFunction is a single vertex shader, fragment shader, or compute function.  A Function can only be used with the device that it was created against.
 */
-MTLFunction :: struct #type_info_none {
+MTLFunction :: struct #type_info_no_size_complaint {
 /*!
  * @method newArgumentEncoderWithBufferIndex:
  * @abstract Creates an argument encoder which will encode arguments matching the layout of the argument buffer at the given bind point index.
@@ -1195,7 +1195,7 @@ MTLFunction :: struct #type_info_none {
 
 }
 
-MTLLibrary :: struct #type_info_none {
+MTLLibrary :: struct #type_info_no_size_complaint {
 /*!
  @method newFunctionWithName
  @abstract Returns a pointer to a function object, return nil if the function is not found in the library.
@@ -1363,7 +1363,7 @@ MTLLibrary :: struct #type_info_none {
  @protocol MTLCounter
  @abstract A descriptor for a single counter.
  */
-MTLCounter :: struct #type_info_none {
+MTLCounter :: struct #type_info_no_size_complaint {
     name :: (self: *MTLCounter) -> *NSString {
         func: #type (obj: *void, selector: *void) -> *NSString #c_call;
         func = xx objc_msgSend;
@@ -1377,7 +1377,7 @@ MTLCounter :: struct #type_info_none {
  @abstract A collection of MTLCounters that the device can capture in
  a single pass.
  */
-MTLCounterSet :: struct #type_info_none {
+MTLCounterSet :: struct #type_info_no_size_complaint {
 /*!
  @property name The name of the counter set.
  */
@@ -1408,7 +1408,7 @@ MTLCounterSet :: struct #type_info_none {
  @abstract The Counter Sample Buffer contains opaque counter samples as well
  as state needed to request a sample from the API.
  */
-MTLCounterSampleBuffer :: struct #type_info_none {
+MTLCounterSampleBuffer :: struct #type_info_no_size_complaint {
 /*!
  @method resolveCounterRange:
  @abstract Resolve the counters from the sample buffer to an NSData containing
@@ -1457,7 +1457,7 @@ MTLCounterSampleBuffer :: struct #type_info_none {
 }
 
 /// A reference to an asynchronous compilation task that you initiate from a compiler instance.
-MTL4CompilerTask :: struct #type_info_none {
+MTL4CompilerTask :: struct #type_info_no_size_complaint {
 /// Waits synchronously for this compile task to complete by blocking the calling thread.
     waitUntilCompleted :: (self: *MTL4CompilerTask) -> void {
         func: #type (obj: *void, selector: *void) -> void #c_call;
@@ -1484,7 +1484,7 @@ MTL4CompilerTask :: struct #type_info_none {
 }
 
 /// A abstraction for a pipeline state and shader function compiler.
-MTL4Compiler :: struct #type_info_none {
+MTL4Compiler :: struct #type_info_no_size_complaint {
 /// Creates a new Metal library synchronously.
 ///
 /// - Parameters:
@@ -1837,7 +1837,7 @@ MTL4Compiler :: struct #type_info_none {
 /// Represents an opaque, driver-controlled section of memory that can store GPU counter data.
 ///
 /// The data instances that this type stores correspond to the ``MTL4CounterHeapType`` heap type that you assign at creation time.
-MTL4CounterHeap :: struct #type_info_none {
+MTL4CounterHeap :: struct #type_info_no_size_complaint {
 /// Resolves heap data on the CPU timeline.
 ///
 /// This method resolves heap data in the CPU timeline. Your app needs to ensure the GPU work has completed in order to
@@ -1902,7 +1902,7 @@ MTL4CounterHeap :: struct #type_info_none {
  @protocol MTLDevice
  @abstract MTLDevice represents a processor capable of data parallel computations
  */
-MTLDevice :: struct #type_info_none {
+MTLDevice :: struct #type_info_no_size_complaint {
 /*!
  @method newLogStateWithDescriptor
  @abstract This method will create a new MTLLogState.
@@ -3400,7 +3400,7 @@ MTLDevice :: struct #type_info_none {
 
 }
 
-MTLFence :: struct #type_info_none {
+MTLFence :: struct #type_info_no_size_complaint {
     device :: (self: *MTLFence) -> *MTLDevice {
         func: #type (obj: *void, selector: *void) -> *MTLDevice #c_call;
         func = xx objc_msgSend;
@@ -3425,7 +3425,7 @@ MTLFence :: struct #type_info_none {
 
 }
 
-MTLResourceStateCommandEncoder :: struct #type_info_none {
+MTLResourceStateCommandEncoder :: struct #type_info_no_size_complaint {
 /*!
  @method updateTextureMappings:regions:mipLevels:slices:numRegions:mode:
  @abstract Updates multiple regions within a sparse texture.
@@ -3503,7 +3503,7 @@ MTLResourceStateCommandEncoder :: struct #type_info_none {
  @protocol MTLBlitCommandEncoder
  @abstract A command encoder that performs basic copies and blits between buffers and textures.
  */
-MTLBlitCommandEncoder :: struct #type_info_none {
+MTLBlitCommandEncoder :: struct #type_info_no_size_complaint {
 /*!
  @method synchronizeResource:
  @abstract Flush any copy of this resource from the device's caches, and invalidate any CPU caches if needed.
@@ -3825,7 +3825,7 @@ MTLBlitCommandEncoder :: struct #type_info_none {
 /*!
  @abstract Provides execution status information for a Metal command encoder.
  */
-MTLCommandBufferEncoderInfo :: struct #type_info_none {
+MTLCommandBufferEncoderInfo :: struct #type_info_no_size_complaint {
 /*!
  @abstract The debug label given to the associated Metal command encoder at command buffer submission.
 */
@@ -3859,7 +3859,7 @@ MTLCommandBufferEncoderInfo :: struct #type_info_none {
  @protocol MTLCommandBuffer
  @abstract A serial list of commands for the device to execute.
  */
-MTLCommandBuffer :: struct #type_info_none {
+MTLCommandBuffer :: struct #type_info_no_size_complaint {
 /*!
  @method enqueue
  @abstract Append this command buffer to the end of its MTLCommandQueue.
@@ -4236,7 +4236,7 @@ MTLCommandBuffer :: struct #type_info_none {
  @protocol MTLComputeCommandEncoder
  @abstract A command encoder that writes data parallel compute commands.
  */
-MTLComputeCommandEncoder :: struct #type_info_none {
+MTLComputeCommandEncoder :: struct #type_info_no_size_complaint {
 /*!
  @method setComputePipelineState:
  @abstract Set the compute pipeline state that will be used.
@@ -4676,7 +4676,7 @@ MTLComputeCommandEncoder :: struct #type_info_none {
  @protocol MTLCommandQueue
  @brief A serial queue of command buffers to be executed by the device.
  */
-MTLCommandQueue :: struct #type_info_none {
+MTLCommandQueue :: struct #type_info_no_size_complaint {
 /*! 
  @method commandBuffer
  @abstract Returns a new autoreleased command buffer used to encode work into this queue that 
@@ -4783,7 +4783,7 @@ MTLCommandQueue :: struct #type_info_none {
 }
 
 /* Device-specific compiled depth/stencil state object */
-MTLDepthStencilState :: struct #type_info_none {
+MTLDepthStencilState :: struct #type_info_no_size_complaint {
 /*!
  @property label
  @abstract A string to help identify this object.
@@ -4820,7 +4820,7 @@ MTLDepthStencilState :: struct #type_info_none {
  @protocol MTLDrawable
  @abstract All "drawable" objects (such as those coming from CAMetalLayer) are expected to conform to this protocol
  */
-MTLDrawable :: struct #type_info_none {
+MTLDrawable :: struct #type_info_no_size_complaint {
 /* Present this drawable as soon as possible */
     present :: (self: *MTLDrawable) -> void {
         func: #type (obj: *void, selector: *void) -> void #c_call;
@@ -4885,7 +4885,7 @@ MTLDrawable :: struct #type_info_none {
  @abstract A handle to compiled code for a compute function.
  @discussion MTLComputePipelineState is a single compute function.  It can only be used with the device that it was created against.
 */
-MTLComputePipelineState :: struct #type_info_none {
+MTLComputePipelineState :: struct #type_info_no_size_complaint {
 /// Gets the function handle for a function this pipeline links at the Metal IR level by name.
 ///
 /// - Parameters:
@@ -5080,7 +5080,7 @@ MTLComputePipelineState :: struct #type_info_none {
  @protocol MTLRenderCommandEncoder
  @discussion MTLRenderCommandEncoder is a container for graphics rendering state and the code to translate the state into a command format that the device can execute. 
  */
-MTLRenderCommandEncoder :: struct #type_info_none {
+MTLRenderCommandEncoder :: struct #type_info_no_size_complaint {
 /*!
  @method setRenderPipelineState
  @brief Sets the current render pipeline state object.
@@ -6500,7 +6500,7 @@ MTLRenderCommandEncoder :: struct #type_info_none {
 
 }
 
-MTLFunctionHandle :: struct #type_info_none {
+MTLFunctionHandle :: struct #type_info_no_size_complaint {
     functionType :: (self: *MTLFunctionHandle) -> MTLFunctionType {
         func: #type (obj: *void, selector: *void) -> MTLFunctionType #c_call;
         func = xx objc_msgSend;
@@ -6532,7 +6532,7 @@ MTLFunctionHandle :: struct #type_info_none {
 
 }
 
-MTLVisibleFunctionTable :: struct #type_info_none {
+MTLVisibleFunctionTable :: struct #type_info_no_size_complaint {
     setFunction_atIndex_ :: (self: *MTLVisibleFunctionTable, function: *MTLFunctionHandle, index: NSUInteger) -> void {
         func: #type (obj: *void, selector: *void, function: *MTLFunctionHandle, index: NSUInteger) -> void #c_call;
         func = xx objc_msgSend;
@@ -6563,7 +6563,7 @@ MTLVisibleFunctionTable :: struct #type_info_none {
  
  @discussion MTLRenderPipelineState is a compiled render pipeline and can be set on a MTLRenderCommandEncoder.
  */
-MTLRenderPipelineState :: struct #type_info_none {
+MTLRenderPipelineState :: struct #type_info_no_size_complaint {
 /// Obtains a function handle for the a specific function this pipeline links at the Metal IR level.
 ///
 /// - Parameters:
@@ -6853,7 +6853,7 @@ MTLRenderPipelineState :: struct #type_info_none {
  @protocol MTLParallelRenderCommandEncoder
  @discussion The MTLParallelRenderCommandEncoder protocol is designed to allow a single render to texture operation to be efficiently (and safely) broken up across multiple threads.
  */
-MTLParallelRenderCommandEncoder :: struct #type_info_none {
+MTLParallelRenderCommandEncoder :: struct #type_info_no_size_complaint {
 /*!
  @method renderCommandEncoder
  @abstract Return a new autoreleased object that conforms to <MTLRenderCommandEncoder> that may be used to encode on a different thread.
@@ -6940,7 +6940,7 @@ MTLParallelRenderCommandEncoder :: struct #type_info_none {
  @protocol MTLSamplerState
  @abstract An immutable collection of sampler state compiled for a single device.
  */
-MTLSamplerState :: struct #type_info_none {
+MTLSamplerState :: struct #type_info_no_size_complaint {
 /*!
  @property label
  @abstract A string to help identify this object.
@@ -6973,7 +6973,7 @@ MTLSamplerState :: struct #type_info_none {
 
 }
 
-MTLAccelerationStructure :: struct #type_info_none {
+MTLAccelerationStructure :: struct #type_info_no_size_complaint {
     size :: (self: *MTLAccelerationStructure) -> NSUInteger {
         func: #type (obj: *void, selector: *void) -> NSUInteger #c_call;
         func = xx objc_msgSend;
@@ -6995,7 +6995,7 @@ MTLAccelerationStructure :: struct #type_info_none {
 /*!
  @protocol MTLHeap
  */
-MTLHeap :: struct #type_info_none {
+MTLHeap :: struct #type_info_no_size_complaint {
 /*!
  @method maxAvailableSizeWithAlignment:
  @abstract The maximum size that can be successfully allocated from the heap in bytes, taking into notice given alignment. Alignment needs to be zero, or power of two.
@@ -7251,7 +7251,7 @@ MTLHeap :: struct #type_info_none {
  * @protocol MTLArgumentEncoder
  * @discussion MTLArgumentEncoder encodes buffer, texture, sampler, and constant data into a buffer.
  */
-MTLArgumentEncoder :: struct #type_info_none {
+MTLArgumentEncoder :: struct #type_info_no_size_complaint {
 /*!
  * @method setArgumentBuffer:offset:
  * @brief Sets the destination buffer and offset at which the arguments will be encoded.
@@ -7530,7 +7530,7 @@ MTLArgumentEncoder :: struct #type_info_none {
 }
 
 /// An encoder that writes GPU commands into a command buffer.
-MTL4CommandEncoder :: struct #type_info_none {
+MTL4CommandEncoder :: struct #type_info_no_size_complaint {
 /// Encodes a consumer barrier on work you commit to the same command queue.
 ///
 /// Encode a barrier that guarantees that any subsequent work you encode in the current command encoder that corresponds
@@ -7705,7 +7705,7 @@ MTL4CommandEncoder :: struct #type_info_none {
 }
 
 /// Encodes a render pass into a command buffer, including all its draw calls and configuration.
-MTL4RenderCommandEncoder :: struct #type_info_none {
+MTL4RenderCommandEncoder :: struct #type_info_no_size_complaint {
 /// Sets the mapping from logical shader color output to physical render pass color attachments.
 ///
 /// Use this method to define how the physical color attachments you specify via ``MTL4RenderPassDescriptor/colorAttachments``
@@ -8390,7 +8390,7 @@ MTL4RenderCommandEncoder :: struct #type_info_none {
 }
 
 /// Records a sequence of GPU commands.
-MTL4CommandBuffer :: struct #type_info_none {
+MTL4CommandBuffer :: struct #type_info_no_size_complaint {
 /// Prepares a command buffer for encoding.
 ///
 /// Attaches the command buffer to the specified ``MTL4CommandAllocator`` and declares that the
@@ -8613,7 +8613,7 @@ MTL4CommandBuffer :: struct #type_info_none {
 
 }
 
-MTLEvent :: struct #type_info_none {
+MTLEvent :: struct #type_info_no_size_complaint {
 /*!
  @property device
  @abstract The device this event can be used with. Will be nil when the event is shared across devices (i.e. MTLSharedEvent).
@@ -8642,7 +8642,7 @@ MTLEvent :: struct #type_info_none {
 
 }
 
-MTLSharedEvent :: struct #type_info_none {
+MTLSharedEvent :: struct #type_info_no_size_complaint {
 // When the event's signaled value reaches value or higher, invoke the block on the dispatch queue owned by the listener.
     notifyListener_atValue_block_ :: (self: *MTLSharedEvent, listener: *MTLSharedEventListener, value: u64, block: MTLSharedEventNotificationBlock) -> void {
         func: #type (obj: *void, selector: *void, listener: *MTLSharedEventListener, value: u64, block: MTLSharedEventNotificationBlock) -> void #c_call;
@@ -8681,7 +8681,7 @@ MTLSharedEvent :: struct #type_info_none {
 }
 
 /// Describes an object containing debug information from Metal to your app after completing a workload.
-MTL4CommitFeedback :: struct #type_info_none {
+MTL4CommitFeedback :: struct #type_info_no_size_complaint {
 /// A description of an error when the GPU encounters an issue as it runs the committed command buffers.
     error :: (self: *MTL4CommitFeedback) -> *NSError {
         func: #type (obj: *void, selector: *void) -> *NSError #c_call;
@@ -8707,7 +8707,7 @@ MTL4CommitFeedback :: struct #type_info_none {
 
 /// An abstraction representing a command queue that you use commit and synchronize command buffers and to
 /// perform other GPU operations.
-MTL4CommandQueue :: struct #type_info_none {
+MTL4CommandQueue :: struct #type_info_no_size_complaint {
 /// Enqueues an array of command buffers for execution.
 ///
 /// The order in which you sort the command buffers in the array is meaningful, especially when it contains suspending/resuming
@@ -8973,7 +8973,7 @@ MTL4CommandQueue :: struct #type_info_none {
 
 }
 
-MTLCaptureScope :: struct #type_info_none {
+MTLCaptureScope :: struct #type_info_no_size_complaint {
 // Marks the begin of the capture scope. Note: This method should be invoked repeatedly per frame.
     beginScope :: (self: *MTLCaptureScope) -> void {
         func: #type (obj: *void, selector: *void) -> void #c_call;
@@ -9032,7 +9032,7 @@ MTLCaptureScope :: struct #type_info_none {
  @abstract
  Describes a CPU-recorded indirect render command
  */
-MTLIndirectRenderCommand :: struct #type_info_none {
+MTLIndirectRenderCommand :: struct #type_info_no_size_complaint {
     setRenderPipelineState_ :: (self: *MTLIndirectRenderCommand, pipelineState: *MTLRenderPipelineState) -> void {
         func: #type (obj: *void, selector: *void, pipelineState: *MTLRenderPipelineState) -> void #c_call;
         func = xx objc_msgSend;
@@ -9175,7 +9175,7 @@ MTLIndirectRenderCommand :: struct #type_info_none {
 
 }
 
-MTLIndirectComputeCommand :: struct #type_info_none {
+MTLIndirectComputeCommand :: struct #type_info_no_size_complaint {
     setComputePipelineState_ :: (self: *MTLIndirectComputeCommand, pipelineState: *MTLComputePipelineState) -> void {
         func: #type (obj: *void, selector: *void, pipelineState: *MTLComputePipelineState) -> void #c_call;
         func = xx objc_msgSend;
@@ -9250,7 +9250,7 @@ MTLIndirectComputeCommand :: struct #type_info_none {
 
 }
 
-MTLIndirectCommandBuffer :: struct #type_info_none {
+MTLIndirectCommandBuffer :: struct #type_info_no_size_complaint {
     resetWithRange_ :: (self: *MTLIndirectCommandBuffer, range: NSRange) -> void {
         func: #type (obj: *void, selector: *void, range: NSRange) -> void #c_call;
         func = xx objc_msgSend;
@@ -9287,10 +9287,10 @@ MTLIndirectCommandBuffer :: struct #type_info_none {
 
 }
 
-MTLLogContainer :: struct #type_info_none {
+MTLLogContainer :: struct #type_info_no_size_complaint {
 }
 
-MTLFunctionLogDebugLocation :: struct #type_info_none {
+MTLFunctionLogDebugLocation :: struct #type_info_no_size_complaint {
 // faulting function
     functionName :: (self: *MTLFunctionLogDebugLocation) -> *NSString {
         func: #type (obj: *void, selector: *void) -> *NSString #c_call;
@@ -9321,7 +9321,7 @@ MTLFunctionLogDebugLocation :: struct #type_info_none {
 
 }
 
-MTLFunctionLog :: struct #type_info_none {
+MTLFunctionLog :: struct #type_info_no_size_complaint {
     type :: (self: *MTLFunctionLog) -> MTLFunctionLogType {
         func: #type (obj: *void, selector: *void) -> MTLFunctionLogType #c_call;
         func = xx objc_msgSend;
@@ -9348,7 +9348,7 @@ MTLFunctionLog :: struct #type_info_none {
 
 }
 
-MTLAccelerationStructureCommandEncoder :: struct #type_info_none {
+MTLAccelerationStructureCommandEncoder :: struct #type_info_no_size_complaint {
 /*!
  * @brief Encode an acceleration structure build into the command buffer. All bottom-level acceleration
  * structure builds must have completed before a top-level acceleration structure build may begin. The
@@ -9623,7 +9623,7 @@ MTLAccelerationStructureCommandEncoder :: struct #type_info_none {
  Because a smaller area of the framebuffer is populated, less fragment shader invocations are required to render content, and less bandwidth is consumed to store the shaded values.
  Use a rasterization rate map to reduce rendering quality in less-important or less-sampled regions of the framebuffer, such as the periphery of a VR/AR display or a far-away cascade of a shadow map.
  */
-MTLRasterizationRateMap :: struct #type_info_none {
+MTLRasterizationRateMap :: struct #type_info_no_size_complaint {
 /*!
  @method copyParameterDataToBuffer:offset:
  @abstract Copy the parameter data into the provided buffer at the provided offset.
@@ -9760,7 +9760,7 @@ MTLRasterizationRateMap :: struct #type_info_none {
  If any unresolved symbols remain after searching the set, the creation of the MTLComputePipelineState fails.
  Otherwise, the MTLComputePipelineState creation succeeds, and the set of MTLDynamicLibraries used are retained by the MTLComputePipelineState.
  */
-MTLDynamicLibrary :: struct #type_info_none {
+MTLDynamicLibrary :: struct #type_info_no_size_complaint {
 /*!
  @method serializeToURL:error:
  @abstract Writes the contents of the MTLDynamicLibrary to a file.
@@ -9815,7 +9815,7 @@ MTLDynamicLibrary :: struct #type_info_none {
 
 }
 
-MTLLogState :: struct #type_info_none {
+MTLLogState :: struct #type_info_no_size_complaint {
 /*!
 @method addLogHandler
 @abstract Add a function block to handle log message output.
@@ -9846,7 +9846,7 @@ In the absence of any handlers, log messages go through the default handler.
  Updating a MTLBinaryArchive at runtime in a shipping app configuration is not recommended; such a scenario requires corruption resiliency, careful storage space management and may cache hard-to-reproduce errors.
  These kind of issues are handled transparently by the Metal maintained cache, therefore we recommend that MTLBinaryArchive is populated during development time and shipped as an asset.
  */
-MTLBinaryArchive :: struct #type_info_none {
+MTLBinaryArchive :: struct #type_info_no_size_complaint {
 /*!
  @method addComputePipelineFunctionsWithDescriptor:error:
  @abstract Add the function(s) from a compute pipeline state to the archive.
@@ -9968,7 +9968,7 @@ MTLBinaryArchive :: struct #type_info_none {
 
 }
 
-MTLIntersectionFunctionTable :: struct #type_info_none {
+MTLIntersectionFunctionTable :: struct #type_info_no_size_complaint {
     setBuffer_offset_atIndex_ :: (self: *MTLIntersectionFunctionTable, buffer: *MTLBuffer, offset: NSUInteger, index: NSUInteger) -> void {
         func: #type (obj: *void, selector: *void, buffer: *MTLBuffer, offset: NSUInteger, index: NSUInteger) -> void #c_call;
         func = xx objc_msgSend;
@@ -10077,14 +10077,14 @@ MTLIntersectionFunctionTable :: struct #type_info_none {
  @protocol MTLFunctionStitchingAttribute
  @abstract An attribute to be applied to the produced stitched function.
 */
-MTLFunctionStitchingAttribute :: struct #type_info_none {
+MTLFunctionStitchingAttribute :: struct #type_info_no_size_complaint {
 }
 
 /*!
  @protocol MTLFunctionStitchingNode
  @abstract A node used in a graph for stitching.
 */
-MTLFunctionStitchingNode :: struct #type_info_none {
+MTLFunctionStitchingNode :: struct #type_info_no_size_complaint {
 }
 
 /*!
@@ -10092,7 +10092,7 @@ MTLFunctionStitchingNode :: struct #type_info_none {
  @abstract Represents a queue that schedules command buffers containing command that
  read from handle objects and write to MTLResource objects.
  */
-MTLIOCommandQueue :: struct #type_info_none {
+MTLIOCommandQueue :: struct #type_info_no_size_complaint {
 /*!
  @method enqueueBarrier
  @abstract Inserts a barrier that ensures that all commandBuffers commited
@@ -10156,7 +10156,7 @@ MTLIOCommandQueue :: struct #type_info_none {
  a custom allocator. The underlying buffer is used as scratch space for IO commands
  that need it.
  */
-MTLIOScratchBuffer :: struct #type_info_none {
+MTLIOScratchBuffer :: struct #type_info_no_size_complaint {
     buffer :: (self: *MTLIOScratchBuffer) -> *MTLBuffer {
         func: #type (obj: *void, selector: *void) -> *MTLBuffer #c_call;
         func = xx objc_msgSend;
@@ -10174,7 +10174,7 @@ MTLIOScratchBuffer :: struct #type_info_none {
  complete they return the storage by dealloc'ing the MTLIOScratchBuffer objects (where
  the application can optionally pool the memory for use by future commands.
  */
-MTLIOScratchBufferAllocator :: struct #type_info_none {
+MTLIOScratchBufferAllocator :: struct #type_info_no_size_complaint {
 /*!
  @method newScratchBufferWithMinimumSize:minimumSize
  @abstract This method is called when additional scratch memory is required by a load command.
@@ -10197,7 +10197,7 @@ MTLIOScratchBufferAllocator :: struct #type_info_none {
  @abstract Represents a  file (raw or compressed) that can be used as a source
  for load commands encoded in a MTLIOCommandBuffer.
  */
-MTLIOFileHandle :: struct #type_info_none {
+MTLIOFileHandle :: struct #type_info_no_size_complaint {
 /*!
  @property label
  @abstract An optional label for this handle.
@@ -10220,7 +10220,7 @@ MTLIOFileHandle :: struct #type_info_none {
  @protocol MTLIOCommandBuffer
  @abstract represents a list of IO commands for a queue to execute
 */
-MTLIOCommandBuffer :: struct #type_info_none {
+MTLIOCommandBuffer :: struct #type_info_no_size_complaint {
 /*!
  @method addCompletedHandler:block:
  @abstract Add a block to be called when this command buffer has completed execution.
@@ -10411,7 +10411,7 @@ MTLIOCommandBuffer :: struct #type_info_none {
  Resources and heaps are added and removed uncommitted and a subsequent commit call applies all
  of the changes in bulk.
  */
-MTLResidencySet :: struct #type_info_none {
+MTLResidencySet :: struct #type_info_no_size_complaint {
 /*!
   @method requestResidency
   @abstract Requests that the set and all the committed resources and heaps are made resident.
@@ -10559,7 +10559,7 @@ MTLResidencySet :: struct #type_info_none {
 }
 
 /// Contains views over resources of a specific type, and allows you to manage those views.
-MTLResourceViewPool :: struct #type_info_none {
+MTLResourceViewPool :: struct #type_info_no_size_complaint {
 /// Copies a range of resource views from a source view pool to a destination location in this view pool.
 ///
 /// - Parameters:
@@ -10608,7 +10608,7 @@ MTLResourceViewPool :: struct #type_info_none {
 ///
 /// Use texture view pools to create lightweight texture view objects of ``MTLTexture``
 /// and ``MTLBuffer`` instances.
-MTLTextureViewPool :: struct #type_info_none {
+MTLTextureViewPool :: struct #type_info_no_size_complaint {
 /// Copies a default texture view to a slot in this texture view pool at an index provided.
 ///
 /// - Parameters:
@@ -10660,7 +10660,7 @@ MTLTextureViewPool :: struct #type_info_none {
 }
 
 /// Provides a mechanism to manage and provide resource bindings for buffers, textures, sampler states and other Metal resources.
-MTL4ArgumentTable :: struct #type_info_none {
+MTL4ArgumentTable :: struct #type_info_no_size_complaint {
 /// Binds a GPU address to a buffer binding slot.
 ///
 /// - Parameters:
@@ -10757,7 +10757,7 @@ MTL4ArgumentTable :: struct #type_info_none {
 /// Represents a binary function.
 ///
 /// A binary function is a shader that you precompile from Metal IR to GPU machine code.
-MTL4BinaryFunction :: struct #type_info_none {
+MTL4BinaryFunction :: struct #type_info_no_size_complaint {
 /// Obtains the optional name of this binary function.
     name :: (self: *MTL4BinaryFunction) -> *NSString {
         func: #type (obj: *void, selector: *void) -> *NSString #c_call;
@@ -10775,7 +10775,7 @@ MTL4BinaryFunction :: struct #type_info_none {
 }
 
 /// Manages the memory backing the encoding of GPU commands into command buffers.
-MTL4CommandAllocator :: struct #type_info_none {
+MTL4CommandAllocator :: struct #type_info_no_size_complaint {
 /// Queries the size of the internal memory heaps of this command allocator that support encoding
 /// commands into command buffers.
 ///
@@ -10820,7 +10820,7 @@ MTL4CommandAllocator :: struct #type_info_none {
 /// Use instances of this abstraction to encode a compute pass into ``MTL4CommandBuffer`` instances, as well as commands
 /// that copy and modify the underlying memory of various Metal resources, and commands that build or refit acceleration
 /// structures.
-MTL4ComputeCommandEncoder :: struct #type_info_none {
+MTL4ComputeCommandEncoder :: struct #type_info_no_size_complaint {
 /// Queries a bitmask representing the shader stages on which commands currently present in this command encoder
 /// operate.
 ///
@@ -11591,7 +11591,7 @@ MTL4ComputeCommandEncoder :: struct #type_info_none {
 }
 
 /// Encodes commands for dispatching machine learning networks on Apple silicon.
-MTL4MachineLearningCommandEncoder :: struct #type_info_none {
+MTL4MachineLearningCommandEncoder :: struct #type_info_no_size_complaint {
 /// Configures the encoder with a machine learning pipeline state instance.
 ///
 /// The pipeline state instance affects all subsequent Machine Learning commands.
@@ -11634,7 +11634,7 @@ MTL4MachineLearningCommandEncoder :: struct #type_info_none {
 /// A pipeline state that you can use with machine-learning encoder instances.
 ///
 /// See ``MTL4MachineLearningCommandEncoder`` for more information.
-MTL4MachineLearningPipelineState :: struct #type_info_none {
+MTL4MachineLearningPipelineState :: struct #type_info_no_size_complaint {
 /// Queries the string that helps identify this object.
     label :: (self: *MTL4MachineLearningPipelineState) -> *NSString {
         func: #type (obj: *void, selector: *void) -> *NSString #c_call;
@@ -11685,7 +11685,7 @@ MTL4MachineLearningPipelineState :: struct #type_info_none {
 ///
 /// - Note: The objects ``MTL4PipelineDataSetSerializer`` contains are opaque and can't accelerate compilation for
 /// compilers they are not attached to. Additionally, your program can't read data out of data set serializer instances.
-MTL4PipelineDataSetSerializer :: struct #type_info_none {
+MTL4PipelineDataSetSerializer :: struct #type_info_no_size_complaint {
 /// Serializes a pipeline data set to an archive.
 ///
 /// - Parameters:
@@ -11738,7 +11738,7 @@ MTL4PipelineDataSetSerializer :: struct #type_info_none {
 /// ### Creating binary functions
 ///
 /// - ``newBinaryFunctionWithDescriptor:functionType:error:``
-MTL4Archive :: struct #type_info_none {
+MTL4Archive :: struct #type_info_no_size_complaint {
 /// Creates a compute pipeline state from the archive with a descriptor.
 ///
 /// - Parameters:
@@ -11843,7 +11843,7 @@ MTL4Archive :: struct #type_info_none {
  * display. In order for a texture to be re-used for a new CAMetalDrawable,
  * any prior CAMetalDrawable must have been deallocated and another
  * CAMetalDrawable presented. */
-CAMetalDrawable :: struct #type_info_none {
+CAMetalDrawable :: struct #type_info_no_size_complaint {
 /* This is an object that conforms to the MTLTexture protocol and will
  * typically be used to create an MTLRenderTargetDescriptor. */
     texture :: (self: *CAMetalDrawable) -> *MTLTexture {

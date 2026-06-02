@@ -863,7 +863,7 @@ write_to_file :: () {
             append(*sb, "\n");
         }
 
-        print_to_builder(*sb, "% :: struct #type_info_none {\n", i.name);
+        print_to_builder(*sb, "% :: struct #type_info_no_size_complaint {\n", i.name);
         // For other Jai objc module, it adds a nsobject pointer as
         // the sole struct member, I don't know if that is necessary,
         // it does not affect any usage. So for consistency, I will
@@ -948,7 +948,7 @@ write_to_file :: () {
             append(*sb, protocol.comment);
             append(*sb, "\n");
         }
-        print_to_builder(*sb, "% :: struct #type_info_none {\n", protocol.name);
+        print_to_builder(*sb, "% :: struct #type_info_no_size_complaint {\n", protocol.name);
 
         for m: protocol.instance_methods {
             if m.comment != "" {
