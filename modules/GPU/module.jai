@@ -9,6 +9,8 @@
 // the description. One way of implementing it would be create a
 // lambda function, or macros, which I don't really want to.
 
+#module_parameters(VALIDATION := true);
+
 Texture_Type :: enum {
     e1D;
     e2D;
@@ -209,6 +211,7 @@ arena_reset :: (arena: *Arena) {
     arena.bytes_left = arena.total;
 }
 
+#add_context gpu_context: *GPU_Context;
 
 #if OS == .MACOS {
     #load "metal.jai";

@@ -1,5 +1,3 @@
-#add_context gpu_context: *GPU_Context;
-
 GPU_Context :: struct {
     device: *MTLDevice;
     sdl_window: *SDL_Window;
