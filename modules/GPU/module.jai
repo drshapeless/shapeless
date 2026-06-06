@@ -9,7 +9,30 @@
 // the description. One way of implementing it would be create a
 // lambda function, or macros, which I don't really want to.
 
-#module_parameters(VALIDATION := true);
+// Here are the functions that declared in different implementations,
+// almost a one to one translation from No Graphics API.
+
+//// If an SDL_Window is passed, the gpu would have swapchain support
+// init :: (window: *SDL_Window = null)
+
+// deinit :: ()
+
+//// allocation with alignment specified is no use in both API
+// alloc :: (bytes: u64) -> Allocation
+
+// free :: (allocation: Allocation)
+
+// texture_size_align :: (desc: Texture_Desc) -> Texture_Size_Align
+
+#module_parameters(VALIDATION := true, DEBUG_ASSERT := true);
+
+Memory_Type :: enum {
+    SHARED;
+    PRIVATE;
+
+    DEFAULT :: SHARED;
+    GPU :: PRIVATE;
+}
 
 Texture_Type :: enum {
     e1D;

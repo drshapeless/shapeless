@@ -6,42 +6,63 @@ GPU_Context :: struct {
     surface: VkSurfaceKHR;
     queue_indices: Queue_Family_Indices;
     physical_device: VkPhysicalDevice;
+    memory_indices: Memory_Indices;
 }
 
 Allocation :: struct {
     cpu: *void;
     gpu: u64;
     offset: u64;
+    memory: VkDeviceMemory;
+    // Should I also put a mapped VkBuffer here? Currently I
+    // deallocate the buffer after getting its address. Also, should I
+    // keep the size of the allocation here or leave the user to do.
 }
 
-init :: () {
+Texture :: struct {
+    image: VkImage;
+    view: VkImageView;
+}
+
+init :: (window: *SDL_Window = null) {
     context.gpu_context = Basic.alloc(size_of(GPU_Context));
     using context.gpu_context;
     get_instance_proc_addr := SDL_Vulkan_GetVkGetInstanceProcAddr();
-    vk_load_global_functions(get_instance_proc_addr);
+    Basic.assert(get_instance_proc_addr != null);
+
+    vk_load_global_functions(xx get_instance_proc_addr);
 
     result: VkResult;
     result, instance = make_instance();
 
     vk_load_instance_functions(instance);
 
-    // Here comes a problem, suppose we do not want swapchain support
-    // when swapchain is not initialized, but when we init_swapchain,
-    // the device may not be useful
-    physical_device, queue_indices = choose_physical_device(instance, null, DEVICE_EXTENSIONS);
+    device_extensions: [..] *u8;
+    device_extensions.allocator = Basic.temp;
+    Basic.array_add(*device_extensions, ..DEVICE_EXTENSIONS);
+    if window {
+        sdl_window = window;
+        ok := SDL_Vulkan_CreateSurface(window, instance, vka, *surface);
+        Basic.assert(ok);
+        Basic.array_add(*device_extensions, VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+    }
+
+    physical_device, queue_indices = choose_physical_device(instance, surface, device_extensions);
     if !physical_device {
-        log_error("Vulkan failed to find physical device");
+        Basic.log_error("Vulkan failed to find physical device");
         deinit();
         return;
     }
 
-    result, device = make_device(DEVICE_EXTENSIONS);
+    result, device = make_device(device_extensions);
     if result {
-        log_error("Vulkan failed to create device");
+        Basic.log_error("Vulkan failed to create device");
         deinit();
         return;
     }
     vk_load_device_functions(device);
+
+    memory_indices = get_memory_indices();
 }
 
 deinit :: () {
@@ -49,39 +70,104 @@ deinit :: () {
     if device {
         vkDestroyDevice(device, vka);
     }
+
+    if surface {
+        SDL_Vulkan_DestroySurface(instance, surface, vka);
+    }
+
     if instance {
         vkDestroyInstance(instance, vka);
     }
     Basic.free(context.gpu_context);
 }
 
-init_swapchain :: (window: *SDL_Window) {
+// This only allocates shared memory (rebar).
+alloc :: (bytes: u64) -> Allocation {
     using context.gpu_context;
-    sdl_window = window;
-    ok := SDL_Vulkan_CreateSurface(window, instance, vka, *surface);
-    assert(ok);
+    buffer: VkBuffer;
+    buffer_create_info := VkBufferCreateInfo.{
+        flags = 0,
+        size = bytes,
+        usage = .SHADER_DEVICE_ADDRESS | .STORAGE_BUFFER | .TRANSFER_DST | .TRANSFER_SRC,
+        sharingMode = .EXCLUSIVE,
+    };
+    result: VkResult;
+    result = check_vk(vkCreateBuffer(device, *buffer_create_info, vka, *buffer));
+    Basic.assert(result == .SUCCESS);
+    defer vkDestroyBuffer(device, buffer, vka);
 
-    device_extensions: [..] *u8;
-    device_extensions.allocator = temp;
-    array_add(device_extensions, ..DEVICE_EXTENSIONS);
-    array_add(device_extensions, VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-    physical_device, queue_indices = choose_physical_device(instance, null, DEVICE_EXTENSIONS);
+    memory_requirements: VkMemoryRequirements;
+    vkGetBufferMemoryRequirements(device, buffer, *memory_requirements);
 
-    // Destory to original device
-    vkDestroyDevice(device, vka);
+    memory_allocate_flags := VkMemoryAllocateFlagsInfo.{
+        flags = .DEVICE_ADDRESS,
+    };
+    allocation_info := VkMemoryAllocateInfo.{
+        pNext = *memory_allocate_flags,
+        allocationSize = memory_requirements.size,
+        memoryTypeIndex = memory_indices.shared,
+    };
 
-    result, device = make_device(device_extensions);
-    if result {
-        log_error("Vulkan failed to create device");
-        deinit();
-        return;
-    }
-    vk_load_device_functions(device);
+    memory: VkDeviceMemory;
+    result = check_vk(vkAllocateMemory(device, *allocation_info, vka, *memory));
+    Basic.assert(result == .SUCCESS);
+
+    result = check_vk(vkBindBufferMemory(device, buffer, memory, 0));
+    Basic.assert(result == .SUCCESS);
+
+    address_info := VkBufferDeviceAddressInfo.{
+        buffer = buffer
+    };
+
+    allocation: Allocation;
+    allocation.gpu = vkGetBufferDeviceAddress(device, *address_info);
+
+    check_vk(vkMapMemory(device, memory, 0, memory_requirements.size, 0, *allocation.cpu));
+    Basic.assert(result == .SUCCESS);
+    allocation.memory = memory;
+
+    return allocation;
 }
 
-deinit_swapchain :: () {
+free :: (allocation: Allocation) {
     using context.gpu_context;
-    SDL_Vulkan_DestroySurface(instance, surface, vka);
+    if allocation.memory {
+        vkFreeMemory(device, allocation.memory, vka);
+    }
+}
+
+texture_size_align :: (desc: Texture_Desc) -> Texture_Size_Align {
+    using context.gpu_context;
+    image_create_info := to_vulkan_image_create_info(desc);
+
+    image_memory_requirements := VkDeviceImageMemoryRequirements.{
+        pCreateInfo = *image_create_info,
+    };
+
+    memory_requirements: VkMemoryRequirements2;
+
+    vkGetDeviceImageMemoryRequirements(device, *image_memory_requirements, *memory_requirements);
+
+    size_align := Texture_Size_Align.{
+        size = memory_requirements.memoryRequirements.size,
+        align = memory_requirements.memoryRequirements.alignment,
+    };
+
+    return size_align;
+}
+
+create_texture :: (desc: Texture_Desc, allocation: Allocation) -> Texture {
+    using context.gpu_context;
+    image_create_info := to_vulkan_image_create_info(desc);
+    texture: Texture;
+    result: VkResult;
+    result = check_vk(vkCreateImage(device, *image_create_info, vka, *texture.image));
+    return_if_error(result, Texture.{});
+
+    result = check_vk(vkBindImageMemory(device, texture.image, allocation.memory, allocation.offset));
+    return_if_error(result, Texture.{});
+
+    return texture;
 }
 
 #scope_file
@@ -93,36 +179,53 @@ application_info :: VkApplicationInfo.{
     apiVersion = VK_API_VERSION_1_4,
 };
 
-INSTANCE_EXTENSIONS :: (*u8).[];
 VALIDATION_LAYERS :: (*u8).["VK_LAYER_KHRONOS_validation"];
 DEVICE_EXTENSIONS :: (*u8).[
 VK_EXT_SHADER_OBJECT_EXTENSION_NAME,
 ];
 
+return_if_error :: (result: VkResult) #expand {
+    if result != .SUCCESS {
+        #if DEBUG_ASSERT {
+            debug_break();
+        }
+        `return;
+    }
+}
+
+return_if_error :: (result: VkResult, v: $T) #expand {
+    if result != .SUCCESS {
+        #if DEBUG_ASSERT {
+            debug_break();
+        }
+        `return v;
+    }
+}
+
 // Stolen from JBlow's Vulkan_Renderer
 // Generic api result logging helper, useful for Khronos apis
 check_api_result :: (result: $Result, api: string, $call := #caller_code, loc := #caller_location) -> Result {
     call_string :: #run -> string {
-        root := compiler_get_nodes(call);
+        root := Compiler.compiler_get_nodes(call);
 
         if root.kind == {
         case .PROCEDURE_CALL;
-            proc_call := cast(*Code_Procedure_Call) root;
+            proc_call := cast(*Compiler.Code_Procedure_Call) root;
             expression := proc_call.arguments_sorted[0];
 
             if expression.kind != .PROCEDURE_CALL {
                 return "";
             }
 
-            call := cast(*Code_Procedure_Call) expression;
+            call := cast(*Compiler.Code_Procedure_Call) expression;
             if call.procedure_expression.kind != .IDENT {
                 return "";
             }
 
-            return (cast(*Code_Ident) call.procedure_expression).name;
+            return (cast(*Compiler.Code_Ident) call.procedure_expression).name;
 
         case .IDENT;
-            return (cast(*Code_Ident) root).name;
+            return (cast(*Compiler.Code_Ident) root).name;
 
         case;
             return "";
@@ -145,7 +248,7 @@ check_api_result :: (result: $Result, api: string, $call := #caller_code, loc :=
         printed_result := ifx result_string
             then cast(Any) result_string
             else cast(Any) result;
-        log_error("% '%' failed: %", api, action, printed_result, loc = loc);
+        Basic.log_error("% '%' failed: %", api, action, printed_result, loc = loc);
         return result;
     }
     return .SUCCESS;
@@ -161,9 +264,9 @@ get_vk_instance_extensions :: () -> [] *u8 {
     instance_extension_data := SDL_Vulkan_GetInstanceExtensions(*instance_extension_count);
 
     for 0..instance_extension_count - 1 {
-        array_add(*instance_extensions, instance_extension_data[it]);
+        Basic.array_add(*instance_extensions, instance_extension_data[it]);
     }
-     array_add(*instance_extensions, VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+    Basic.array_add(*instance_extensions, VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 
     return instance_extensions;
 }
@@ -176,9 +279,9 @@ debug_utils_callback :: (messageSeverity: VkDebugUtilsMessageSeverityFlagBitsEXT
         case .INFO;
             ;
         case .WARNING;
-            log("[WARN ] %", to_string(pCallbackData.pMessage));
+            Basic.log("[WARN ] %", to_string(pCallbackData.pMessage));
         case .ERROR;
-            log("[ERROR] %", to_string(pCallbackData.pMessage));
+            Basic.log("[ERROR] %", to_string(pCallbackData.pMessage));
         }
 
     }
@@ -192,12 +295,14 @@ debug_utils_messenger_create_info :: VkDebugUtilsMessengerCreateInfoEXT.{
 };
 
 make_instance :: () -> VkResult, VkInstance {
+    using context.gpu_context;
+    instance_extensions := get_vk_instance_extensions();
     instance_create_info := VkInstanceCreateInfo.{
         pNext = *debug_utils_messenger_create_info,
         flags = 0,
         pApplicationInfo = *application_info,
-        enabledExtensionCount = xx INSTANCE_EXTENSIONS.count,
-        ppEnabledExtensionNames = xx INSTANCE_EXTENSIONS.data,
+        enabledExtensionCount = xx instance_extensions.count,
+        ppEnabledExtensionNames = xx instance_extensions.data,
     };
 
     #if VALIDATION {
@@ -205,9 +310,9 @@ make_instance :: () -> VkResult, VkInstance {
         instance_create_info.ppEnabledLayerNames = VALIDATION_LAYERS.data;
     }
 
-    instance: VkInstance;
-    result := check_vk(vkCreateInstance(*instance_create_info, vka, *instance));
-    return result, instance;
+    my_instance: VkInstance;
+    result := check_vk(vkCreateInstance(*instance_create_info, vka, *my_instance));
+    return result, my_instance;
 }
 
 Queue_Family_Indices :: struct {
@@ -216,10 +321,10 @@ Queue_Family_Indices :: struct {
 }
 
 find_queue_families :: (physical_device: VkPhysicalDevice, surface: VkSurfaceKHR) -> ok:bool, Queue_Family_Indices {
-    graphics := U32_MAX;
-    present  := U32_MAX;
+    graphics := Math.U32_MAX;
+    present  := Math.U32_MAX;
 
-    queue_families := vkGetPhysicalDeviceQueueFamilyProperties(physical_device,, temp);
+    queue_families := vkGetPhysicalDeviceQueueFamilyProperties(physical_device,, Basic.temp);
 
     for queue_families {
         if it.queueFlags & .GRAPHICS {
@@ -236,7 +341,7 @@ find_queue_families :: (physical_device: VkPhysicalDevice, surface: VkSurfaceKHR
             present = xx it_index;
         }
 
-        if graphics != U32_MAX && present != U32_MAX {
+        if graphics != Math.U32_MAX && present != Math.U32_MAX {
             return true, .{graphics = graphics, present = present};
         }
     }
@@ -245,7 +350,7 @@ find_queue_families :: (physical_device: VkPhysicalDevice, surface: VkSurfaceKHR
 }
 
 device_supports_extensions :: (physical_device: VkPhysicalDevice, extensions: [] *u8) -> bool {
-    result, available_extensions := vkEnumerateDeviceExtensionProperties(physical_device, null,, temp);
+    result, available_extensions := vkEnumerateDeviceExtensionProperties(physical_device, null,, Basic.temp);
     if check_vk(result, vkEnumerateDeviceExtensionProperties) return false;
 
     for extension: extensions {
@@ -261,7 +366,7 @@ device_supports_extensions :: (physical_device: VkPhysicalDevice, extensions: []
         }
 
         if !supported {
-            log("device does not support %", to_string(extension));
+            Basic.log("device does not support %", to_string(extension));
             return false;
         };
     }
@@ -279,10 +384,10 @@ get_swapchain_support :: (physical_device: VkPhysicalDevice, surface: VkSurfaceK
     capabilities: VkSurfaceCapabilitiesKHR;
     if check_vk(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device, surface, *capabilities)) return .{};
 
-    result, formats := vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface,, temp);
+    result, formats := vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface,, Basic.temp);
     if check_vk(result, vkGetPhysicalDeviceSurfaceFormatsKHR) return .{};
 
-    result=, present_modes := vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface,, temp);
+    result=, present_modes := vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface,, Basic.temp);
     if check_vk(result, vkGetPhysicalDeviceSurfacePresentModesKHR) return .{};
 
     return .{
@@ -293,7 +398,6 @@ get_swapchain_support :: (physical_device: VkPhysicalDevice, surface: VkSurfaceK
 }
 
 choose_physical_device :: (instance: VkInstance, surface: VkSurfaceKHR, device_extensions: [] *u8) -> VkPhysicalDevice, Queue_Family_Indices {
-    using context.gpu_context;
     result, devices := vkEnumeratePhysicalDevices(instance);
     if check_vk(result, vkEnumeratePhysicalDevices) return null, .{};
 
@@ -348,7 +452,7 @@ make_device :: (device_extensions: [] *u8) -> VkResult, VkDevice {
     indices_array := u32.[queue_indices.graphics, queue_indices.present];
 
     queue_count := ifx queue_indices.graphics == queue_indices.present then 1 else 2;
-    queue_create_infos := NewArray(queue_count, VkDeviceQueueCreateInfo, initialized = false,, temp);
+    queue_create_infos := Basic.NewArray(queue_count, VkDeviceQueueCreateInfo, initialized = false,, Basic.temp);
     queue_priority : float32 = 1.0;
 
     for * queue_create_infos {
@@ -373,6 +477,7 @@ make_device :: (device_extensions: [] *u8) -> VkResult, VkDevice {
         pNext = chain,
         dynamicRendering = VK_TRUE,
         synchronization2 = VK_TRUE,
+        maintenance4 = VK_TRUE,
     };
     chain = *features13;
     features12 := VkPhysicalDeviceVulkan12Features.{
@@ -418,6 +523,122 @@ make_device :: (device_extensions: [] *u8) -> VkResult, VkDevice {
     return result, my_device;
 }
 
+Memory_Indices :: struct {
+    shared: u32 = Math.U32_MAX;
+    private: u32 = Math.U32_MAX;
+}
+
+get_memory_indices :: () -> Memory_Indices {
+    using context.gpu_context;
+
+    indices: Memory_Indices;
+    properties: VkPhysicalDeviceMemoryProperties;
+    vkGetPhysicalDeviceMemoryProperties(physical_device, *properties);
+
+    SHARED_FLAGS: VkMemoryPropertyFlags = .DEVICE_LOCAL | .HOST_VISIBLE | .HOST_COHERENT;
+
+    for i: 0..properties.memoryTypeCount - 1 {
+        f := properties.memoryTypes[i].propertyFlags;
+        if (f & SHARED_FLAGS) == SHARED_FLAGS {
+            indices.shared = i;
+        }
+
+        // This ensure the private index return is not cpu visible
+        if (f & .DEVICE_LOCAL == .DEVICE_LOCAL) && (f & .HOST_VISIBLE == 0) {
+            indices.private = i;
+        }
+
+        if indices.shared != Math.U32_MAX && indices.private != Math.U32_MAX {
+            break;
+        }
+    }
+
+    return indices;
+}
+
+to_vulkan_format :: (format: Format) -> VkFormat {
+    vk_format: VkFormat = UNDEFINED;
+    if format == {
+    case .NONE;
+        vk_format = .UNDEFINED;
+    case .RGBA8_UNORM;
+        vk_format = .R8G8B8A8_UNORM;
+    case .D32_FLOAT;
+        vk_format = .D32_SFLOAT;
+    case .D24_UNORM_S8;
+        vk_format = .D24_UNORM_S8_UINT;
+    }
+
+    return vk_format;
+}
+
+to_vulkan_image_type :: (type: Texture_Type) -> VkImageType {
+    image_type: VkImageType;
+    if type == {
+    case .e1D;
+        image_type = .e1D;
+    case .e2D;
+        image_type = .e2D;
+    case .e3D;
+        image_type = .e3D;
+    case .CUBE;
+        image_type = .e2D;
+    case .e2D_ARRAY;
+        image_type = .e2D;
+    case .CUBE_ARRAY;
+        image_type = .e2D;
+    }
+
+    return image_type;
+}
+
+to_vulkan_image_view_type :: (type: Texture_Type) -> VkImageViewType {
+    image_view_type: VkImageViewType;
+    if type == {
+    case .e1D;
+        image_view_type = .e1D;
+    case .e2D;
+        image_view_type = .e2D;
+    case .e3D;
+        image_view_type = .e3D;
+    case .CUBE;
+        image_view_type = .CUBE;
+    case .e2D_ARRAY;
+        image_view_type = .e2D_ARRAY;
+    case .CUBE_ARRAY;
+        image_view_type = .CUBE_ARRAY;
+    }
+
+    return image_view_type;
+}
+
+to_vulkan_sample_count :: (count: u32) -> VkSampleCountFlagBits {
+    return cast(VkSampleCountFlags) count;
+}
+
+to_vulkan_image_usage :: (usage: Texture_Usage) -> VkImageUsageFlags {
+
+}
+
+to_vulkan_image_create_info :: (desc: Texture_Desc) -> VkImageCreateInfo {
+    info := VkImageCreateInfo.{
+        imageType = to_vulkan_image_type(desc.type),
+        format = to_vulkan_format(desc.format),
+        extent = cast(VkExtent3D) desc.dimensions,
+        mipLevels = desc.mip_count,
+        arrayLayers = desc.layer_count,
+        samples = to_vulkan_sample_count(desc.sample_count),
+        tiling = .OPTIMAL,
+        usage = .TRANSFER_SRC | .TRANSFER_DST | .SAMPLED | .STORAGE,
+        sharingMode = .EXCLUSIVE,
+        initialLayout = UNDEFINED,
+    };
+
+    return info;
+}
+
 #import "Vulkan";
 #import "SDL3";
 Basic :: #import "Basic";
+Math :: #import "Math";
+Compiler :: #import "Compiler";

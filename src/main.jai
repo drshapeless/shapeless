@@ -9,7 +9,7 @@ main :: () {
         window_flags |= .VULKAN;
     }
 
-    window := SDL_CreateWindow("shapeless", 800, 600, .RESIZABLE | .METAL);
+    window := SDL_CreateWindow("shapeless", 800, 600, window_flags);
     defer SDL_DestroyWindow(window);
 
     GPU.init();
@@ -18,6 +18,7 @@ main :: () {
     defer GPU.deinit_swapchain();
 
     allocation := GPU.alloc(1024);
+    defer GPU.free(allocation);
     log("%", allocation);
 }
 
