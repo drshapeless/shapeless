@@ -348,9 +348,6 @@ copy_from_texture :: (cb: Command_Buffer, dest: Allocation, texture: Texture) {
     blit.(*MTLCommandEncoder).endEncoding(blit);
 }
 
-get_alignment_padding :: (memory: *void, alignment: u64) -> u64 {
-    padding := (alignment - (memory.(u64) % alignment)) % alignment;
-    return padding;
 }
 
 #scope_file

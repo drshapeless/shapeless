@@ -241,3 +241,8 @@ arena_reset :: (arena: *Arena) {
 } else {
     #load "vulkan.jai";
 }
+
+get_alignment_padding :: (memory: *void, alignment: u64) -> u64 {
+    padding := (alignment - (memory.(u64) % alignment)) % alignment;
+    return padding;
+}
