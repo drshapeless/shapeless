@@ -4,24 +4,48 @@ GPU_Context :: struct {
     device: VkDevice;
     vka: *VkAllocationCallbacks;
     surface: VkSurfaceKHR;
-    queue_indices: Queue_Family_Indices;
+    queue_family_indices: Queue_Family_Indices;
     physical_device: VkPhysicalDevice;
     memory_indices: Memory_Indices;
+    main_queue: VkQueue;
+    command_pools: [5]VkCommandPool;
+    current_command_pool_index := 0;
+    pipeline_layout: VkPipelineLayout;
 }
 
 Allocation :: struct {
     cpu: *void;
     gpu: u64;
     offset: u64;
+
+    // The following fields are implementation specific
     memory: VkDeviceMemory;
-    // Should I also put a mapped VkBuffer here? Currently I
-    // deallocate the buffer after getting its address. Also, should I
-    // keep the size of the allocation here or leave the user to do.
+    buffer: VkBuffer; // Keeping a mapped buffer here makes copying much easier
 }
 
 Texture :: struct {
     image: VkImage;
     view: VkImageView;
+}
+
+Pipeline :: struct {
+    // At most we can have two shaders in a pipeline
+    // For compute shader, only the first is useful
+    shaders: [2]VkShaderEXT;
+    is_compute: bool;
+}
+
+Queue :: struct {
+    type: Queue_Type;
+    vk: VkQueue;
+}
+
+Command_Buffer :: struct {
+    #as vk: VkCommandBuffer;
+}
+
+Semaphore :: struct {
+    #as vk: VkSemaphore;
 }
 
 init :: (window: *SDL_Window = null) {
@@ -47,7 +71,7 @@ init :: (window: *SDL_Window = null) {
         Basic.array_add(*device_extensions, VK_KHR_SWAPCHAIN_EXTENSION_NAME);
     }
 
-    physical_device, queue_indices = choose_physical_device(instance, surface, device_extensions);
+    physical_device, queue_family_indices = choose_physical_device(instance, surface, device_extensions);
     if !physical_device {
         Basic.log_error("Vulkan failed to find physical device");
         deinit();
@@ -63,10 +87,42 @@ init :: (window: *SDL_Window = null) {
     vk_load_device_functions(device);
 
     memory_indices = get_memory_indices();
+
+    vkGetDeviceQueue(device, queue_family_indices.graphics, 0, *main_queue);
+
+    command_pool_create_info := VkCommandPoolCreateInfo.{
+        // flags = .RESET_COMMAND_BUFFER,
+        queueFamilyIndex = queue_family_indices.graphics,
+    };
+
+    for command_pools {
+        result = check_vk(vkCreateCommandPool(device, *command_pool_create_info, vka, *command_pools[it_index]));
+        assert_vk_result(result);
+    }
+
+    pipeline_layout_create_info := VkPipelineLayoutCreateInfo.{
+        pushConstantRangeCount = 1,
+        pPushConstantRanges = *PUSH_CONSTANT_RANGE,
+    };
+
+    result = check_vk(vkCreatePipelineLayout(device, *pipeline_layout_create_info, vka, *pipeline_layout));
+    assert_vk_result(result);
 }
 
 deinit :: () {
     using context.gpu_context;
+    result: VkResult;
+    result = vkDeviceWaitIdle(device);
+    assert_vk_result(result);
+
+    if pipeline_layout {
+        vkDestroyPipelineLayout(device, pipeline_layout, vka);
+    }
+
+    for command_pools {
+        if it vkDestroyCommandPool(device, it, vka);
+    }
+
     if device {
         vkDestroyDevice(device, vka);
     }
@@ -93,8 +149,7 @@ alloc :: (bytes: u64) -> Allocation {
     };
     result: VkResult;
     result = check_vk(vkCreateBuffer(device, *buffer_create_info, vka, *buffer));
-    Basic.assert(result == .SUCCESS);
-    defer vkDestroyBuffer(device, buffer, vka);
+    assert_vk_result(result);
 
     memory_requirements: VkMemoryRequirements;
     vkGetBufferMemoryRequirements(device, buffer, *memory_requirements);
@@ -125,12 +180,16 @@ alloc :: (bytes: u64) -> Allocation {
     check_vk(vkMapMemory(device, memory, 0, memory_requirements.size, 0, *allocation.cpu));
     Basic.assert(result == .SUCCESS);
     allocation.memory = memory;
+    allocation.buffer = buffer;
 
     return allocation;
 }
 
 free :: (allocation: Allocation) {
     using context.gpu_context;
+    if allocation.buffer {
+        vkDestroyBuffer(device, allocation.buffer, vka);
+    }
     if allocation.memory {
         vkFreeMemory(device, allocation.memory, vka);
     }
@@ -162,12 +221,247 @@ create_texture :: (desc: Texture_Desc, allocation: Allocation) -> Texture {
     texture: Texture;
     result: VkResult;
     result = check_vk(vkCreateImage(device, *image_create_info, vka, *texture.image));
-    return_if_error(result, Texture.{});
+    assert_vk_result(result);
 
     result = check_vk(vkBindImageMemory(device, texture.image, allocation.memory, allocation.offset));
-    return_if_error(result, Texture.{});
+    assert_vk_result(result);
 
     return texture;
+}
+
+// In this implementation, I use shader object as the primary pipeline
+// alternative, even though it is still called pipeline, it is in fact
+// shader object underneath.
+create_compute_pipeline :: (ir: string, entry_point: string = "main") -> Pipeline {
+    using context.gpu_context;
+    Basic.auto_release_temp();
+    create_info := VkShaderCreateInfoEXT.{
+        stage = .COMPUTE,
+        nextStage = .ALL, // because we don't know what the next will be
+        codeType = .SPIRV,
+        codeSize = ir.count, // This should be a multiple of 4
+        pCode = ir.data,
+        pName = Basic.temp_c_string(entry_point),
+        setLayoutCount = 0, // We don't use any descriptor set
+        pSetLayouts = null,
+        pushConstantRangeCount = 1,
+        pPushConstantRanges = *PUSH_CONSTANT_RANGE,
+        pSpecializationInfo = null, // Don't know what this is yet
+    };
+
+    shader: VkShaderEXT;
+    result := check_vk(vkCreateShadersEXT(device, 1, *create_info, vka, *shader));
+    assert_vk_result(result);
+
+    pipeline: Pipeline;
+    pipeline.shaders[0] = shader;
+    pipeline.is_compute = true;
+
+    return pipeline;
+}
+
+free_pipeline :: (pipeline: Pipeline) {
+    using context.gpu_context;
+    if pipeline.is_compute {
+        vkDestroyShaderEXT(device, pipeline.shaders[0], vka);
+    } else {
+        vkDestroyShaderEXT(device, pipeline.shaders[0], vka);
+        vkDestroyShaderEXT(device, pipeline.shaders[1], vka);
+    }
+}
+
+// This is not create queue, but aquire one. We currently push
+// everything into the main graphics queue
+create_queue :: () -> Queue {
+    using context.gpu_context;
+    return .{vk = main_queue};
+}
+
+// TODO: the command pool selection should base on the queue passed
+start_command_recording :: (queue: Queue) -> Command_Buffer {
+    using context.gpu_context;
+
+    bump_command_pool_index();
+
+    result: VkResult;
+    cb: Command_Buffer;
+    // Here we optimistically reset the command pool
+    // TODO: we should have a semaphore to track the finish of the command pool
+    command_pool := command_pools[current_command_pool_index];
+    result = check_vk(vkResetCommandPool(device, command_pool, 0));
+    assert_vk_result(result);
+
+    allocate_info := VkCommandBufferAllocateInfo.{
+        commandPool = command_pool,
+        level = .PRIMARY,
+        commandBufferCount = 1,
+    };
+    result = check_vk(vkAllocateCommandBuffers(device, *allocate_info, *cb.vk));
+    assert_vk_result(result);
+
+    begin_info := VkCommandBufferBeginInfo.{
+        flags = .ONE_TIME_SUBMIT,
+    };
+    result = vkBeginCommandBuffer(cb, *begin_info);
+    assert_vk_result(result);
+    return cb;
+}
+
+submit :: (queue: Queue, command_buffers: []Command_Buffer, wait: []Semaphore_Pair = .[], signal: []Semaphore_Pair = .[]) {
+    Basic.auto_release_temp();
+    Basic.push_allocator(Basic.temp);
+
+    command_buffer_submit_infos := Basic.NewArray(command_buffers.count, VkCommandBufferSubmitInfo);
+
+    for 0..command_buffers.count - 1 {
+        vkEndCommandBuffer(command_buffers[it]);
+        command_buffer_submit_infos[it].commandBuffer = command_buffers[it];
+    }
+
+
+    submit_info := VkSubmitInfo2.{
+        commandBufferInfoCount = xx command_buffers.count,
+        pCommandBufferInfos = command_buffer_submit_infos.data,
+    };
+
+    if wait.count > 0 {
+        semaphore_infos := Basic.NewArray(wait.count, VkSemaphoreSubmitInfo);
+        for wait {
+            semaphore_infos[it_index].semaphore = it.semaphore;
+            semaphore_infos[it_index].value = it.value;
+            semaphore_infos[it_index].stageMask = .ALL_COMMANDS;
+        }
+
+        submit_info.waitSemaphoreInfoCount = xx semaphore_infos.count;
+        submit_info.pWaitSemaphoreInfos = semaphore_infos.data;
+    }
+
+    if signal.count > 0 {
+        semaphore_infos := Basic.NewArray(signal.count, VkSemaphoreSubmitInfo);
+
+        for signal {
+            semaphore_infos[it_index].semaphore = it.semaphore;
+            semaphore_infos[it_index].value = it.value;
+        }
+
+        submit_info.signalSemaphoreInfoCount = xx semaphore_infos.count;
+        submit_info.pSignalSemaphoreInfos = semaphore_infos.data;
+    }
+
+    result := check_vk(vkQueueSubmit2(queue.vk, 1, *submit_info, null));
+    assert_vk_result(result);
+}
+
+memcpy :: (cb: Command_Buffer, dst: Allocation, src: Allocation, size: u64) {
+    copy_region := VkBufferCopy2.{
+        srcOffset = src.offset,
+        dstOffset = dst.offset,
+        size = size,
+    };
+
+    copy_info := VkCopyBufferInfo2.{
+        srcBuffer = src.buffer,
+        dstBuffer = dst.buffer,
+        regionCount = 1,
+        pRegions = *copy_region,
+    };
+
+    vkCmdCopyBuffer2(cb, *copy_info);
+}
+
+create_semaphore :: (init_value: u64) -> Semaphore {
+    using context.gpu_context;
+
+    semaphore_type_create_info := VkSemaphoreTypeCreateInfo.{
+        semaphoreType = .TIMELINE,
+        initialValue = init_value,
+    };
+    semaphore_create_info := VkSemaphoreCreateInfo.{
+        pNext = *semaphore_type_create_info,
+    };
+    semaphore: Semaphore;
+    result: VkResult;
+    result = check_vk(vkCreateSemaphore(device, *semaphore_create_info, vka, *semaphore.vk));
+    assert_vk_result(result);
+
+    return semaphore;
+}
+
+wait_semaphore :: (semaphore: Semaphore, value: u64, timeout: u64 = 1000000) {
+    using context.gpu_context;
+    wait_info := VkSemaphoreWaitInfo.{
+        semaphoreCount = 1,
+        pSemaphores = *semaphore.vk,
+        pValues = *value,
+    };
+
+    result := check_vk(vkWaitSemaphores(device, *wait_info, timeout));
+    assert_vk_result(result);
+}
+
+destroy_semaphore :: (semaphore: Semaphore) {
+    using context.gpu_context;
+    vkDestroySemaphore(device, semaphore, vka);
+}
+
+// This function is weird
+barrier :: (cb: Command_Buffer, before: Stage, after: Stage, hazards: Hazard = 0) {
+    dependency_info := VkDependencyInfo.{
+        dependencyFlags = 0,
+    };
+
+    memory_barrier := VkMemoryBarrier2.{
+        srcStageMask = to_vulkan_pipeline_stage(before),
+        srcAccessMask = .NONE,
+        dstStageMask = to_vulkan_pipeline_stage(after),
+        dstAccessMask = .NONE,
+    };
+
+    if hazards & .DRAW_ARGUMENTS {
+        memory_barrier.srcAccessMask |= .SHADER_WRITE;
+        memory_barrier.dstAccessMask |= .INDIRECT_COMMAND_READ;
+    }
+
+    if hazards & .DESCRIPTORS {
+        memory_barrier.srcAccessMask |= .SHADER_WRITE;
+        memory_barrier.dstAccessMask |= .SHADER_READ;
+    }
+
+    if hazards & .DEPTH_STENCIL {
+        memory_barrier.srcAccessMask |= .DEPTH_STENCIL_ATTACHMENT_WRITE;
+        memory_barrier.dstAccessMask |= .DEPTH_STENCIL_ATTACHMENT_WRITE | DEPTH_STENCIL_ATTACHMENT_READ;
+    }
+
+    // Generic
+    if hazards == 0 {
+        memory_barrier.srcAccessMask = .MEMORY_WRITE;
+        memory_barrier.dstAccessMask = .MEMORY_READ;
+    }
+
+    dependency_info.memoryBarrierCount = 1;
+    dependency_info.pMemoryBarriers = *memory_barrier;
+
+    vkCmdPipelineBarrier2(cb, *dependency_info);
+}
+
+set_pipeline :: (cb: Command_Buffer, pipeline: Pipeline) {
+    if pipeline.is_compute {
+        stage: VkShaderStageFlagBits = .COMPUTE;
+        vkCmdBindShadersEXT(cb, 1, *stage, pipeline.shaders.data);
+    } else {
+        stages := VkShaderStageFlagBits.[.VERTEX, .FRAGMENT];
+        vkCmdBindShadersEXT(cb, 2, stages.data, pipeline.shaders.data);
+    }
+}
+
+dispatch :: (cb: Command_Buffer, data: Allocation, count: u32) {
+    using context.gpu_context;
+    pc := Push_Constant.{
+        in_out = data.gpu,
+    };
+
+    vkCmdPushConstants(cb, pipeline_layout, .COMPUTE, 0, size_of(Push_Constant), *pc);
+    vkCmdDispatch(cb, count, 0, 0);
 }
 
 #scope_file
@@ -184,21 +478,21 @@ DEVICE_EXTENSIONS :: (*u8).[
 VK_EXT_SHADER_OBJECT_EXTENSION_NAME,
 ];
 
-return_if_error :: (result: VkResult) #expand {
-    if result != .SUCCESS {
-        #if DEBUG_ASSERT {
-            debug_break();
-        }
-        `return;
-    }
+// This is the sole push constant struct that will ever pass to the shader
+Push_Constant :: struct {
+    in_out: VkDeviceAddress;
+    textures: VkDeviceAddress; // TODO: I am not sure whether this could work
 }
 
-return_if_error :: (result: VkResult, v: $T) #expand {
-    if result != .SUCCESS {
-        #if DEBUG_ASSERT {
-            debug_break();
-        }
-        `return v;
+PUSH_CONSTANT_RANGE :: VkPushConstantRange.{
+    stageFlags = .ALL,
+    offset = 0,
+    size = size_of(Push_Constant),
+};
+
+assert_vk_result :: (result: VkResult) #expand {
+    #if DEBUG_ASSERT {
+        `Basic.assert(result == .SUCCESS);
     }
 }
 
@@ -449,9 +743,9 @@ choose_physical_device :: (instance: VkInstance, surface: VkSurfaceKHR, device_e
 make_device :: (device_extensions: [] *u8) -> VkResult, VkDevice {
     using context.gpu_context;
 
-    indices_array := u32.[queue_indices.graphics, queue_indices.present];
+    indices_array := u32.[queue_family_indices.graphics, queue_family_indices.present];
 
-    queue_count := ifx queue_indices.graphics == queue_indices.present then 1 else 2;
+    queue_count := ifx queue_family_indices.graphics == queue_family_indices.present then 1 else 2;
     queue_create_infos := Basic.NewArray(queue_count, VkDeviceQueueCreateInfo, initialized = false,, Basic.temp);
     queue_priority : float32 = 1.0;
 
@@ -481,7 +775,7 @@ make_device :: (device_extensions: [] *u8) -> VkResult, VkDevice {
     };
     chain = *features13;
     features12 := VkPhysicalDeviceVulkan12Features.{
-        pNext = chain,
+        pNext                                         = chain,
         bufferDeviceAddress                           = VK_TRUE,
         descriptorIndexing                            = VK_TRUE,
         scalarBlockLayout                             = VK_TRUE,
@@ -489,6 +783,7 @@ make_device :: (device_extensions: [] *u8) -> VkResult, VkDevice {
         descriptorBindingVariableDescriptorCount      = VK_TRUE,
         descriptorBindingStorageBufferUpdateAfterBind = VK_TRUE,
         shaderInt8                                    = VK_TRUE,
+        timelineSemaphore                             = VK_TRUE,
     };
     chain = *features12;
     features11 := VkPhysicalDeviceVulkan11Features.{
@@ -635,6 +930,40 @@ to_vulkan_image_create_info :: (desc: Texture_Desc) -> VkImageCreateInfo {
     };
 
     return info;
+}
+
+to_vulkan_pipeline_stage :: (stage: Stage) -> VkPipelineStageFlags2 {
+    vk: VkPipelineStageFlags2 = .NONE;
+    if stage == {
+    case .TOP;
+        vk = .TOP_OF_PIPE;
+    case .BOTTOM;
+        vk = .BOTTOM_OF_PIPE;
+    case .COMPUTE;
+        vk = .COMPUTE_SHADER;
+    case .TRANSFER;
+        vk = .ALL_TRANSFER;
+    case .VERTEX;
+        vk = .VERTEX_SHADER;
+    case .FRAGMENT;
+        vk = .FRAGMENT_SHADER;
+    case .ALL_GRAPHICS;
+        vk = .ALL_GRAPHICS;
+    case .ALL_COMMANDS;
+        vk = .ALL_COMMANDS;
+    }
+
+    return vk;
+}
+
+bump_command_pool_index :: () {
+    using context.gpu_context;
+
+    if current_command_pool_index >= 4 {
+        current_command_pool_index = 0;
+    } else {
+        current_command_pool_index += 1;
+    }
 }
 
 #import "Vulkan";

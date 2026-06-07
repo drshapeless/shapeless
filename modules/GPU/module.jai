@@ -43,6 +43,12 @@ Texture_Type :: enum {
     CUBE_ARRAY;
 }
 
+Queue_Type :: enum {
+    MAIN     :: 0;
+    COMPUTE  :: 1;
+    TRANSFER :: 2;
+}
+
 u32x3 :: struct {
     x: u32;
     y: u32;
@@ -199,6 +205,28 @@ Arena :: struct {
     total: u64;
     current_position: u64;
     bytes_left: u64;
+}
+
+Semaphore_Pair :: struct {
+    semaphore: Semaphore;
+    value: u64;
+}
+
+Stage :: enum {
+    TOP;
+    TRANSFER;
+    COMPUTE;
+    VERTEX;
+    FRAGMENT;
+    BOTTOM;
+    ALL_GRAPHICS;
+    ALL_COMMANDS;
+}
+
+Hazard :: enum_flags {
+    DRAW_ARGUMENTS :: 0x1;
+    DESCRIPTORS :: 0x2;
+    DEPTH_STENCIL :: 0x4;
 }
 
 init_arena :: (arena: *Arena, size: u64) {
