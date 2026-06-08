@@ -461,7 +461,7 @@ dispatch :: (cb: Command_Buffer, data: Allocation, count: u32) {
     };
 
     vkCmdPushConstants(cb, pipeline_layout, .COMPUTE, 0, size_of(Push_Constant), *pc);
-    vkCmdDispatch(cb, count, 0, 0);
+    vkCmdDispatch(cb, count, 1, 1);
 }
 
 #scope_file
