@@ -240,7 +240,7 @@ deinit_arena :: (arena: *Arena) {
     free(arena.base_allocation);
 }
 
-arena_alloc :: (arena: *Arena, size: u64, alignment: u64) -> Allocation {
+arena_alloc :: (arena: *Arena, size: u64, alignment: u64 = 8) -> Allocation {
     padding := get_alignment_padding(arena.current_position, alignment);
 
     if padding + size > arena.bytes_left {
@@ -270,7 +270,7 @@ arena_reset :: (arena: *Arena) {
     #load "vulkan.jai";
 }
 
-get_alignment_padding :: (memory: *void, alignment: u64) -> u64 {
-    padding := (alignment - (memory.(u64) % alignment)) % alignment;
+get_alignment_padding :: (memory: u64, alignment: u64) -> u64 {
+    padding := (alignment - (memory % alignment)) % alignment;
     return padding;
 }

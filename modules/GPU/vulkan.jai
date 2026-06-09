@@ -237,9 +237,9 @@ create_compute_pipeline :: (ir: string, entry_point: string = "main") -> Pipelin
     Basic.auto_release_temp();
     create_info := VkShaderCreateInfoEXT.{
         stage = .COMPUTE,
-        nextStage = .ALL, // because we don't know what the next will be
+        nextStage = 0, // because we don't know what the next will be
         codeType = .SPIRV,
-        codeSize = ir.count, // This should be a multiple of 4
+        codeSize = xx ir.count, // This should be a multiple of 4
         pCode = ir.data,
         pName = Basic.temp_c_string(entry_point),
         setLayoutCount = 0, // We don't use any descriptor set
@@ -460,7 +460,7 @@ dispatch :: (cb: Command_Buffer, data: Allocation, count: u32) {
         in_out = data.gpu,
     };
 
-    vkCmdPushConstants(cb, pipeline_layout, .COMPUTE, 0, size_of(Push_Constant), *pc);
+    vkCmdPushConstants(cb, pipeline_layout, .ALL, 0, size_of(Push_Constant), *pc);
     vkCmdDispatch(cb, count, 1, 1);
 }
 

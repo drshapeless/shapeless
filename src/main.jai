@@ -15,40 +15,50 @@ main :: () {
     GPU.init();
     defer GPU.deinit();
 
-    allocation0 := GPU.alloc(1024);
-    defer GPU.free(allocation0);
+    shader_code := read_entire_file("shaders/test_color.slang.spv");
+    defer free(shader_code);
 
-    allocation1 := GPU.alloc(1024);
-    defer GPU.free(allocation1);
-
-    some_numbers := int.[1, 2, 3, 3];
-    memcpy(allocation0.cpu, some_numbers.data, size_of(int) * some_numbers.count);
-
-    a0_num: []int;
-    a0_num.count = 4;
-    a0_num.data = allocation0.cpu;
-
-    log("%", a0_num);
-
-    a1_num: []int;
-    a1_num.count = 4;
-    a1_num.data = allocation1.cpu;
-    log("%", a1_num);
-
-    semaphore := GPU.create_semaphore(0);
-    defer GPU.destroy_semaphore(semaphore);
     queue := GPU.create_queue();
-    cb := GPU.start_command_recording(queue);
-    GPU.memcpy(cb, allocation1, allocation0, size_of(int) * some_numbers.count);
-    GPU.submit(queue, .[cb], signal = .[.{semaphore, 1}]);
+    pipeline := GPU.create_compute_pipeline(shader_code);
+    defer GPU.free_pipeline(pipeline);
 
-    GPU.wait_semaphore(semaphore, 1);
+    arena: GPU.Arena;
+    GPU.init_arena(*arena, 128 * 1024 * 1024);
+    defer GPU.deinit_arena(*arena);
 
-    log("%", a1_num);
+    My_Struct :: struct {
+        input: u64;
+        output: u64;
+    }
 
+    gpu_data := GPU.arena_alloc(*arena, size_of(My_Struct));
+    input_data := GPU.arena_alloc(*arena, size_of(float) * 256);
+    output_data := GPU.arena_alloc(*arena, size_of(float) * 256);
+    gpu_data.cpu.(*My_Struct).input = input_data.gpu;
+    gpu_data.cpu.(*My_Struct).output = output_data.gpu;
 
+    input_array: []float = .{count = 256, data = input_data.cpu};
+
+    for * input_array {
+        it.* = it_index.(float) * 1.7;
+    }
+
+    cmd := GPU.start_command_recording(queue);
+    GPU.set_pipeline(cmd, pipeline);
+    GPU.dispatch(cmd, gpu_data, 256);
+    sema := GPU.create_semaphore(0);
+    GPU.submit(queue, .[cmd], signal = .[.{sema, 1}]);
+
+    GPU.wait_semaphore(sema, 1);
+    defer GPU.destroy_semaphore(sema);
+
+    output_array: []float = .{count = 256, data = output_data.cpu};
+    for 0..10 {
+        log("%", output_array[it]);
+    }
 }
 
 #import "SDL3";
 GPU :: #import "GPU";
 #import "Basic";
+#import "File";
