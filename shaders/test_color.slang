@@ -10,8 +10,8 @@ struct Push_Constants {
 
 [shader("compute")]
 [numthreads(256, 1, 1)]
-void main(uint3 thread_id: SV_DispatchThreadID, uniform Push_Constants pc) {
-    var i = thread_id.x;
+void compute_main(uint thread_id: SV_DispatchThreadID, uniform Push_Constants pc) {
+    var i = thread_id;
     var original = pc.in_out.in_pointer[i];
     pc.in_out.out_pointer[i] = original * 2;
 }

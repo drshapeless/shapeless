@@ -232,7 +232,7 @@ create_texture :: (desc: Texture_Desc, allocation: Allocation) -> Texture {
 // In this implementation, I use shader object as the primary pipeline
 // alternative, even though it is still called pipeline, it is in fact
 // shader object underneath.
-create_compute_pipeline :: (ir: string, entry_point: string = "main") -> Pipeline {
+create_compute_pipeline :: (ir: string, entry_point: string = "compute_main") -> Pipeline {
     using context.gpu_context;
     Basic.auto_release_temp();
     create_info := VkShaderCreateInfoEXT.{
