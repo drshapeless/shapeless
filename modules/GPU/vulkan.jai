@@ -1,22 +1,25 @@
 GPU_Context :: struct {
-    sdl_window: *SDL_Window;
-    instance: VkInstance;
-    device: VkDevice;
-    vka: *VkAllocationCallbacks;
-    surface: VkSurfaceKHR;
-    queue_family_indices: Queue_Family_Indices;
-    physical_device: VkPhysicalDevice;
-    memory_indices: Memory_Indices;
-    main_queue: VkQueue;
-    command_pools: [5]VkCommandPool;
+    sdl_window                 : *SDL_Window;
+    instance                   : VkInstance;
+    device                     : VkDevice;
+    vka                        : *VkAllocationCallbacks;
+    surface                    : VkSurfaceKHR;
+    queue_family_indices       : Queue_Family_Indices;
+    physical_device            : VkPhysicalDevice;
+    memory_indices             : Memory_Indices;
+    main_queue                 : VkQueue;
+    command_pools              : [5]VkCommandPool;
     current_command_pool_index := 0;
-    pipeline_layout: VkPipelineLayout;
+    pipeline_layout            : VkPipelineLayout;
+
+    cpu_pointer_table: Table(*void, Allocation);
+    gpu_pointer_table: Table(u64, Allocation);
 }
 
 Allocation :: struct {
-    cpu: *void;
-    gpu: u64;
-    offset: u64;
+    cpu:    *void;
+    gpu:    u64;
+    size:   u64;
 
     // The following fields are implementation specific
     memory: VkDeviceMemory;
@@ -50,6 +53,7 @@ Semaphore :: struct {
 
 init :: (window: *SDL_Window = null) {
     context.gpu_context = Basic.alloc(size_of(GPU_Context));
+    context.gpu_allocator = vulkan_allocator;
     using context.gpu_context;
     get_instance_proc_addr := SDL_Vulkan_GetVkGetInstanceProcAddr();
     Basic.assert(get_instance_proc_addr != null);
@@ -137,8 +141,47 @@ deinit :: () {
     Basic.free(context.gpu_context);
 }
 
+vulkan_allocator :: Allocator.{vulkan_allocator_proc, null};
+
+vulkan_allocator_proc :: (mode: Allocator_Mode, requested_size: s64, old_size: s64, old_memory: *void, allocator_data: *void) -> *void {
+    using context.gpu_context;
+
+    if mode == {
+    case .ALLOCATE;
+        allocation := vulkan_allocate(xx requested_size);
+        table_add(*cpu_pointer_table, allocation.cpu, allocation);
+        table_add(*gpu_pointer_table, allocation.gpu, allocation);
+        return allocation.cpu;
+    case .FREE;
+        found, allocation := table_find(*allocation_table, old_memory);
+        if found {
+            vulkan_deallocate(allocation);
+        }
+    case;
+        Basic.assert(false, "% mode is not supported in Vulkan allocator", mode);
+    }
+
+    return null;
+}
+
+host_to_device_pointer :: (ptr: *void) -> u64 {
+    using context.gpu_context;
+
+    allocation: Allocation;
+    found := false;
+    for allocation_table {
+        if ptr >= it.cpu && ptr < (it.cpu + it.size) {
+            found = true;
+            allocation = it;
+        }
+    }
+    Basic.assert(found, "Invalid host pointer");
+
+    return allocation.gpu;
+}
+
 // This only allocates shared memory (rebar).
-alloc :: (bytes: u64) -> Allocation {
+vulkan_allocate :: (bytes: u64) -> Allocation {
     using context.gpu_context;
     buffer: VkBuffer;
     buffer_create_info := VkBufferCreateInfo.{
@@ -181,11 +224,12 @@ alloc :: (bytes: u64) -> Allocation {
     Basic.assert(result == .SUCCESS);
     allocation.memory = memory;
     allocation.buffer = buffer;
+    allocation.size = bytes;
 
     return allocation;
 }
 
-free :: (allocation: Allocation) {
+vulkan_deallocate :: (allocation: Allocation) {
     using context.gpu_context;
     if allocation.buffer {
         vkDestroyBuffer(device, allocation.buffer, vka);
@@ -971,3 +1015,4 @@ bump_command_pool_index :: () {
 Basic :: #import "Basic";
 Math :: #import "Math";
 Compiler :: #import "Compiler";
+#import "Hash_Table";

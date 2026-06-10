@@ -222,39 +222,43 @@ Hazard :: enum_flags {
     DEPTH_STENCIL :: 0x4;
 }
 
-// This mimics the allocator in Jai
-GPU_Allocator_Proc :: #type (mode: Allocator_Mode, size: s64, old_size: s64, old_memory: Allocation, allocator_data: *void) -> Allocation;
-GPU_Allocator :: struct {
-    proc: GPU_Allocator_Proc;
-    data: *void;
+// Allocator
+// A GPU allocator has the same interface as a Jai allocator
+alloc :: (size: s64) -> *void {
+    a := context.gpu_allocator;
+    return a.proc(.ALLOCATE, size, 0, null, a.data);
+}
+
+free :: (ptr: *void) {
+    a := context.gpu_allocator;
+    a.proc(.FREE, 0, 0, ptr, a.data);
 }
 
 Arena :: struct {
-    base_allocation:  Allocation;
+    base_memory:      *void;
     total:            s64;
     current_position: s64;
     bytes_left:       s64;
-}
-
-alloc :: (size: s64) -> Allocation {
-    a := context.gpu_allocator;
-    return a.proc(.ALLOCATE, size, 0, .{}, a.data);
-}
-
-free :: (allocation: Allocation) {
-    using context.gpu_context;
-    return gpu_allocator.proc(.FREE, 0, 0, allocation, gpu_allocator.data);
+    allocator:        Allocator;
 }
 
 init_arena :: (arena: *Arena, size: s64) {
-    arena.base_allocation = alloc(size);
+    arena.allocator = context.gpu_allocator;
+    arena.base_memory = alloc(size);
     arena.total = size;
     arena.current_position = 0;
     arena.bytes_left = size;
 }
 
 deinit_arena :: (arena: *Arena) {
-    free(arena.base_allocation);
+    free(arena.base_memory,, gpu_allocator = arena.allocator);
+}
+
+arena_allocator_proc :: (mode: Allocator_Mode, requested_size: s64, old_size: s64, old_memory: *void, allocator_data: *void) -> *void {
+    arena := allocator_data.(*Arena);
+    if mode == {
+
+    }
 }
 
 arena_alloc :: (arena: *Arena, size: u64, alignment: u64 = 8) -> Allocation {
