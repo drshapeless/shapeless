@@ -1,17 +1,25 @@
+// This implementation is based on Metal 4, some of the older things
+// suggested by No Graphics API that based on Metal is no longer
+// valid, for example a command buffer based on a queue, now Metal 4
+// mimics that behaviour of Vulkan, I don't really know whether this
+// is a good idea or not.
+
 GPU_Context :: struct {
-    device: *MTLDevice;
-    sdl_window: *SDL_Window;
-    view: SDL_MetalView;
-    layer: *CAMetalLayer;
-    compiler: *MTL4Compiler;
+    device:                  *MTLDevice;
+    sdl_window:              *SDL_Window;
+    view:                    SDL_MetalView;
+    layer:                   *CAMetalLayer;
+    compiler:                *MTL4Compiler;
+
+    spirv_cross_context:     spvc_context;
 
     // Useful for checking size and alignment.
     temp_texture_descriptor: *MTLTextureDescriptor;
 }
 
 Allocation :: struct {
-    cpu: *void;
-    gpu: u64;
+    cpu:    *void;
+    gpu:    u64;
     buffer: *MTLBuffer;
     offset: u64;
 }
@@ -25,11 +33,16 @@ Pipeline :: struct {
 
 Depth_Stencil_State :: *MTLDepthStencilState;
 
-Queue :: *MTLCommandQueue;
-Command_Buffer :: *MTLCommandBuffer;
+Queue :: struct {
+    #as mtl: *MTL4CommandQueue;
+}
+Command_Buffer :: struct {
+    #as mtl: *MTL4CommandBuffer;
+}
+
 Semaphore :: *MTLSharedEvent;
 
-init :: () {
+init :: (window: *SDL_Window = null) {
     init_objective_c();
     init_metal();
     context.gpu_context = Basic.alloc(size_of(GPU_Context));
@@ -44,53 +57,51 @@ init :: () {
     defer release(compiler_desc);
     compiler = MTLDevice.newCompilerWithDescriptor_error_(device, compiler_desc, *error);
     Basic.assert(error == null, "Error creating compiler: %", to_string(NSError.localizedDescription(error)));
+
+    spv_result := spvc_context_create(*spirv_cross_context);
+    assert_spvc(spv_result == .SUCCESS);
+
+    if window {
+        sdl_window = window;
+        view = SDL_Metal_CreateView(window);
+        layer = SDL_Metal_GetLayer(view);
+    }
 }
 
 deinit :: () {
     using context.gpu_context;
+    SDL_Metal_DestroyView(view);
     release(compiler);
     release(temp_texture_descriptor);
     release(device);
     Basic.free(context.gpu_context);
 }
 
-init_swapchain :: (window: *SDL_Window) {
-    using context.gpu_context;
-    sdl_window = window;
-    view = SDL_Metal_CreateView(window);
-    layer = SDL_Metal_GetLayer(view);
-}
+// // Allocating arbitary memory in Metal is just allocating a buffer
+// alloc :: (bytes: u64) -> Allocation {
+//     using context.gpu_context;
 
-deinit_swapchain :: () {
-    using context.gpu_context;
-    SDL_Metal_DestroyView(view);
-}
+//     buffer := MTLDevice.newBufferWithLength_options_(device, bytes, .StorageModeShared);
+//     allocation: Allocation;
+//     allocation.cpu = MTLBuffer.contents(buffer);
+//     allocation.gpu = MTLBuffer.gpuAddress(buffer);
+//     allocation.buffer = buffer;
 
-// Allocating arbitary memory in Metal is just allocating a buffer
-alloc :: (bytes: u64) -> Allocation {
-    using context.gpu_context;
+//     return allocation;
+// }
 
-    buffer := MTLDevice.newBufferWithLength_options_(device, bytes, .StorageModeShared);
-    allocation: Allocation;
-    allocation.cpu = MTLBuffer.contents(buffer);
-    allocation.gpu = MTLBuffer.gpuAddress(buffer);
-    allocation.buffer = buffer;
+// // Since all buffer are aligned in the strictest alignment requirement
+// // to my knowledge, we just ignore the alignment.
+// alloc :: (bytes: u64, align: u64) -> Allocation {
+//     return alloc(bytes);
+// }
 
-    return allocation;
-}
-
-// Since all buffer are aligned in the strictest alignment requirement
-// to my knowledge, we just ignore the alignment.
-alloc :: (bytes: u64, align: u64) -> Allocation {
-    return alloc(bytes);
-}
-
-free :: (allocation: Allocation) {
-    // We should do something like this
-    // [buffer setPurgeableState:MTLPurgeableStateEmpty]
-    // But it is a thing of MTLHeap, I am lazy to cast.
-    release(allocation.buffer);
-}
+// free :: (allocation: Allocation) {
+//     // We should do something like this
+//     // [buffer setPurgeableState:MTLPurgeableStateEmpty]
+//     // But it is a thing of MTLHeap, I am lazy to cast.
+//     release(allocation.buffer);
+// }
 
 texture_size_align :: (desc: Texture_Desc) -> Texture_Size_Align {
     using context.gpu_context;
@@ -130,7 +141,7 @@ rw_texture_view_descriptor :: (texture: Texture, desc: View_Desc) -> Texture_Des
     return texture_view_descriptor(texture, desc);
 }
 
-create_compute_pipeline_with_filename :: (shader_path: string, function_name: string = "main") -> Pipeline {
+create_compute_pipeline_with_filename :: (shader_path: string, function_name: string = "compute_main") -> Pipeline {
     using context.gpu_context;
     error: *NSError;
     shader_string := File.read_entire_file(shader_path);
@@ -158,11 +169,58 @@ create_compute_pipeline_with_filename :: (shader_path: string, function_name: st
     return .{compute = pipeline_state, is_compute = true};
 }
 
-// TODO: IR version is not yet implemented, in fact, the IR may even
-// be .spirv, not .air.
-create_compute_pipeline :: (compute_ir: string) -> Pipeline {
+// The IR passed here is spirv, we use spirv cross to turn spirv into metal shader
+create_compute_pipeline :: (compute_ir: string, entry_point: string = "compute_main") -> Pipeline {
+    using context.gpu_context;
 
-    return .{};
+    ir: spvc_parsed_ir;
+    result := spvc_context_parse_spirv(spirv_cross_context, xx compute_ir.data, xx compute_ir.count, *ir);
+    assert_spvc(result);
+
+    my_compiler: spvc_compiler;
+    result = spvc_context_create_compiler(spirv_cross_context, .MSL, ir, .TAKE_OWNERSHIP, *my_compiler);
+    assert_spvc(result);
+
+    my_options: spvc_compiler_options;
+    result = spvc_compiler_create_compiler_options(my_compiler, *my_options);
+    assert_spvc(result);
+    result = spvc_compiler_options_set_uint(my_options, .MSL_VERSION, SPVC_MAKE_MSL_VERSION(4, 0, 0));
+    assert_spvc(result);
+    result = spvc_compiler_options_set_bool(my_options, .MSL_ARGUMENT_BUFFERS, SPVC_TRUE);
+    assert_spvc(result);
+
+    msl_source: *u8;
+    result = spvc_compiler_compile(my_compiler, *msl_source);
+    assert_spvc(result);
+
+    shader_string := to_string(msl_source);
+
+    mtl_options: *MTLCompileOptions = objc_new(MTLCompileOptions);
+    mtl_options.setLanguageVersion_(mtl_options, MTLLanguageVersion.e4_0);
+
+    error: *NSError;
+    library_desc := objc_new(MTL4LibraryDescriptor);
+    defer release(library_desc);
+    MTL4LibraryDescriptor.setSource_(library_desc, NSString.getTempString(shader_string));
+    MTL4LibraryDescriptor.setOptions_(library_desc, mtl_options);
+
+    library := MTL4Compiler.newLibraryWithDescriptor_error_(compiler, *error);
+    Basic.assert(error == null, "Error creating library: %", to_string(NSError.localizedDescription(error)));
+
+    function_desc := objc_new(MTL4LibraryFunctionDescriptor);
+    defer release(function_desc);
+    MTL4LibraryFunctionDescriptor.setLibrary_(function_desc, library);
+    MTL4LibraryFunctionDescriptor.setName_(function_desc, NSString.getTempString(entry_point));
+
+    compute_pipeline_desc := objc_new(MTL4ComputePipelineDescriptor);
+    defer release(compute_pipeline_desc);
+
+    MTL4ComputePipelineDescriptor.setComputeFunctionDescriptor_(compute_pipeline_desc, function_desc);
+    pipeline_state := MTL4Compiler.newComputePipelineStateWithDescriptor_compilerTaskOptions_error_(compiler, compute_pipeline_desc, null, *error);
+
+    Basic.assert(error == null, "Error creating compute PSO: %", to_string(NSError.localizedDescription(error)));
+
+    return .{compute = pipeline_state, is_compute = true};
 }
 
 create_graphics_pipeline_with_filename :: (shader_path: string, desc: Raster_Desc, vertex_function_name: string = "vertex_main", fragment_function_main: string = "fragment_main") -> Pipeline {
@@ -283,20 +341,21 @@ free_depth_stencil_state :: (state: Depth_Stencil_State) {
 create_queue :: () -> Queue {
     using context.gpu_context;
     // Currently, a simple queue is created
-    queue := MTLDevice.newCommandQueue(device);
+    queue := MTLDevice.newMTL4CommandQueue(device);
     return queue;
 }
 
 start_command_recording :: (queue: Queue) -> Command_Buffer {
-    cmd := MTLCommandQueue.commandBuffer(queue);
+    using context.gpu_context;
+    cmd := MTLDevice.newCommandBuffer(device);
 
     // TODO: Here we should set up the argument buffer, just like the
     // push constant in Vulkan
-    return cmd;
+    return .{mtl = cmd};
 }
 
 // This function looks weird, what the hell, queue is not used at all in metal.
-submit :: (queue: Queue, command_buffers: []Command_Buffer) {
+submit :: (queue: Queue, command_buffers: []Command_Buffer, wait: []Semaphore_Pair = .[], signal: []Semaphore_Pair = .[]) {
     for cmd: command_buffers {
         MTLCommandBuffer.commit(cmd);
     }
@@ -348,6 +407,24 @@ copy_from_texture :: (cb: Command_Buffer, dest: Allocation, texture: Texture) {
     blit.(*MTLCommandEncoder).endEncoding(blit);
 }
 
+set_active_texture_heap_ptr :: (cb: Command_Buffer, allocation: Allocation) {
+
+}
+
+set_pipeline :: (cb: Command_Buffer, pipeline: Pipeline) {
+    if pipeline.is_compute {
+        encoder := cb.computeCommandEncoder(cb);
+        encoder.setComputePipelineState_(encoder, pipeline.compute);
+        encoder.(*MTLCommandEncoder).endEncoding(encoder);
+    }
+}
+
+dispatch :: (cb: Command_Buffer, data: Allocation, count: u32) {
+    encoder := cb.computeCommandEncoder(cb);
+    encoder.setBytes_length_atIndex_(encoder, *data.gpu, size_of(u64), 0);
+    encoder.useResource_usage_(encoder, data.buffer, .Read);
+    encoder.dispatchThreadgroups_threadsPerThreadgroup_(encoder, .{1, 1, 1}, .{256, 1, 1});
+    encoder.(*MTLCommandEncoder).endEncoding(encoder);
 }
 
 #scope_file
@@ -498,6 +575,10 @@ to_metal_stencil_operation :: (op: OP) -> MTLStencilOperation {
     return func;
 }
 
+assert_spvc :: (result: spvc_result) #expand {
+    `Basic.assert(result == .SUCCESS);
+}
+
 #import "Metal";
 Basic :: #import "Basic";
 #import "SDL3";
@@ -505,3 +586,4 @@ Basic :: #import "Basic";
 #import "Objective_C";
 File :: #import "File";
 String :: #import "String";
+#import "spirv_cross";

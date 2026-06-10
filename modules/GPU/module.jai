@@ -200,13 +200,6 @@ Depth_Stencil_Desc :: struct {
     stencil_back: Stencil;
 }
 
-Arena :: struct {
-    base_allocation: Allocation;
-    total: u64;
-    current_position: u64;
-    bytes_left: u64;
-}
-
 Semaphore_Pair :: struct {
     semaphore: Semaphore;
     value: u64;
@@ -229,7 +222,31 @@ Hazard :: enum_flags {
     DEPTH_STENCIL :: 0x4;
 }
 
-init_arena :: (arena: *Arena, size: u64) {
+// This mimics the allocator in Jai
+GPU_Allocator_Proc :: #type (mode: Allocator_Mode, size: s64, old_size: s64, old_memory: Allocation, allocator_data: *void) -> Allocation;
+GPU_Allocator :: struct {
+    proc: GPU_Allocator_Proc;
+    data: *void;
+}
+
+Arena :: struct {
+    base_allocation:  Allocation;
+    total:            s64;
+    current_position: s64;
+    bytes_left:       s64;
+}
+
+alloc :: (size: s64) -> Allocation {
+    a := context.gpu_allocator;
+    return a.proc(.ALLOCATE, size, 0, .{}, a.data);
+}
+
+free :: (allocation: Allocation) {
+    using context.gpu_context;
+    return gpu_allocator.proc(.FREE, 0, 0, allocation, gpu_allocator.data);
+}
+
+init_arena :: (arena: *Arena, size: s64) {
     arena.base_allocation = alloc(size);
     arena.total = size;
     arena.current_position = 0;
@@ -263,6 +280,7 @@ arena_reset :: (arena: *Arena) {
 }
 
 #add_context gpu_context: *GPU_Context;
+#add_context gpu_allocator: GPU_Allocator;
 
 #if OS == .MACOS {
     #load "metal.jai";
