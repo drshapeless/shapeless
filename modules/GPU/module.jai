@@ -226,73 +226,136 @@ Hazard :: enum_flags {
 // A GPU allocator has the same interface as a Jai allocator
 alloc :: (size: s64) -> *void {
     a := context.gpu_allocator;
-    return a.proc(.ALLOCATE, size, 0, null, a.data);
+
+    result := a.proc(.ALLOCATE, size, 0, null, a.data);
+
+    return result;
 }
 
-free :: (ptr: *void) {
+free :: (memory: *void) {
     a := context.gpu_allocator;
-    a.proc(.FREE, 0, 0, ptr, a.data);
+
+    a.proc(.FREE, 0, 0, memory, a.data);
 }
 
-Arena :: struct {
-    base_memory:      *void;
-    total:            s64;
-    current_position: s64;
-    bytes_left:       s64;
-    allocator:        Allocator;
+array_free :: inline (array: [] $T) {
+    free(array.data);
 }
 
-init_arena :: (arena: *Arena, size: s64) {
-    arena.allocator = context.gpu_allocator;
-    arena.base_memory = alloc(size);
-    arena.total = size;
-    arena.current_position = 0;
-    arena.bytes_left = size;
-}
+New :: ($T: Type, $initialized := true) -> *T {
+    memory := alloc(size_of(T));
 
-deinit_arena :: (arena: *Arena) {
-    free(arena.base_memory,, gpu_allocator = arena.allocator);
-}
+    // Since New gets called a lot, we just roll Initialize() into here, so that
+    // we don't kick off so many extra polymorphs.
+    #if initialized {
+        ini :: initializer_of(T);
 
-arena_allocator_proc :: (mode: Allocator_Mode, requested_size: s64, old_size: s64, old_memory: *void, allocator_data: *void) -> *void {
-    arena := allocator_data.(*Arena);
-    if mode == {
-
-    }
-}
-
-arena_alloc :: (arena: *Arena, size: u64, alignment: u64 = 8) -> Allocation {
-    padding := get_alignment_padding(arena.current_position, alignment);
-
-    if padding + size > arena.bytes_left {
-        return {};
+        #if ini  inline ini(memory);
+        else     memset(memory, 0, size_of(T));
     }
 
-    allocation := arena.base_allocation;
-    allocation.cpu += arena.current_position + padding;
-    allocation.gpu += arena.current_position + padding;
-    allocation.offset = arena.current_position + padding;
-    arena.current_position += padding + size;
-    arena.bytes_left -= padding + size;
+    return cast(*T) memory;
+}
+
+// This is a direct copy of the Basic.NewArray, only modifying the allocator
+NewArray :: (count: s64, $T: Type, $initialized := true, alignment: s32 = -1) -> (result: [] T, unaligned_base: *void) {
+    if !count return .[], null;
+
+    a := context.gpu_allocator;
+
+    extra: s32 = 0;
+    if alignment > 0 {
+        extra = alignment;
+    }
+
+    original_memory := cast(*void) alloc(size_of(T) * count + extra);
+
+    memory: *void;
+    if alignment > 0 {
+        memory = cast(*void) Basic.align_forward(cast(s64)original_memory, alignment);
+    } else {
+        memory = original_memory;
+    }
+
+    result: [] T = ---;
+    result.count = count;
+    result.data  = memory;
+
+    #if initialized {
+        ini :: initializer_of(T);
+
+        #if ini {
+            for 0..count-1 {
+                inline ini(memory);
+                memory += size_of(T);
+            }
+        } else {
+            memset(memory, 0, count * size_of(T));
+        }
+    }
+
+    return result, original_memory;
+}
+
+host_to_device_pointer :: (ptr: *void) -> u64 {
+    using context.gpu_context;
+
+    allocation: Allocation;
+    found := false;
+    for cpu_pointer_table {
+        if ptr >= it.cpu && ptr < (it.cpu + it.size) {
+            found = true;
+            allocation = it;
+        }
+    }
+    Basic.assert(found, "Invalid cpu host pointer");
+
+    return allocation.gpu;
+}
+
+cpu_pointer_to_allocation :: (ptr: *void) -> Allocation {
+    using context.gpu_context;
+
+    allocation: Allocation;
+    found := false;
+    for cpu_pointer_table {
+        if ptr >= it.cpu && ptr < (it.cpu + it.size) {
+            found = true;
+            allocation = it;
+        }
+    }
+    Basic.assert(found, "Invalid cpu host pointer");
 
     return allocation;
 }
 
-arena_reset :: (arena: *Arena) {
-    arena.current_position = 0;
-    arena.bytes_left = arena.total;
+gpu_pointer_to_allocation :: (ptr: u64) -> Allocation {
+    using context.gpu_context;
+
+    allocation: Allocation;
+    found := false;
+    for gpu_pointer_table {
+        if ptr >= it.gpu && ptr < (it.gpu + it.size) {
+            found = true;
+            allocation = it;
+        }
+    }
+    Basic.assert(found, "Invalid gpu device pointer");
+
+    return allocation;
 }
 
 #add_context gpu_context: *GPU_Context;
-#add_context gpu_allocator: GPU_Allocator;
 
 #if OS == .MACOS {
     #load "metal.jai";
 } else {
     #load "vulkan.jai";
 }
+#load "arena.jai";
 
-get_alignment_padding :: (memory: u64, alignment: u64) -> u64 {
-    padding := (alignment - (memory % alignment)) % alignment;
-    return padding;
+#scope_file
+Basic :: #import "Basic";
+get_alignment_padding :: (current_position: u64, alignment: u64) -> u64 {
+    return (alignment - (current_position % alignment)) % alignment;
 }

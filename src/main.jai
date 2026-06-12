@@ -23,42 +23,72 @@ main :: () {
     defer GPU.free_pipeline(pipeline);
 
     arena: GPU.Arena;
-    GPU.init_arena(*arena, 128 * 1024 * 1024);
-    defer GPU.deinit_arena(*arena);
+    defer GPU.fini(*arena);
 
-    My_Struct :: struct {
-        input: u64;
-        output: u64;
+    array_0 := GPU.NewArray(16, float);
+    defer GPU.array_free(array_0);
+
+    array_0_gpu := GPU.host_to_device_pointer(array_0.data);
+
+    array_1 := GPU.NewArray(16, float);
+    defer GPU.array_free(array_1);
+
+    array_1_gpu := GPU.host_to_device_pointer(array_1.data);
+
+    for * array_0 {
+        it.* = xx it_index;
     }
 
-    gpu_data := GPU.arena_alloc(*arena, size_of(My_Struct));
-    input_data := GPU.arena_alloc(*arena, size_of(float) * 256);
-    output_data := GPU.arena_alloc(*arena, size_of(float) * 256);
-    gpu_data.cpu.(*My_Struct).input = input_data.gpu;
-    gpu_data.cpu.(*My_Struct).output = output_data.gpu;
+    log("%", array_0);
+    log("%", array_1);
 
-    input_array: []float = .{count = 256, data = input_data.cpu};
-
-    for * input_array {
-        it.* = it_index.(float) * 1.7;
-    }
-
-    cmd := GPU.start_command_recording(queue);
-    GPU.set_pipeline(cmd, pipeline);
-    GPU.dispatch(cmd, gpu_data, 256);
     sema := GPU.create_semaphore(0);
-    GPU.submit(queue, .[cmd], signal = .[.{sema, 1}]);
 
-    GPU.wait_semaphore(sema, 1);
-    defer GPU.destroy_semaphore(sema);
+    cb := GPU.start_command_recording();
 
-    output_array: []float = .{count = 256, data = output_data.cpu};
-    for 0..10 {
-        log("%", output_array[it]);
-    }
+    GPU.memcpy(cb, array_1_gpu, array_0_gpu, 16 * size_of(float));
+
+    GPU.submit(queue, .[cb], signal = .[.{sema, 1}]);
+
+    GPU.wait_semaphore(sema, 1, 100000);
+
+    log("%", array_0);
+    log("%", array_1);
+
+    // My_Struct :: struct {
+    //     input: u64;
+    //     output: u64;
+    // }
+
+    // gpu_data := GPU.arena_alloc(*arena, size_of(My_Struct));
+    // input_data := GPU.arena_alloc(*arena, size_of(float) * 256);
+    // output_data := GPU.arena_alloc(*arena, size_of(float) * 256);
+    // gpu_data.cpu.(*My_Struct).input = input_data.gpu;
+    // gpu_data.cpu.(*My_Struct).output = output_data.gpu;
+
+    // input_array: []float = .{count = 256, data = input_data.cpu};
+
+    // for * input_array {
+    //     it.* = it_index.(float) * 1.7;
+    // }
+
+    // cmd := GPU.start_command_recording(queue);
+    // GPU.set_pipeline(cmd, pipeline);
+    // GPU.dispatch(cmd, gpu_data, 256);
+    // sema := GPU.create_semaphore(0);
+    // GPU.submit(queue, .[cmd], signal = .[.{sema, 1}]);
+
+    // GPU.wait_semaphore(sema, 1);
+    // defer GPU.destroy_semaphore(sema);
+
+    // output_array: []float = .{count = 256, data = output_data.cpu};
+    // for 0..10 {
+    //     log("%", output_array[it]);
+    // }
 }
 
 #import "SDL3";
 GPU :: #import "GPU";
 #import "Basic";
 #import "File";
+#import "Hash_Table";

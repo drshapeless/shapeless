@@ -141,6 +141,7 @@ deinit :: () {
     Basic.free(context.gpu_context);
 }
 
+#add_context gpu_allocator: Allocator = vulkan_allocator;
 vulkan_allocator :: Allocator.{vulkan_allocator_proc, null};
 
 vulkan_allocator_proc :: (mode: Allocator_Mode, requested_size: s64, old_size: s64, old_memory: *void, allocator_data: *void) -> *void {
@@ -162,22 +163,6 @@ vulkan_allocator_proc :: (mode: Allocator_Mode, requested_size: s64, old_size: s
     }
 
     return null;
-}
-
-host_to_device_pointer :: (ptr: *void) -> u64 {
-    using context.gpu_context;
-
-    allocation: Allocation;
-    found := false;
-    for allocation_table {
-        if ptr >= it.cpu && ptr < (it.cpu + it.size) {
-            found = true;
-            allocation = it;
-        }
-    }
-    Basic.assert(found, "Invalid host pointer");
-
-    return allocation.gpu;
 }
 
 // This only allocates shared memory (rebar).
