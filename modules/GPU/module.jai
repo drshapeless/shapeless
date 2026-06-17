@@ -222,6 +222,32 @@ Hazard :: enum_flags {
     DEPTH_STENCIL :: 0x4;
 }
 
+Color :: struct {
+    r: float;
+    g: float;
+    b: float;
+    a: float;
+}
+
+Render_Pass_Attachment_Desc :: struct {
+    texture: Texture;
+    load_op: OP;
+    store_op: OP;
+    union {
+        clear_color: Color;
+        clear_value: struct {
+            depth: float;
+            stencil: u32;
+        };
+    };
+}
+
+Render_Pass_Desc :: struct {
+    depth_target: Render_Pass_Attachment_Desc;
+    stencil_target: Render_Pass_Attachment_Desc;
+    color_targets: [] Render_Pass_Attachment_Desc;
+}
+
 // Allocator
 // A GPU allocator has the same interface as a Jai allocator
 alloc :: (size: s64) -> *void {
@@ -295,6 +321,22 @@ NewArray :: (count: s64, $T: Type, $initialized := true, alignment: s32 = -1) ->
     }
 
     return result, original_memory;
+}
+
+push_allocator :: (allocator: Allocator) #expand #no_debug {
+    old_allocator := context.gpu_allocator;
+    context.gpu_allocator = allocator;
+
+    `defer context.gpu_allocator = old_allocator;
+}
+
+push_allocator :: (proc: Allocator_Proc, data: *void) #expand #no_debug {
+    old_allocator     := context.gpu_allocator;
+
+    context.gpu_allocator.proc = proc;
+    context.gpu_allocator.data = data;
+
+    `defer context.gpu_allocator = old_allocator;
 }
 
 host_to_device_pointer :: (ptr: *void) -> u64 {

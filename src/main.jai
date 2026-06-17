@@ -15,76 +15,38 @@ main :: () {
     GPU.init();
     defer GPU.deinit();
 
-    shader_code := read_entire_file("shaders/test_color.slang.spv");
+    shader_code := read_entire_file("shaders/test_metal.metal");
     defer free(shader_code);
 
-    queue := GPU.create_queue();
-    pipeline := GPU.create_compute_pipeline(shader_code);
+    pipeline := GPU.create_compute_pipeline_msl(shader_code);
     defer GPU.free_pipeline(pipeline);
 
     arena: GPU.Arena;
+    GPU.init(*arena);
     defer GPU.fini(*arena);
 
-    array_0 := GPU.NewArray(16, float);
-    defer GPU.array_free(array_0);
-
-    array_0_gpu := GPU.host_to_device_pointer(array_0.data);
-
-    array_1 := GPU.NewArray(16, float);
-    defer GPU.array_free(array_1);
-
-    array_1_gpu := GPU.host_to_device_pointer(array_1.data);
-
-    for * array_0 {
-        it.* = xx it_index;
-    }
-
-    log("%", array_0);
-    log("%", array_1);
-
-    sema := GPU.create_semaphore(0);
+    output_array := GPU.NewArray(256, float);
+    output_array_gpu := GPU.host_to_device_pointer(output_array.data);
 
     cb := GPU.start_command_recording();
 
-    GPU.memcpy(cb, array_1_gpu, array_0_gpu, 16 * size_of(float));
+    GPU.set_pipeline(cb, pipeline);
 
-    GPU.submit(queue, .[cb], signal = .[.{sema, 1}]);
+    GPU.dispatch(cb, output_array_gpu, 1);
 
-    GPU.wait_semaphore(sema, 1, 100000);
+    queue_g := GPU.create_queue();
+    queue := queue_g.mtl;
 
-    log("%", array_0);
-    log("%", array_1);
+    sema := GPU.create_semaphore(0);
 
-    // My_Struct :: struct {
-    //     input: u64;
-    //     output: u64;
-    // }
+    GPU.submit(queue_g, .[cb], signal = .[.{sema, 1}]);
 
-    // gpu_data := GPU.arena_alloc(*arena, size_of(My_Struct));
-    // input_data := GPU.arena_alloc(*arena, size_of(float) * 256);
-    // output_data := GPU.arena_alloc(*arena, size_of(float) * 256);
-    // gpu_data.cpu.(*My_Struct).input = input_data.gpu;
-    // gpu_data.cpu.(*My_Struct).output = output_data.gpu;
+    GPU.wait_semaphore(sema, 1, 10000);
 
-    // input_array: []float = .{count = 256, data = input_data.cpu};
+    for 0..10 {
+        log("%", output_array[it]);
+    }
 
-    // for * input_array {
-    //     it.* = it_index.(float) * 1.7;
-    // }
-
-    // cmd := GPU.start_command_recording(queue);
-    // GPU.set_pipeline(cmd, pipeline);
-    // GPU.dispatch(cmd, gpu_data, 256);
-    // sema := GPU.create_semaphore(0);
-    // GPU.submit(queue, .[cmd], signal = .[.{sema, 1}]);
-
-    // GPU.wait_semaphore(sema, 1);
-    // defer GPU.destroy_semaphore(sema);
-
-    // output_array: []float = .{count = 256, data = output_data.cpu};
-    // for 0..10 {
-    //     log("%", output_array[it]);
-    // }
 }
 
 #import "SDL3";
@@ -92,3 +54,5 @@ GPU :: #import "GPU";
 #import "Basic";
 #import "File";
 #import "Hash_Table";
+#import "Metal";
+#import "Objective_C";

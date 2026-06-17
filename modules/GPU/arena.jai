@@ -9,8 +9,7 @@ Arena :: struct {
 
 init :: (using arena: *Arena, reserve: s64 = 256 * 1024 * 1024) {
     allocator = context.gpu_allocator;
-    log("init %", allocator);
-    memory_base = alloc(size);
+    memory_base = alloc(reserve);
     current_point = memory_base;
     address_limit = memory_base + reserve;
 }

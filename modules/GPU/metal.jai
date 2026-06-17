@@ -4,23 +4,27 @@
 // mimics that behaviour of Vulkan, I don't really know whether this
 // is a good idea or not.
 
-DEFAULT_COMMAND_ALLOCATOR_COUNT :: 5;
+DEFAULT_COMMAND_BUFFER_COUNT :: 5;
 
 GPU_Context :: struct {
-    device                          : *MTLDevice;
-    sdl_window                      : *SDL_Window;
-    view                            : SDL_MetalView;
-    layer                           : *CAMetalLayer;
-    compiler                        : *MTL4Compiler;
-    command_allocators              : [DEFAULT_COMMAND_ALLOCATOR_COUNT] *MTL4CommandAllocator;
-    current_command_allocator_index := 0;
+    device:          *MTLDevice;
+    sdl_window:      *SDL_Window;
+    view:            SDL_MetalView;
+    layer:           *CAMetalLayer;
+    compiler:        *MTL4Compiler;
+    command_buffers: [DEFAULT_COMMAND_BUFFER_COUNT] Command_Buffer;
 
-    spirv_cross_context             : spvc_context;
+    current_command_buffer_index:= 0;
+
+    spirv_cross_context:    spvc_context;
 
     // Useful for checking size and alignment.
-    temp_texture_descriptor         : *MTLTextureDescriptor;
-    cpu_pointer_table               : Table(*void, Allocation);
-    gpu_pointer_table               : Table(u64, Allocation);
+    temp_texture_descriptor: *MTLTextureDescriptor;
+    cpu_pointer_table:       Table(*void, Allocation);
+    gpu_pointer_table:       Table(u64, Allocation);
+
+    argument_table_descriptor: *MTL4ArgumentTableDescriptor;
+    argument_table:            *MTL4ArgumentTable;
 }
 
 Allocation :: struct {
@@ -33,9 +37,10 @@ Allocation :: struct {
 Texture :: struct {
     #as mtl: *MTLTexture;
 };
+
 Pipeline :: struct {
-    render: *MTLRenderPipelineState;
-    compute: *MTLComputePipelineState;
+    render:     *MTLRenderPipelineState;
+    compute:    *MTLComputePipelineState;
     is_compute: bool = false;
 }
 
@@ -46,8 +51,28 @@ Depth_Stencil_State :: struct {
 Queue :: struct {
     #as mtl: *MTL4CommandQueue;
 }
+
+// Since we have to modify the internal when passing, and we don't
+// want to pass a pointer everytime.
 Command_Buffer :: struct {
-    #as mtl: *MTL4CommandBuffer;
+    // No Graphics API suggest a single use command buffer, but newer
+    // Metal 4 API evolves into Vulkan like and recommend reuse of
+    // command buffer. Older Metal API does suggest single use command
+    // buffer. I tried to do the same in Metal 4, but releasing
+    // command buffer becomes a pain in the ass, it either involves
+    // some semaphore magic, or optimistic cycles of a freeable list
+    // of command buffer.
+    //
+    // No Graphics API's discouragement about reusable command buffer
+    // is not followed in this implementation.
+
+    cmd:                    *MTL4CommandBuffer;
+    command_allocator:      *MTL4CommandAllocator;
+    compute_encoder:        *MTL4ComputeCommandEncoder;
+    render_encoder:         *MTL4RenderCommandEncoder;
+    is_recording:           bool;
+
+    render_pass_descriptor: *MTL4RenderPassDescriptor;
 }
 
 Semaphore :: struct {
@@ -68,11 +93,18 @@ init :: (window: *SDL_Window = null) {
     compiler_desc := objc_new(MTL4CompilerDescriptor);
     defer release(compiler_desc);
     compiler = MTLDevice.newCompilerWithDescriptor_error_(device, compiler_desc, *error);
-    Basic.assert(error == null, "Error creating compiler: %", to_string(NSError.localizedDescription(error)));
+    assert_metal(error);
 
-    for * command_allocators {
-        it.* = MTLDevice.newCommandAllocator(device);
+    for * cb: command_buffers {
+        cb.cmd = MTLDevice.newCommandBuffer(device);
+        cb.command_allocator = MTLDevice.newCommandAllocator(device);
+        cb.render_pass_descriptor = objc_new(MTL4RenderPassDescriptor);
     }
+
+    argument_table_descriptor = objc_new(MTL4ArgumentTableDescriptor);
+    MTL4ArgumentTableDescriptor.setMaxBufferBindCount_(argument_table_descriptor, 1);
+    argument_table = MTLDevice.newArgumentTableWithDescriptor_error_(device, argument_table_descriptor, *error);
+    assert_metal(error);
 
     spv_result := spvc_context_create(*spirv_cross_context);
     assert_spvc(spv_result);
@@ -86,8 +118,10 @@ init :: (window: *SDL_Window = null) {
 
 deinit :: () {
     using context.gpu_context;
-    for command_allocators {
-        release(it);
+    for command_buffers {
+        release(it.cmd);
+        release(it.command_allocator);
+        release(it.render_pass_descriptor);
     }
 
     if spirv_cross_context {
@@ -176,12 +210,8 @@ rw_texture_view_descriptor :: (texture: Texture, desc: View_Desc) -> Texture_Des
     return texture_view_descriptor(texture, desc);
 }
 
-// The IR passed here is spirv, we use spirv cross to turn spirv into metal shader
-create_compute_pipeline :: (compute_ir: string, entry_point: string = "compute_main") -> Pipeline {
+create_compute_pipeline_msl :: (compute_shader_msl: string, entry_point: string = "compute_main") -> Pipeline {
     using context.gpu_context;
-
-    shader_string := spirv_to_metal_shader(compute_ir);
-    defer spvc_context_release_allocations(spirv_cross_context);
 
     mtl_options: *MTLCompileOptions = objc_new(MTLCompileOptions);
     mtl_options.setLanguageVersion_(mtl_options, MTLLanguageVersion.e4_0);
@@ -189,11 +219,11 @@ create_compute_pipeline :: (compute_ir: string, entry_point: string = "compute_m
     error: *NSError;
     library_desc := objc_new(MTL4LibraryDescriptor);
     defer release(library_desc);
-    MTL4LibraryDescriptor.setSource_(library_desc, NSString.getTempString(shader_string));
+    MTL4LibraryDescriptor.setSource_(library_desc, NSString.getTempString(compute_shader_msl));
     MTL4LibraryDescriptor.setOptions_(library_desc, mtl_options);
 
     library := MTL4Compiler.newLibraryWithDescriptor_error_(compiler, library_desc, *error);
-    Basic.assert(error == null, "Error creating library: %", to_string(NSError.localizedDescription(error)));
+    assert_metal(error);
 
     function_desc := objc_new(MTL4LibraryFunctionDescriptor);
     defer release(function_desc);
@@ -205,10 +235,19 @@ create_compute_pipeline :: (compute_ir: string, entry_point: string = "compute_m
 
     MTL4ComputePipelineDescriptor.setComputeFunctionDescriptor_(compute_pipeline_desc, xx function_desc);
     pipeline_state := MTL4Compiler.newComputePipelineStateWithDescriptor_compilerTaskOptions_error_(compiler, compute_pipeline_desc, null, *error);
-
-    Basic.assert(error == null, "Error creating compute PSO: %", to_string(NSError.localizedDescription(error)));
+    assert_metal(error);
 
     return .{compute = pipeline_state, is_compute = true};
+}
+
+// The IR passed here is spirv, we use spirv cross to turn spirv into metal shader
+create_compute_pipeline :: (compute_ir: string, entry_point: string = "compute_main") -> Pipeline {
+    using context.gpu_context;
+
+    shader_string := spirv_to_metal_shader(compute_ir);
+    defer spvc_context_release_allocations(spirv_cross_context);
+
+    return create_compute_pipeline_msl(shader_string, entry_point);
 }
 
 // create_graphics_pipeline_with_filename :: (shader_path: string, desc: Raster_Desc, vertex_function_name: string = "vertex_main", fragment_function_main: string = "fragment_main") -> Pipeline {
@@ -322,6 +361,8 @@ free_pipeline :: (pipeline: Pipeline) {
 //     release(state);
 // }
 
+// We are only supporting one main queue, in modern hardwares, we
+// should submit everything to the main queue.
 create_queue :: () -> Queue {
     using context.gpu_context;
     // Currently, a simple queue is created
@@ -329,30 +370,46 @@ create_queue :: () -> Queue {
     return .{queue};
 }
 
-start_command_recording :: () -> Command_Buffer {
+// Since we have one type of queue, we have no way to know what type
+// of command we are using, we cannot create an encoder in this
+// function. So we should defer the creation of the encoder to every
+// compute action and perform a single if check. Not sure if that
+// would affect performance.
+start_command_recording :: () -> *Command_Buffer {
     using context.gpu_context;
-    cb := MTLDevice.newCommandBuffer(device);
-    a := aquire_next_command_allocator();
-    a.reset(a);
+    command_buffer := aquire_next_command_buffer();
+    {
+        using command_buffer;
+        command_allocator.reset(command_allocator);
+        cmd.beginCommandBufferWithAllocator_(cmd, command_allocator);
+        is_recording = false;
+        compute_encoder = null;
+        render_encoder = null;
+    }
 
-    cb.beginCommandBufferWithAllocator_(cb, a);
-
-    // TODO: Here we should set up the argument table, just like the
-    // push constant in Vulkan
-    return .{mtl = cb};
+    return command_buffer;
 }
 
 // This function looks weird, what the hell, queue is not used at all in metal.
-submit :: (queue: Queue, command_buffers: []Command_Buffer, wait: []Semaphore_Pair = .[], signal: []Semaphore_Pair = .[]) {
+submit :: (queue: Queue, command_buffers: []*Command_Buffer, wait: []Semaphore_Pair = .[], signal: []Semaphore_Pair = .[]) {
     Basic.auto_release_temp();
     for wait {
         MTL4CommandQueue.waitForEvent_value_(queue, xx it.semaphore.shared_event, it.value);
     }
 
     buffers := Basic.NewArray(command_buffers.count, *MTL4CommandBuffer,, Basic.temp);
-    for cmd: command_buffers {
-        buffers[it_index] = cmd.mtl;
-        MTL4CommandBuffer.endCommandBuffer(cmd);
+    for cb: command_buffers {
+        buffers[it_index] = cb.cmd;
+        if cb.is_recording {
+            if cb.compute_encoder {
+                MTLCommandEncoder.endEncoding(xx cb.compute_encoder);
+                release(cb.compute_encoder);
+            } else {
+                MTLCommandEncoder.endEncoding(xx cb.render_encoder);
+                release(cb.render_encoder);
+            }
+        }
+        MTL4CommandBuffer.endCommandBuffer(cb.cmd);
     }
 
     MTL4CommandQueue.commit_count_(queue, buffers.data, xx command_buffers.count);
@@ -381,16 +438,47 @@ destroy_semaphore :: (sema: Semaphore) {
     release(sema.event);
 }
 
-memcpy :: (cb: Command_Buffer, dest: u64, src: u64, size: s64) {
+memcpy :: (cb: *Command_Buffer, dest: u64, src: u64, size: s64) {
     using context.gpu_context;
-    e := MTL4CommandBuffer.computeCommandEncoder(cb);
+
+    create_compute_encoder_and_maybe_end_render_encoder(cb);
 
     dest_allocation := gpu_pointer_to_allocation(dest);
     src_allocation  := gpu_pointer_to_allocation(src);
 
-    e.copyFromBuffer_sourceOffset_toBuffer_destinationOffset_size_(e, src_allocation.buffer, src - src_allocation.gpu, dest_allocation.buffer, dest - dest_allocation.gpu, xx size);
+    cb.compute_encoder.copyFromBuffer_sourceOffset_toBuffer_destinationOffset_size_(cb.compute_encoder, src_allocation.buffer, src - src_allocation.gpu, dest_allocation.buffer, dest - dest_allocation.gpu, xx size);
+}
 
-    e.(*MTLCommandEncoder).endEncoding(xx e);
+set_pipeline :: (cb: *Command_Buffer, pipeline: Pipeline) {
+    if pipeline.is_compute {
+        create_compute_encoder_and_maybe_end_render_encoder(cb);
+        e := cb.compute_encoder;
+        e.setComputePipelineState_(e, pipeline.compute);
+    } else {
+        create_render_encoder_and_maybe_end_compute_encoder(cb);
+        e := cb.render_encoder;
+        e.setRenderPipelineState_(e, pipeline.render);
+    }
+}
+
+dispatch :: (cb: *Command_Buffer, data_gpu: u64, count: u32) {
+    using context.gpu_context;
+
+    MTL4ArgumentTable.setAddress_atIndex_(argument_table, data_gpu, 0);
+
+    create_compute_encoder_and_maybe_end_render_encoder(cb);
+
+    cb.compute_encoder.setArgumentTable_(cb.compute_encoder, argument_table);
+
+    dispatch_threads := MTLSize.{count, 1, 1};
+
+    // 256 is hardcoded, always use 256 in the slang shader
+    //
+    // Caution!!!
+    // dispatchThreads_threadsPerThreadgroup_ and
+    // dispatchThreadgroups_threadsPerThreadgroup_ is completely
+    // different thing, the latter one is what we want.
+    cb.compute_encoder.dispatchThreadgroups_threadsPerThreadgroup_(cb.compute_encoder, dispatch_threads, .{256, 1, 1});
 }
 
 #scope_file
@@ -512,7 +600,7 @@ to_metal_compare_function :: (op: OP) -> MTLCompareFunction {
     case .ALWAYS;
         func = .Always;
     case;
-        assert(false, "Invalid op when translating to MTLCompareFunction: %", op);
+        Basic.assert(false, "Invalid op when translating to MTLCompareFunction: %", op);
     }
 
     return func;
@@ -536,14 +624,22 @@ to_metal_stencil_operation :: (op: OP) -> MTLStencilOperation {
     case .DECREMENT_WRAP;
         func = .DecrementWrap;
     case;
-        assert(false, "Invalid op when translating to MTLStencilOperation: %", op);
+        Basic.assert(false, "Invalid op when translating to MTLStencilOperation: %", op);
     }
     return func;
+}
+
+to_metal_render_pass_descriptor :: (desc: Render_Pass_Desc) -> *MTLRenderPassDescriptor {
+
 }
 
 assert_spvc :: (result: spvc_result) #expand {
     using context.gpu_context;
     `Basic.assert(result == .SUCCESS, "spvc result %, reason %", result, to_string(spvc_context_get_last_error_string(spirv_cross_context)));
+}
+
+assert_metal :: (error: *NSError) #expand {
+    `Basic.assert(error == null, "%", to_string(NSError.localizedDescription(error)));
 }
 
 // The return string's memory is managed by spvc context, no need to free.
@@ -564,8 +660,8 @@ spirv_to_metal_shader :: (spirv: string) -> string {
     assert_spvc(result);
     result = spvc_compiler_options_set_uint(my_options, .MSL_VERSION, SPVC_MAKE_MSL_VERSION(4, 0, 0));
     assert_spvc(result);
-    result = spvc_compiler_options_set_bool(my_options, .MSL_ARGUMENT_BUFFERS, SPVC_TRUE);
-    assert_spvc(result);
+    // result = spvc_compiler_options_set_bool(my_options, .MSL_ARGUMENT_BUFFERS, SPVC_TRUE);
+    // assert_spvc(result);
 
     spvc_compiler_install_compiler_options(my_compiler, my_options);
 
@@ -576,18 +672,60 @@ spirv_to_metal_shader :: (spirv: string) -> string {
     return to_string(msl_source);
 }
 
-aquire_next_command_allocator :: () -> *MTL4CommandAllocator {
+aquire_next_command_buffer :: () -> *Command_Buffer {
     using context.gpu_context;
 
-    a := command_allocators[current_command_allocator_index];
+    a := *command_buffers[current_command_buffer_index];
 
-    if current_command_allocator_index >= DEFAULT_COMMAND_ALLOCATOR_COUNT {
-        current_command_allocator_index = 0;
+    if current_command_buffer_index >= DEFAULT_COMMAND_BUFFER_COUNT {
+        current_command_buffer_index = 0;
     } else {
-        current_command_allocator_index += 1;
+        current_command_buffer_index += 1;
     }
 
     return a;
+}
+
+create_compute_encoder_and_maybe_end_render_encoder :: (cb: *Command_Buffer) {
+    if cb.is_recording {
+        if cb.render_encoder != null {
+            cb.render_encoder.(*MTLCommandEncoder).endEncoding(xx cb.render_encoder);
+            release(cb.render_encoder);
+            cb.render_encoder = null;
+        }
+    } else {
+        cb.is_recording = true;
+    }
+
+    if cb.compute_encoder == null {
+        cb.compute_encoder = cb.cmd.computeCommandEncoder(cb.cmd);
+    }
+
+}
+
+create_render_encoder_and_maybe_end_compute_encoder :: (cb: *Command_Buffer) {
+    if cb.is_recording {
+        if cb.compute_encoder != null {
+            cb.compute_encoder.(*MTLCommandEncoder).endEncoding(xx cb.compute_encoder);
+            release(cb.compute_encoder);
+            cb.compute_encoder = null;
+        }
+    } else {
+        cb.is_recording = true;
+    }
+
+    if cb.render_encoder == null {
+        cb.render_encoder = cb.cmd.renderCommandEncoderWithDescriptor_(cb.cmd, cb.render_pass_descriptor);
+    }
+}
+
+get_optimal_1D_threadgroup_size :: (pipeline_state: *MTLComputePipelineState) -> NSUInteger {
+    execution_width := pipeline_state.threadExecutionWidth(pipeline_state);
+    max_threads     := pipeline_state.maxTotalThreadsPerThreadgroup(pipeline_state);
+
+    threadgroup_size := (max_threads / execution_width) * execution_width;
+
+    return threadgroup_size;
 }
 
 #import "Metal";
