@@ -37,7 +37,7 @@ Allocation :: struct {
 }
 
 Texture :: struct {
-    #as mtl: *MTLTexture;
+    mtl: *MTLTexture;
 };
 
 Pipeline :: struct {
@@ -47,11 +47,11 @@ Pipeline :: struct {
 }
 
 Depth_Stencil_State :: struct {
-    #as mtl: *MTLDepthStencilState;
+    mtl: *MTLDepthStencilState;
 };
 
 Queue :: struct {
-    #as mtl: *MTL4CommandQueue;
+    mtl: *MTL4CommandQueue;
 }
 
 // Since we have to modify the internal when passing, and we don't
@@ -72,7 +72,6 @@ Command_Buffer :: struct {
     command_allocator:      *MTL4CommandAllocator;
     compute_encoder:        *MTL4ComputeCommandEncoder;
     render_encoder:         *MTL4RenderCommandEncoder;
-    is_recording:           bool;
 
     render_pass_descriptor: *MTL4RenderPassDescriptor;
 }
@@ -114,6 +113,9 @@ init :: (window: *SDL_Window = null) {
         sdl_window = window;
         view = SDL_Metal_CreateView(window);
         layer = SDL_Metal_GetLayer(view);
+        layer.setDevice_(layer, device);
+        // Metal only support MTLPixelFormatBGRA8Unorm and MTLPixelFormatBGRA8Unorm_sRGB
+        layer.setPixelFormat_(layer, .BGRA8Unorm);
     }
 }
 
@@ -250,6 +252,10 @@ create_compute_pipeline :: (compute_ir: string, entry_point: string = "compute_m
     return create_compute_pipeline_msl(shader_string, entry_point);
 }
 
+create_graphics_pipeline_msl :: (shader_msl: string, vertex_entry_point: string = "vertex_main", fragment_entry_point: string = "fragment_main") -> Pipeline {
+    return .{};
+}
+
 // create_graphics_pipeline_with_filename :: (shader_path: string, desc: Raster_Desc, vertex_function_name: string = "vertex_main", fragment_function_main: string = "fragment_main") -> Pipeline {
 //     using context.gpu_context;
 //     shader_string := read_entire_file(shader_path);
@@ -382,7 +388,6 @@ start_command_recording :: () -> *Command_Buffer {
         using command_buffer;
         command_allocator.reset(command_allocator);
         cmd.beginCommandBufferWithAllocator_(cmd, command_allocator);
-        is_recording = false;
         compute_encoder = null;
         render_encoder = null;
     }
@@ -394,28 +399,20 @@ start_command_recording :: () -> *Command_Buffer {
 submit :: (queue: Queue, command_buffers: []*Command_Buffer, wait: []Semaphore_Pair = .[], signal: []Semaphore_Pair = .[]) {
     Basic.auto_release_temp();
     for wait {
-        MTL4CommandQueue.waitForEvent_value_(queue, xx it.semaphore.shared_event, it.value);
+        MTL4CommandQueue.waitForEvent_value_(queue.mtl, xx it.semaphore.shared_event, it.value);
     }
 
     buffers := Basic.NewArray(command_buffers.count, *MTL4CommandBuffer,, Basic.temp);
     for cb: command_buffers {
         buffers[it_index] = cb.cmd;
-        if cb.is_recording {
-            if cb.compute_encoder {
-                MTLCommandEncoder.endEncoding(xx cb.compute_encoder);
-                release(cb.compute_encoder);
-            } else {
-                MTLCommandEncoder.endEncoding(xx cb.render_encoder);
-                release(cb.render_encoder);
-            }
-        }
+        maybe_end_compute_encoder(cb);
         MTL4CommandBuffer.endCommandBuffer(cb.cmd);
     }
 
-    MTL4CommandQueue.commit_count_(queue, buffers.data, xx command_buffers.count);
+    MTL4CommandQueue.commit_count_(queue.mtl, buffers.data, xx command_buffers.count);
 
     for signal {
-        MTL4CommandQueue.signalEvent_value_(queue, xx it.semaphore.shared_event, it.value);
+        MTL4CommandQueue.signalEvent_value_(queue.mtl, xx it.semaphore.shared_event, it.value);
     }
 }
 
@@ -451,11 +448,12 @@ memcpy :: (cb: *Command_Buffer, dest: u64, src: u64, size: s64) {
 
 set_pipeline :: (cb: *Command_Buffer, pipeline: Pipeline) {
     if pipeline.is_compute {
-        create_compute_encoder_and_maybe_end_render_encoder(cb);
+        maybe_create_compute_encoder(cb);
         e := cb.compute_encoder;
         e.setComputePipelineState_(e, pipeline.compute);
     } else {
-        create_render_encoder_and_maybe_end_compute_encoder(cb);
+        // We should not create a render encoder here
+        Basic.assert(cb.render_encoder != null, "The render encoder is not yet started, maybe you forget to call GPU.begin_render_pass()");
         e := cb.render_encoder;
         e.setRenderPipelineState_(e, pipeline.render);
     }
@@ -466,7 +464,7 @@ dispatch :: (cb: *Command_Buffer, data_gpu: u64, count: u32) {
 
     MTL4ArgumentTable.setAddress_atIndex_(argument_table, data_gpu, 0);
 
-    create_compute_encoder_and_maybe_end_render_encoder(cb);
+    maybe_create_compute_encoder(cb);
 
     cb.compute_encoder.setArgumentTable_(cb.compute_encoder, argument_table);
 
@@ -479,6 +477,25 @@ dispatch :: (cb: *Command_Buffer, data_gpu: u64, count: u32) {
     // dispatchThreadgroups_threadsPerThreadgroup_ is completely
     // different thing, the latter one is what we want.
     cb.compute_encoder.dispatchThreadgroups_threadsPerThreadgroup_(cb.compute_encoder, dispatch_threads, .{256, 1, 1});
+}
+
+begin_render_pass :: (cb: *Command_Buffer, desc: Render_Pass_Desc) {
+    using context.gpu_context;
+
+    drawable :*CAMetalDrawable = layer.nextDrawable(layer);
+
+    set_metal_render_pass_descriptor(cb.render_pass_descriptor, desc);
+
+    maybe_end_compute_encoder(cb);
+    create_render_encoder(cb);
+}
+
+end_render_pass :: (cb: *Command_Buffer) {
+    end_render_encoder(cb);
+}
+
+present :: () {
+
 }
 
 #scope_file
@@ -629,8 +646,96 @@ to_metal_stencil_operation :: (op: OP) -> MTLStencilOperation {
     return func;
 }
 
-to_metal_render_pass_descriptor :: (desc: Render_Pass_Desc) -> *MTLRenderPassDescriptor {
+to_metal_load_action :: (op: Load_OP) -> MTLLoadAction {
+    if #complete op == {
+    case .DONT_CARE;
+        return .DontCare;
+    case .LOAD;
+        return .Load;
+    case .CLEAR;
+        return .Clear;
+    }
+}
 
+to_metal_store_action :: (op: Store_OP) -> MTLStoreAction {
+    if #complete op == {
+    case .DONT_CARE;
+        return .DontCare;
+    case .STORE;
+        return .Store;
+    }
+}
+
+// This allocate an objc object
+to_metal_color_attachment :: (target: Render_Pass_Attachment_Desc) -> *MTLRenderPassColorAttachmentDescriptor {
+    desc :*MTLRenderPassColorAttachmentDescriptor = objc_new(MTLRenderPassColorAttachmentDescriptor);
+
+    MTLRenderPassAttachmentDescriptor.setTexture_(xx desc, target.texture.mtl);
+    MTLRenderPassAttachmentDescriptor.setLoadAction_(xx desc, to_metal_load_action(target.load_op));
+    MTLRenderPassAttachmentDescriptor.setStoreAction_(xx desc, to_metal_store_action(target.store_op));
+
+    c := target.clear_color;
+    desc.setClearColor_(desc, .{c.r, c.g, c.b, c.a});
+
+    return desc;
+}
+
+to_metal_depth_attachment :: (target: Render_Pass_Attachment_Desc) -> *MTLRenderPassDepthAttachmentDescriptor {
+    desc :*MTLRenderPassDepthAttachmentDescriptor = objc_new(MTLRenderPassDepthAttachmentDescriptor);
+
+    MTLRenderPassAttachmentDescriptor.setTexture_(xx desc, target.texture.mtl);
+    MTLRenderPassAttachmentDescriptor.setLoadAction_(xx desc, to_metal_load_action(target.load_op));
+    MTLRenderPassAttachmentDescriptor.setStoreAction_(xx desc, to_metal_store_action(target.store_op));
+
+    desc.setClearDepth_(desc, xx target.clear_value.depth);
+}
+
+to_metal_stencil_attachment :: (target: Render_Pass_Attachment_Desc) -> *MTLRenderPassStencilAttachmentDescriptor {
+    desc: *MTLRenderPassStencilAttachmentDescriptor = objc_new(MTLRenderPassStencilAttachmentDescriptor);
+
+    MTLRenderPassAttachmentDescriptor.setTexture_(xx desc, target.texture.mtl);
+    MTLRenderPassAttachmentDescriptor.setLoadAction_(xx desc, to_metal_load_action(target.load_op));
+    MTLRenderPassAttachmentDescriptor.setStoreAction_(xx desc, to_metal_store_action(target.store_op));
+
+    desc.setClearStencil_(desc, target.clear_value.stencil);
+}
+
+set_metal_render_pass_descriptor :: (descriptor: *MTL4RenderPassDescriptor, desc: Render_Pass_Desc) {
+    color_attachment_array := descriptor.colorAttachments(descriptor);
+
+    // Since Metal only supports up to 8 attachments, we set all of
+    // them back to nil before doing anything else.
+    for 0..7 {
+        color_attachment_array.setObject_atIndexedSubscript_(color_attachment_array, null, xx it);
+    }
+
+    // This is not ideal, maybe we should create a persistent color
+    // attachment, but in most case, there is only only color target.
+    for color_target: desc.color_targets {
+        color_attachment := to_metal_color_attachment(color_target);
+        defer release(color_attachment);
+
+        // It should be safe to instantly release the attachment,
+        // since Metal uses copy when setting.
+        color_attachment_array.setObject_atIndexedSubscript_(color_attachment_array, color_attachment, xx it_index);
+    }
+
+    if desc.depth_target.texture.mtl == null {
+        descriptor.setDepthAttachment_(descriptor, null);
+    } else {
+        depth_attachment := to_metal_depth_attachment(desc.depth_target);
+        defer release(depth_attachment);
+
+        descriptor.setDepthAttachment_(descriptor, depth_attachment);
+    }
+
+    if desc.stencil_target.texture.mtl == null {
+        descriptor.setStencilAttachment_(descriptor, null);
+    } else {
+        stencil_attachment := to_metal_stencil_attachment(desc.stencil_target);
+        defer release(stencil_attachment);
+        descriptor.setStencilAttachment_(descriptor, stencil_attachment);
+    }
 }
 
 assert_spvc :: (result: spvc_result) #expand {
@@ -686,37 +791,30 @@ aquire_next_command_buffer :: () -> *Command_Buffer {
     return a;
 }
 
-create_compute_encoder_and_maybe_end_render_encoder :: (cb: *Command_Buffer) {
-    if cb.is_recording {
-        if cb.render_encoder != null {
-            cb.render_encoder.(*MTLCommandEncoder).endEncoding(xx cb.render_encoder);
-            release(cb.render_encoder);
-            cb.render_encoder = null;
-        }
-    } else {
-        cb.is_recording = true;
-    }
+create_render_encoder :: (cb: *Command_Buffer) {
+    Basic.assert(cb.render_encoder == null, "There is already a render encoder");
 
-    if cb.compute_encoder == null {
-        cb.compute_encoder = cb.cmd.computeCommandEncoder(cb.cmd);
-    }
-
+    cb.render_encoder = cb.cmd.renderCommandEncoderWithDescriptor_(cb.cmd, cb.render_pass_descriptor);
 }
 
-create_render_encoder_and_maybe_end_compute_encoder :: (cb: *Command_Buffer) {
-    if cb.is_recording {
-        if cb.compute_encoder != null {
-            cb.compute_encoder.(*MTLCommandEncoder).endEncoding(xx cb.compute_encoder);
-            release(cb.compute_encoder);
-            cb.compute_encoder = null;
-        }
-    } else {
-        cb.is_recording = true;
-    }
+end_render_encoder :: (cb: *Command_Buffer) {
+    Basic.assert(cb.render_encoder != null, "There is not recording render encoder");
+    MTLCommandEncoder.endEncoding(xx cb.render_encoder);
+    release(cb.render_encoder);
+    cb.render_encoder = null;
+}
 
-    if cb.render_encoder == null {
-        cb.render_encoder = cb.cmd.renderCommandEncoderWithDescriptor_(cb.cmd, cb.render_pass_descriptor);
-    }
+maybe_create_compute_encoder :: (cb: *Command_Buffer) {
+    Basic.assert(cb.render_encoder == null, "Trying to create a compute encoder but the current command buffer is recording render commands");
+    cb.compute_encoder = cb.cmd.computeCommandEncoder(cb.cmd);
+}
+
+maybe_end_compute_encoder :: (cb: *Command_Buffer) {
+    Basic.assert(cb.render_encoder == null, "A render encoder is still recording");
+
+    MTLCommandEncoder.endEncoding(xx cb.compute_encoder);
+    release(cb.compute_encoder);
+    cb.compute_encoder = null;
 }
 
 get_optimal_1D_threadgroup_size :: (pipeline_state: *MTLComputePipelineState) -> NSUInteger {

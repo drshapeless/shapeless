@@ -17,10 +17,10 @@
 
 // deinit :: ()
 
-//// allocation with alignment specified is no use in both API
-// alloc :: (bytes: u64) -> Allocation
+// GPU allocation is identical to Jai built-in Allocator, change
+// context.gpu_allocator to do any allocation by GPU.alloc or
+// GPU.free, currently, resize is not supported.
 
-// free :: (allocation: Allocation)
 
 // texture_size_align :: (desc: Texture_Desc) -> Texture_Size_Align
 
@@ -229,10 +229,21 @@ Color :: struct {
     a: float;
 }
 
+Load_OP :: enum {
+    DONT_CARE;
+    LOAD;
+    CLEAR;
+}
+
+Store_OP :: enum {
+    DONT_CARE;
+    STORE;
+}
+
 Render_Pass_Attachment_Desc :: struct {
     texture: Texture;
-    load_op: OP;
-    store_op: OP;
+    load_op: Load_OP;
+    store_op: Store_OP;
     union {
         clear_color: Color;
         clear_value: struct {
