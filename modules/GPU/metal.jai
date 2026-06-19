@@ -27,6 +27,8 @@ GPU_Context :: struct {
     argument_table:            *MTL4ArgumentTable;
 }
 
+#add_context gpu_context: GPU_Context;
+
 Allocation :: struct {
     cpu:    *void;
     gpu:    u64;

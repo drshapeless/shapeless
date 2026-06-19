@@ -15,6 +15,7 @@ GPU_Context :: struct {
     cpu_pointer_table: Table(*void, Allocation);
     gpu_pointer_table: Table(u64, Allocation);
 }
+#add_context gpu_context: GPU_Context;
 
 Allocation :: struct {
     cpu:    *void;

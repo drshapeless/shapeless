@@ -387,8 +387,6 @@ gpu_pointer_to_allocation :: (ptr: u64) -> Allocation {
     return allocation;
 }
 
-#add_context gpu_context: *GPU_Context;
-
 #if OS == .MACOS {
     #load "metal.jai";
 } else {
