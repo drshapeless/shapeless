@@ -53,8 +53,6 @@ Semaphore :: struct {
 }
 
 init :: (window: *SDL_Window = null) {
-    context.gpu_context = Basic.alloc(size_of(GPU_Context));
-    context.gpu_allocator = vulkan_allocator;
     using context.gpu_context;
     get_instance_proc_addr := SDL_Vulkan_GetVkGetInstanceProcAddr();
     Basic.assert(get_instance_proc_addr != null);
@@ -139,7 +137,6 @@ deinit :: () {
     if instance {
         vkDestroyInstance(instance, vka);
     }
-    Basic.free(context.gpu_context);
 }
 
 #add_context gpu_allocator: Allocator = vulkan_allocator;

@@ -84,7 +84,6 @@ Semaphore :: struct {
 init :: (window: *SDL_Window = null) {
     init_objective_c();
     init_metal();
-    context.gpu_context = Basic.New(GPU_Context);
     using context.gpu_context;
 
     device = MTLCreateSystemDefaultDevice();
@@ -133,7 +132,6 @@ deinit :: () {
     release(compiler);
     release(temp_texture_descriptor);
     release(device);
-    Basic.free(context.gpu_context);
 }
 
 #add_context gpu_allocator: Allocator = metal_allocator;
