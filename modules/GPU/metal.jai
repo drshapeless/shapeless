@@ -4,6 +4,15 @@
 // mimics that behaviour of Vulkan, I don't really know whether this
 // is a good idea or not.
 
+// About residency set, Metal 4 gives us very fine control of what
+// resources we want to use in shaders, but in this implementation,
+// all the queue created will be added a default residency set managed
+// by GPU_Context, when a new allocation is called via GPU.alloc(),
+// the residency set will be updated and committed
+// immediately. Therefore, to avoid confusion and unknown behaviour,
+// queue should always be created after any resource allocations. In
+// frame allocations should use arena instead.
+
 DEFAULT_COMMAND_BUFFER_COUNT :: 5;
 
 GPU_Context :: struct {
@@ -25,6 +34,8 @@ GPU_Context :: struct {
 
     argument_table_descriptor: *MTL4ArgumentTableDescriptor;
     argument_table:            *MTL4ArgumentTable;
+
+    residency_set: *MTLResidencySet;
 }
 
 #add_context gpu_context: GPU_Context;
@@ -38,6 +49,7 @@ Allocation :: struct {
 
 Texture :: struct {
     mtl: *MTLTexture;
+    drawable: *MTLDrawable;
 };
 
 Pipeline :: struct {
@@ -77,8 +89,12 @@ Command_Buffer :: struct {
 }
 
 Semaphore :: struct {
-    #as shared_event: *MTLSharedEvent;
+    shared_event: *MTLSharedEvent;
 };
+
+IR :: struct {
+    library_function_descriptor: *MTL4LibraryFunctionDescriptor;
+}
 
 init :: (window: *SDL_Window = null) {
     init_objective_c();
@@ -108,6 +124,11 @@ init :: (window: *SDL_Window = null) {
 
     spv_result := spvc_context_create(*spirv_cross_context);
     assert_spvc(spv_result);
+
+    residency_set_descriptor :*MTLResidencySetDescriptor = objc_new(MTLResidencySetDescriptor);
+
+    residency_set = MTLDevice.newResidencySetWithDescriptor_error_(device, residency_set_descriptor, *error);
+    assert_metal(error);
 
     if window {
         sdl_window = window;
@@ -146,6 +167,9 @@ metal_allocator_proc :: (mode: Allocator_Mode, requested_size: s64, old_size: s6
         allocation := metal_allocate(xx requested_size);
         table_add(*cpu_pointer_table, allocation.cpu, allocation);
         table_add(*gpu_pointer_table, allocation.gpu, allocation);
+
+        MTLResidencySet.addAllocation_(residency_set, xx allocation.buffer);
+        MTLResidencySet.commit(residency_set);
         return allocation.cpu;
     case .FREE;
         found, allocation := table_find(*cpu_pointer_table, old_memory);
@@ -182,16 +206,16 @@ texture_size_align :: (desc: Texture_Desc) -> Texture_Size_Align {
     return .{size = metal_size_align.size, align = metal_size_align.align};
 }
 
-// I am not sure if I should reuse the temp descriptor, or create a
-// one-time descriptor every time when I call this function. But real
-// life use case, we should not be creating a lot of texture, right?
-create_texture :: (desc: Texture_Desc, allocation: Allocation) -> Texture {
+create_texture :: (desc: Texture_Desc, ptr_gpu: u64) -> Texture {
     using context.gpu_context;
     metal_desc := objc_new(MTLTextureDescriptor);
     defer release(metal_desc);
 
     to_metal_texture_descriptor(metal_desc, desc);
-    return MTLDevice.newTextureWithDescriptor_(device, metal_desc);
+
+    allocation := gpu_pointer_to_allocation(ptr_gpu);
+
+    return MTLBuffer.newTextureWithDescriptor_offset_bytesPerRow_(allocation.buffer, metal_desc, ptr_gpu - allocation.gpu, bytes_per_pixel(to_metal_format(desc.format)));
 }
 
 texture_view_descriptor :: (texture: Texture, desc: View_Desc) -> Texture_Descriptor {
@@ -212,48 +236,99 @@ rw_texture_view_descriptor :: (texture: Texture, desc: View_Desc) -> Texture_Des
     return texture_view_descriptor(texture, desc);
 }
 
-create_compute_pipeline_msl :: (compute_shader_msl: string, entry_point: string = "compute_main") -> Pipeline {
+load_msl :: (msl: string, entry_points: []string) -> []IR {
     using context.gpu_context;
-
-    mtl_options: *MTLCompileOptions = objc_new(MTLCompileOptions);
-    mtl_options.setLanguageVersion_(mtl_options, MTLLanguageVersion.e4_0);
+    compile_options: *MTLCompileOptions = objc_new(MTLCompileOptions);
+    defer release(compile_options);
+    compile_options.setLanguageVersion_(compile_options, MTLLanguageVersion.e4_0);
 
     error: *NSError;
     library_desc := objc_new(MTL4LibraryDescriptor);
     defer release(library_desc);
-    MTL4LibraryDescriptor.setSource_(library_desc, NSString.getTempString(compute_shader_msl));
-    MTL4LibraryDescriptor.setOptions_(library_desc, mtl_options);
+    MTL4LibraryDescriptor.setSource_(library_desc, NSString.getTempString(msl));
+    MTL4LibraryDescriptor.setOptions_(library_desc, compile_options);
 
     library := MTL4Compiler.newLibraryWithDescriptor_error_(compiler, library_desc, *error);
     assert_metal(error);
 
-    function_desc := objc_new(MTL4LibraryFunctionDescriptor);
-    defer release(function_desc);
-    MTL4LibraryFunctionDescriptor.setLibrary_(function_desc, library);
-    MTL4LibraryFunctionDescriptor.setName_(function_desc, NSString.getTempString(entry_point));
+    irs := Basic.NewArray(entry_points.count, IR);
+    for entry_point: entry_points {
+        function_desc := objc_new(MTL4LibraryFunctionDescriptor);
+        MTL4LibraryFunctionDescriptor.setLibrary_(function_desc, library);
+        MTL4LibraryFunctionDescriptor.setName_(function_desc, NSString.getTempString(entry_point));
 
+        irs[it_index].library_function_descriptor = function_desc;
+    }
+
+    return irs;
+}
+
+load_spirv :: (spirv: string, entry_points: []string) -> []IR {
+    using context.gpu_context;
+
+    shader_string := spirv_to_metal_shader(spirv);
+    defer spvc_context_release_allocations(spirv_cross_context);
+
+    return load_msl(shader_string, entry_points);
+}
+
+// The shader passed here is spirv, we use spirv cross to turn spirv into metal shader
+// load_compute_ir :: #bake_arguments load_spirv(entry_points = .["compute_main"]);
+load_compute_ir :: inline (spirv: string, entry_point: string = "compute_main") -> IR {
+    Basic.auto_release_temp();
+    irs := load_spirv(spirv, .[entry_point],, Basic.temp);
+    return irs[0];
+}
+load_graphics_ir :: #bake_arguments load_spirv(entry_points = .["vertex_main", "fragment_main"]);
+
+destroy_ir :: (ir: IR) {
+    release(IR.library_function_descriptor);
+}
+
+create_compute_pipeline :: (compute_ir: IR) -> Pipeline {
+    using context.gpu_context;
+
+    error: *NSError;
     compute_pipeline_desc := objc_new(MTL4ComputePipelineDescriptor);
     defer release(compute_pipeline_desc);
 
-    MTL4ComputePipelineDescriptor.setComputeFunctionDescriptor_(compute_pipeline_desc, xx function_desc);
+    MTL4ComputePipelineDescriptor.setComputeFunctionDescriptor_(compute_pipeline_desc, xx compute_ir.library_function_descriptor);
     pipeline_state := MTL4Compiler.newComputePipelineStateWithDescriptor_compilerTaskOptions_error_(compiler, compute_pipeline_desc, null, *error);
     assert_metal(error);
 
     return .{compute = pipeline_state, is_compute = true};
 }
 
-// The IR passed here is spirv, we use spirv cross to turn spirv into metal shader
-create_compute_pipeline :: (compute_ir: string, entry_point: string = "compute_main") -> Pipeline {
+create_graphics_pipeline :: (vertex_ir: IR, fragment_ir: IR, desc: Raster_Desc) -> Pipeline {
     using context.gpu_context;
 
-    shader_string := spirv_to_metal_shader(compute_ir);
-    defer spvc_context_release_allocations(spirv_cross_context);
+    error: *NSError;
+    render_pipeline_desc := objc_new(MTL4RenderPipelineDescriptor);
+    defer release(render_pipeline_desc);
 
-    return create_compute_pipeline_msl(shader_string, entry_point);
-}
+    MTL4RenderPipelineDescriptor.setVertexFunctionDescriptor_(render_pipeline_desc, vertex_ir.library_function_descriptor);
+    MTL4RenderPipelineDescriptor.setFragmentFunctionDescriptor_(render_pipeline_desc, fragment_ir.library_function_descriptor);
 
-create_graphics_pipeline_msl :: (shader_msl: string, vertex_entry_point: string = "vertex_main", fragment_entry_point: string = "fragment_main") -> Pipeline {
-    return .{};
+    // More settings here
+    MTL4RenderPipelineDescriptor.setRasterSampleCount_(render_pipeline_desc, xx desc.sample_count);
+    MTL4RenderPipelineDescriptor.setAlphaToCoverageState_(render_pipeline_desc, xx desc.alpha_to_coverage); // 0 is Disabled, 1 is Enabled
+
+    color_attachments := MTL4RenderPipelineDescriptor.colorAttachments(render_pipeline_desc);
+    for target: desc.color_targets {
+        attachment: *MTL4RenderPipelineColorAttachmentDescriptor = objc_new(MTL4RenderPipelineColorAttachmentDescriptor);
+        attachment.setPixelFormat_(attachment, to_metal_format(target.format));
+        attachment.setWriteMask_(attachment, to_metal_write_mask(target.write_mask));
+
+        // Currently, blendstate is completely ignored in pipeline
+        // creation, if you want to set pipeline, set it in command
+        // buffer.
+
+        color_attachments.setObject_atIndexedSubscript_(color_attachments, attachment, xx it_index);
+    }
+
+    pipeline_state := MTL4Compiler.newRenderPipelineStateWithDescriptor_compilerTaskOptions_error_(compiler, render_pipeline_desc, null, *error);
+    assert_metal(error);
+    return .{render = pipeline_state, is_compute = false};
 }
 
 // create_graphics_pipeline_with_filename :: (shader_path: string, desc: Raster_Desc, vertex_function_name: string = "vertex_main", fragment_function_main: string = "fragment_main") -> Pipeline {
@@ -373,6 +448,7 @@ create_queue :: () -> Queue {
     using context.gpu_context;
     // Currently, a simple queue is created
     queue := MTLDevice.newMTL4CommandQueue(device);
+    MTL4CommandQueue.addResidencySet_(queue, residency_set);
     return .{queue};
 }
 
@@ -395,7 +471,10 @@ start_command_recording :: () -> *Command_Buffer {
     return command_buffer;
 }
 
-// This function looks weird, what the hell, queue is not used at all in metal.
+// In Metal, signal and wait is decoupled from commit, but that is not
+// the case in Vulkan. In Vulkan the wait and signal semaphores are
+// grouped together in a single submit info, otherwise, it might have
+// a significant performance impact(?)
 submit :: (queue: Queue, command_buffers: []*Command_Buffer, wait: []Semaphore_Pair = .[], signal: []Semaphore_Pair = .[]) {
     Basic.auto_release_temp();
     for wait {
@@ -416,6 +495,33 @@ submit :: (queue: Queue, command_buffers: []*Command_Buffer, wait: []Semaphore_P
     }
 }
 
+// I can't think of a way to correctly decouple present from submit.
+submit_and_present :: (queue: Queue, texture: Texture, command_buffers: []*Command_Buffer, wait: []Semaphore_Pair = .[], signal: []Semaphore_Pair = .[]) {
+    Basic.auto_release_temp();
+    for wait {
+        MTL4CommandQueue.waitForEvent_value_(queue.mtl, xx it.semaphore.shared_event, it.value);
+    }
+
+    MTL4CommandQueue.waitForDrawable_(queue.mtl, texture.drawable);
+
+    buffers := Basic.NewArray(command_buffers.count, *MTL4CommandBuffer,, Basic.temp);
+    for cb: command_buffers {
+        buffers[it_index] = cb.cmd;
+        maybe_end_compute_encoder(cb);
+        MTL4CommandBuffer.endCommandBuffer(cb.cmd);
+    }
+
+    MTL4CommandQueue.commit_count_(queue.mtl, buffers.data, xx command_buffers.count);
+
+    for signal {
+        MTL4CommandQueue.signalEvent_value_(queue.mtl, xx it.semaphore.shared_event, it.value);
+    }
+
+    MTL4CommandQueue.signalDrawable_(queue.mtl, texture.drawable);
+
+    MTLDrawable.present(texture.drawable);
+}
+
 create_semaphore :: (init_value: u64) -> Semaphore {
     using context.gpu_context;
     event := MTLDevice.newSharedEvent(device);
@@ -425,7 +531,7 @@ create_semaphore :: (init_value: u64) -> Semaphore {
 
 wait_semaphore :: (sema: Semaphore, value: u64, timeout: u64 = 0) {
     // The current timeout is 0, which is infinite
-    success := MTLSharedEvent.waitUntilSignaledValue_timeoutMS_(sema, value, timeout);
+    success := MTLSharedEvent.waitUntilSignaledValue_timeoutMS_(sema.shared_event, value, timeout);
     if !success {
         Basic.log("Timeout waiting semaphore, value: %, timeout: %", value, timeout);
     }
@@ -482,8 +588,6 @@ dispatch :: (cb: *Command_Buffer, data_gpu: u64, count: u32) {
 begin_render_pass :: (cb: *Command_Buffer, desc: Render_Pass_Desc) {
     using context.gpu_context;
 
-    drawable :*CAMetalDrawable = layer.nextDrawable(layer);
-
     set_metal_render_pass_descriptor(cb.render_pass_descriptor, desc);
 
     maybe_end_compute_encoder(cb);
@@ -494,8 +598,18 @@ end_render_pass :: (cb: *Command_Buffer) {
     end_render_encoder(cb);
 }
 
-present :: () {
+aquire_next_texture :: () -> success:bool, Texture {
+    using context.gpu_context;
 
+    drawable :*CAMetalDrawable = layer.nextDrawable(layer);
+    if drawable == null {
+        Basic.log("Cannot aquire drawable");
+        return false, .{};
+    }
+
+    t := drawable.texture(drawable);
+
+    return true, .{t, xx drawable};
 }
 
 #scope_file
@@ -806,15 +920,19 @@ end_render_encoder :: (cb: *Command_Buffer) {
 
 maybe_create_compute_encoder :: (cb: *Command_Buffer) {
     Basic.assert(cb.render_encoder == null, "Trying to create a compute encoder but the current command buffer is recording render commands");
-    cb.compute_encoder = cb.cmd.computeCommandEncoder(cb.cmd);
+    if cb.compute_encoder == null {
+        cb.compute_encoder = cb.cmd.computeCommandEncoder(cb.cmd);
+    }
 }
 
 maybe_end_compute_encoder :: (cb: *Command_Buffer) {
     Basic.assert(cb.render_encoder == null, "A render encoder is still recording");
 
-    MTLCommandEncoder.endEncoding(xx cb.compute_encoder);
-    release(cb.compute_encoder);
-    cb.compute_encoder = null;
+    if cb.compute_encoder {
+        MTLCommandEncoder.endEncoding(xx cb.compute_encoder);
+        release(cb.compute_encoder);
+        cb.compute_encoder = null;
+    }
 }
 
 get_optimal_1D_threadgroup_size :: (pipeline_state: *MTLComputePipelineState) -> NSUInteger {
@@ -825,6 +943,128 @@ get_optimal_1D_threadgroup_size :: (pipeline_state: *MTLComputePipelineState) ->
 
     return threadgroup_size;
 }
+
+// This thing is generated by grok, maybe broken.
+bytes_per_pixel :: (format: MTLPixelFormat) -> u64 {
+    if format == {
+    // 1 byte formats
+    case .A8Unorm;
+        #through;
+    case .R8Unorm;
+        #through;
+    case .R8Unorm_sRGB;
+        #through;
+    case .R8Snorm;
+        #through;
+    case .R8Uint;
+        #through;
+    case .R8Sint;
+        return 1;
+
+    // 2 byte formats
+    case .R16Unorm;
+        #through;
+    case .R16Snorm;
+        #through;
+    case .R16Uint;
+        #through;
+    case .R16Sint;
+        #through;
+    case .R16Float;
+        #through;
+    case .RG8Unorm;
+        #through;
+    case .RG8Unorm_sRGB;
+        #through;
+    case .RG8Snorm;
+        #through;
+    case .RG8Uint;
+        #through;
+    case .RG8Sint;
+        #through;
+    case .B5G6R5Unorm;
+        #through;
+    case .A1BGR5Unorm;
+        #through;
+    case .ABGR4Unorm;
+        #through;
+    case .BGR5A1Unorm;
+        return 2;
+
+    // 4 byte formats
+    case .R32Uint;
+        #through;
+    case .R32Sint;
+        #through;
+    case .R32Float;
+        #through;
+    case .RG16Unorm;
+        #through;
+    case .RG16Snorm;
+        #through;
+    case .RG16Uint;
+        #through;
+    case .RG16Sint;
+        #through;
+    case .RG16Float;
+        #through;
+    case .RGBA8Unorm;
+        #through;
+    case .RGBA8Unorm_sRGB;
+        #through;
+    case .RGBA8Snorm;
+        #through;
+    case .RGBA8Uint;
+        #through;
+    case .RGBA8Sint;
+        #through;
+    case .BGRA8Unorm;
+        #through;
+    case .BGRA8Unorm_sRGB;
+        #through;
+    case .RGB10A2Unorm;
+        #through;
+    case .RGB10A2Uint;
+        #through;
+    case .BGR10A2Unorm;
+        #through;
+    case .RG11B10Float;
+        #through;
+    case .RGB9E5Float;
+        return 4;
+
+    // 8 byte formats
+    case .RG32Uint;
+        #through;
+    case .RG32Sint;
+        #through;
+    case .RG32Float;
+        #through;
+    case .RGBA16Unorm;
+        #through;
+    case .RGBA16Snorm;
+        #through;
+    case .RGBA16Uint;
+        #through;
+    case .RGBA16Sint;
+        #through;
+    case .RGBA16Float;
+        return 8;
+
+    // 16 byte formats
+    case .RGBA32Uint;
+        #through;
+    case .RGBA32Sint;
+        #through;
+    case .RGBA32Float;
+        return 16;
+
+    // Compressed / depth / stencil / unsupported
+    case;
+        return 0;
+    }
+}
+
 
 #import "Metal";
 Basic :: #import "Basic";

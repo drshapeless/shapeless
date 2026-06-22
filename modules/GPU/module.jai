@@ -363,7 +363,9 @@ host_to_device_pointer :: (ptr: *void) -> u64 {
     }
     Basic.assert(found, "Invalid cpu host pointer");
 
-    return allocation.gpu;
+    offset := ptr - allocation.cpu;
+
+    return allocation.gpu + xx offset;
 }
 
 cpu_pointer_to_allocation :: (ptr: *void) -> Allocation {
