@@ -52,6 +52,11 @@ Semaphore :: struct {
     #as vk: VkSemaphore;
 }
 
+IR :: struct {
+    spirv: string;
+    entry_point: string;
+}
+
 init :: (window: *SDL_Window = null) {
     using context.gpu_context;
     get_instance_proc_addr := SDL_Vulkan_GetVkGetInstanceProcAddr();
@@ -152,7 +157,7 @@ vulkan_allocator_proc :: (mode: Allocator_Mode, requested_size: s64, old_size: s
         table_add(*gpu_pointer_table, allocation.gpu, allocation);
         return allocation.cpu;
     case .FREE;
-        found, allocation := table_find(*allocation_table, old_memory);
+        found, allocation := table_find(*cpu_pointer_table, old_memory);
         if found {
             vulkan_deallocate(allocation);
         }
@@ -256,19 +261,35 @@ create_texture :: (desc: Texture_Desc, allocation: Allocation) -> Texture {
     return texture;
 }
 
-// In this implementation, I use shader object as the primary pipeline
-// alternative, even though it is still called pipeline, it is in fact
-// shader object underneath.
-create_compute_pipeline :: (ir: string, entry_point: string = "compute_main") -> Pipeline {
+load_spirv :: (spirv: string, entry_points: []string) -> []IR {
+    irs := Basic.NewArray(entry_points.count, IR);
+
+    for entry_points {
+        irs[it_index].spirv = spirv;
+        irs[it_index].entry_point = it;
+    }
+
+    return irs;
+}
+
+load_compute_ir :: inline (spirv: string, entry_point: string = "compute_main") -> IR {
+    Basic.auto_release_temp();
+    irs := load_spirv(spirv, .[entry_point],, Basic.temp);
+    return irs[0];
+}
+
+load_graphics_ir :: #bake_arguments load_spirv(entry_points = .["vertex_main", "fragment_main"]);
+
+create_compute_pipeline :: (ir: IR) -> Pipeline {
     using context.gpu_context;
     Basic.auto_release_temp();
     create_info := VkShaderCreateInfoEXT.{
         stage = .COMPUTE,
         nextStage = 0, // because we don't know what the next will be
         codeType = .SPIRV,
-        codeSize = xx ir.count, // This should be a multiple of 4
-        pCode = ir.data,
-        pName = Basic.temp_c_string(entry_point),
+        codeSize = xx ir.spirv.count, // This should be a multiple of 4
+        pCode = ir.spirv.data,
+        pName = Basic.temp_c_string(ir.entry_point),
         setLayoutCount = 0, // We don't use any descriptor set
         pSetLayouts = null,
         pushConstantRangeCount = 1,
@@ -283,6 +304,53 @@ create_compute_pipeline :: (ir: string, entry_point: string = "compute_main") ->
     pipeline: Pipeline;
     pipeline.shaders[0] = shader;
     pipeline.is_compute = true;
+
+    return pipeline;
+}
+
+create_graphics_pipeline :: (vertex_ir: IR, fragment_ir: IR, desc: Raster_Desc) -> Pipeline {
+    using context.gpu_context;
+    Basic.auto_release_temp();
+
+    create_infos: [2]VkShaderCreateInfoEXT;
+
+    create_infos[0] = VkShaderCreateInfoEXT.{
+        stage = .VERTEX,
+        nextStage = .FRAGMENT,
+        codeType = .SPIRV,
+        codeSize = xx vertex_ir.spirv.count, // This should be a multiple of 4
+        pCode = vertex_ir.spirv.data,
+        pName = Basic.temp_c_string(vertex_ir.entry_point),
+        setLayoutCount = 0, // We don't use any descriptor set
+        pSetLayouts = null,
+        pushConstantRangeCount = 1,
+        pPushConstantRanges = *PUSH_CONSTANT_RANGE,
+        pSpecializationInfo = null, // Don't know what this is yet
+    };
+
+    create_infos[1] = VkShaderCreateInfoEXT.{
+        stage = .FRAGMENT,
+        nextStage = 0,
+        codeType = .SPIRV,
+        codeSize = xx fragment_ir.spirv.count, // This should be a multiple of 4
+        pCode = fragment_ir.spirv.data,
+        pName = Basic.temp_c_string(fragment_ir.entry_point),
+        setLayoutCount = 0, // We don't use any descriptor set
+        pSetLayouts = null,
+        pushConstantRangeCount = 1,
+        pPushConstantRanges = *PUSH_CONSTANT_RANGE,
+        pSpecializationInfo = null, // Don't know what this is yet
+    };
+
+    result: VkResult;
+    shaders: [2]VkShaderEXT;
+    result = check_vk(vkCreateShadersEXT(device, 1, create_infos.data, vka, shaders.data));
+    assert_vk_result(result);
+
+    pipeline: Pipeline;
+    pipeline.shaders[0] = shaders[0];
+    pipeline.shaders[1] = shaders[1];
+    pipeline.is_compute = false;
 
     return pipeline;
 }
@@ -305,7 +373,7 @@ create_queue :: () -> Queue {
 }
 
 // TODO: the command pool selection should base on the queue passed
-start_command_recording :: (queue: Queue) -> Command_Buffer {
+start_command_recording :: () -> Command_Buffer {
     using context.gpu_context;
 
     bump_command_pool_index();
@@ -379,16 +447,21 @@ submit :: (queue: Queue, command_buffers: []Command_Buffer, wait: []Semaphore_Pa
     assert_vk_result(result);
 }
 
-memcpy :: (cb: Command_Buffer, dst: Allocation, src: Allocation, size: u64) {
+memcpy :: (cb: Command_Buffer, dst: u64, src: u64, size: u64) {
+    using context.gpu_context;
+
+    dst_allocation := gpu_pointer_to_allocation(dst);
+    src_allocation := gpu_pointer_to_allocation(src);
+
     copy_region := VkBufferCopy2.{
-        srcOffset = src.offset,
-        dstOffset = dst.offset,
+        srcOffset = src - src_allocation.gpu,
+        dstOffset = dst - dst_allocation.gpu,
         size = size,
     };
 
     copy_info := VkCopyBufferInfo2.{
-        srcBuffer = src.buffer,
-        dstBuffer = dst.buffer,
+        srcBuffer = src_allocation.buffer,
+        dstBuffer = dst_allocation.buffer,
         regionCount = 1,
         pRegions = *copy_region,
     };
@@ -481,10 +554,10 @@ set_pipeline :: (cb: Command_Buffer, pipeline: Pipeline) {
     }
 }
 
-dispatch :: (cb: Command_Buffer, data: Allocation, count: u32) {
+dispatch :: (cb: Command_Buffer, data_gpu: u64, count: u32) {
     using context.gpu_context;
     pc := Push_Constant.{
-        in_out = data.gpu,
+        in_out = data_gpu,
     };
 
     vkCmdPushConstants(cb, pipeline_layout, .ALL, 0, size_of(Push_Constant), *pc);
