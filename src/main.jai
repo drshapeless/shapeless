@@ -12,7 +12,7 @@ main :: () {
     window := SDL_CreateWindow("shapeless", 800, 600, window_flags);
     defer SDL_DestroyWindow(window);
 
-    GPU.init();
+    GPU.init(window);
     defer GPU.deinit();
 
     shader_code := read_entire_file("shaders/test_apple.slang.spv");
@@ -27,47 +27,45 @@ main :: () {
     GPU.init(*arena);
     defer GPU.fini(*arena);
 
-    {
-        GPU.push_allocator(GPU.arena_allocator_proc, *arena);
+    queue := GPU.create_queue();
 
-        input_array := GPU.NewArray(256, float);
-        input_array_gpu := GPU.host_to_device_pointer(input_array.data);
-
-        for * input_array {
-            it.* = xx it_index;
+    is_running := true;
+    while is_running {
+        e: SDL_Event;
+        while SDL_PollEvent(*e) {
+            if e.type == {
+            case .QUIT;
+                is_running = false;
+            case .WINDOW_CLOSE_REQUESTED;
+                is_running = false;
+            case .KEY_DOWN;
+                if e.key.scancode == {
+                case .ESCAPE;
+                    is_running = false;
+                }
+            }
         }
-
-        output_array := GPU.NewArray(256, float);
-        output_array_gpu := GPU.host_to_device_pointer(output_array.data);
-
-        Params :: struct {
-            input: u64;
-            output: u64;
-        }
-
-        params := GPU.New(Params);
-        params_gpu := GPU.host_to_device_pointer(params);
-
-        params.input = input_array_gpu;
-        params.output = output_array_gpu;
 
         cb := GPU.start_command_recording();
 
-        GPU.set_pipeline(cb, pipeline);
+        success, draw_texture := GPU.aquire_next_texture();
+        if !success continue;
 
-        GPU.dispatch(cb, params_gpu, 1);
+        color_attachment :GPU.Render_Pass_Attachment_Desc = .{
+            texture = draw_texture,
+            load_op = .CLEAR,
+            store_op = .STORE,
+            clear_color = .{0.2, 0.3, 0.4, 1.0}
+        };
 
-        queue := GPU.create_queue();
+        render_pass_desc := GPU.Render_Pass_Desc.{
+            color_targets = .[color_attachment],
+        };
 
-        sema := GPU.create_semaphore(0);
+        GPU.begin_render_pass(cb, render_pass_desc);
+        GPU.end_render_pass(cb);
 
-        GPU.submit(queue, .[cb], signal = .[.{sema, 1}]);
-
-        GPU.wait_semaphore(sema, 1, 10000);
-
-        for 0..10 {
-            log("%", output_array[it]);
-        }
+        GPU.submit_and_present(queue, draw_texture, .[cb]);
     }
 }
 
