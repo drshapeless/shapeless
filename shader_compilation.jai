@@ -28,6 +28,7 @@ shader_path,
 "-fvk-use-entrypoint-name",
 "-fvk-use-scalar-layout",
 "-std", "2026",
+"-capability", "spvDescriptorHeapEXT",
 "-o", output_path];
     log("Compiling % to % (%)", filename, output_path, get_quoted_command_string(compiler_command));
     result := run_command(..compiler_command);

@@ -1,3 +1,29 @@
+// This Vulkan implementation depends on several very new features,
+// like VkPhysicalDeviceShaderObjectFeaturesEXT and
+// VkPhysicalDeviceDescriptorHeapFeaturesEXT. This is likely to be an
+// experiment at the moment, all the Vulkan related flow is vastly
+// different from most of the tutorials that you can find in the
+// Internet, including SaschaWillems' HowToVulkan in 2026. We don't
+// care about older hardware and Apple machines, because we implement
+// the same API in Metal directly. We can have a lot of freedom to try
+// the latest extensions.
+//
+// For radeon GPU, you need to 'export RADV_EXPERIMENTAL=hic,heap' in
+// the environment.
+
+//// Several implementation details.
+//
+//// 1.
+// We are using descriptor heap, push constants and descriptor
+// set are no longer useful. Also, VkPipelineLayoutCreateInfo is also
+// deprecated.
+//
+//// 2.
+// Fences are no longer useful, we heavily depends on timeline
+// semaphores to sychronize all the actions.
+
+DEFAULT_COMMAND_BUFFER_COUNT :: 5;
+
 GPU_Context :: struct {
     sdl_window                 : *SDL_Window;
     instance                   : VkInstance;
@@ -8,12 +34,14 @@ GPU_Context :: struct {
     physical_device            : VkPhysicalDevice;
     memory_indices             : Memory_Indices;
     main_queue                 : VkQueue;
-    command_pools              : [5]VkCommandPool;
+    command_pools              : [DEFAULT_COMMAND_BUFFER_COUNT]VkCommandPool;
     current_command_pool_index := 0;
-    pipeline_layout            : VkPipelineLayout;
 
     cpu_pointer_table: Table(*void, Allocation);
     gpu_pointer_table: Table(u64, Allocation);
+
+    swapchain: Swapchain;
+    frame:     []FRAME;
 }
 #add_context gpu_context: GPU_Context;
 
@@ -29,7 +57,7 @@ Allocation :: struct {
 
 Texture :: struct {
     image: VkImage;
-    view: VkImageView;
+    format: VkFormat;
 }
 
 Pipeline :: struct {
@@ -108,13 +136,9 @@ init :: (window: *SDL_Window = null) {
         assert_vk_result(result);
     }
 
-    pipeline_layout_create_info := VkPipelineLayoutCreateInfo.{
-        pushConstantRangeCount = 1,
-        pPushConstantRanges = *PUSH_CONSTANT_RANGE,
-    };
-
-    result = check_vk(vkCreatePipelineLayout(device, *pipeline_layout_create_info, vka, *pipeline_layout));
-    assert_vk_result(result);
+    if window {
+        create_swapchain();
+    }
 }
 
 deinit :: () {
@@ -122,10 +146,6 @@ deinit :: () {
     result: VkResult;
     result = vkDeviceWaitIdle(device);
     assert_vk_result(result);
-
-    if pipeline_layout {
-        vkDestroyPipelineLayout(device, pipeline_layout, vka);
-    }
 
     for command_pools {
         if it vkDestroyCommandPool(device, it, vka);
@@ -247,8 +267,10 @@ texture_size_align :: (desc: Texture_Desc) -> Texture_Size_Align {
     return size_align;
 }
 
-create_texture :: (desc: Texture_Desc, allocation: Allocation) -> Texture {
+create_texture :: (desc: Texture_Desc, ptr_gpu: u64) -> Texture {
     using context.gpu_context;
+
+    allocation := gpu_pointer_to_allocation(ptr_gpu);
     image_create_info := to_vulkan_image_create_info(desc);
     texture: Texture;
     result: VkResult;
@@ -556,12 +578,14 @@ set_pipeline :: (cb: Command_Buffer, pipeline: Pipeline) {
 
 dispatch :: (cb: Command_Buffer, data_gpu: u64, count: u32) {
     using context.gpu_context;
-    pc := Push_Constant.{
-        in_out = data_gpu,
-    };
 
-    vkCmdPushConstants(cb, pipeline_layout, .ALL, 0, size_of(Push_Constant), *pc);
+    // We no longer use push constants.
+
     vkCmdDispatch(cb, count, 1, 1);
+}
+
+aquire_next_texture :: () -> success:bool, Texture {
+    using context.gpu_context;
 }
 
 #scope_file
@@ -573,22 +597,28 @@ application_info :: VkApplicationInfo.{
     apiVersion = VK_API_VERSION_1_4,
 };
 
+Swapchain :: struct {
+    vk: VkSwapchainKHR;
+    format: VkFormat;
+    extent: VkExtent3D;
+    images: []VkImage;
+    image_views: []VkImageView;
+}
+
+Frame :: struct {
+    acquire_semaphore: VkSemaphore;
+    present_semaphore: VkSemaphore;
+
+    timeline_semaphore: VkSemaphore;
+
+    command_pool: VkCommandPool;
+}
+
 VALIDATION_LAYERS :: (*u8).["VK_LAYER_KHRONOS_validation"];
 DEVICE_EXTENSIONS :: (*u8).[
 VK_EXT_SHADER_OBJECT_EXTENSION_NAME,
+VK_EXT_DESCRIPTOR_HEAP_EXTENSION_NAME,
 ];
-
-// This is the sole push constant struct that will ever pass to the shader
-Push_Constant :: struct {
-    in_out: VkDeviceAddress;
-    textures: VkDeviceAddress; // TODO: I am not sure whether this could work
-}
-
-PUSH_CONSTANT_RANGE :: VkPushConstantRange.{
-    stageFlags = .ALL,
-    offset = 0,
-    size = size_of(Push_Constant),
-};
 
 assert_vk_result :: (result: VkResult) #expand {
     #if DEBUG_ASSERT {
@@ -1065,12 +1095,93 @@ to_vulkan_pipeline_stage :: (stage: Stage) -> VkPipelineStageFlags2 {
 bump_command_pool_index :: () {
     using context.gpu_context;
 
-    if current_command_pool_index >= 4 {
+    if current_command_pool_index >= DEFAULT_COMMAND_BUFFER_COUNT - 1 {
         current_command_pool_index = 0;
     } else {
         current_command_pool_index += 1;
     }
 }
+
+create_swapchain :: () {
+    using context.gpu_context;
+
+    support := get_swapchain_support(physical_device, surface);
+
+    format := support.formats[0];
+    for support.formats {
+        if it.format == .B8G8R8A8_UNORM && it.colorSpace == .SRGB_NONLINEAR {
+            format = it;
+            break;
+        }
+    }
+
+    present_mode := VkPresentModeKHR.FIFO;
+    for support.present_modes {
+        if it == .MAILBOX {
+            present_mode = it;
+            break;
+        }
+    }
+
+    image_count := support.capabilities.minImageCount + 1;
+    if support.capabilities.maxImageCount > 0 && image_count > support.capabilities.maxImageCount {
+        image_count = support.capabilities.maxImageCount;
+    }
+
+    swapchain_extent := support.capabilities.currentExtent;
+    if swapchain_extent.width == Math.U32_MAX {
+        swapchain_extent.width = Math.clamp(extent.width, support.capabilities.minImageExtent.width, support.capabilities.maxImageExtent.width);
+        swapchain_extent.height = Math.clamp(extent.height, support.capabilities.minImageExtent.height, support.capabilities.maxImageExtent.height);
+    }
+
+    swapchain_create_info := VkSwapchainCreateInfoKHR.{
+        surface = surface,
+        minImageCount = image_count,
+        imageFormat = format.format,
+        imageColorSpace = format.colorSpace,
+        imageExtent = swapchain_extent,
+        imageArrayLayers = 1,
+        imageUsage = .TRANSFER_DST | .COLOR_ATTACHMENT,
+        imageSharingMode = .EXCLUSIVE, // We only use one queue for everything
+        queueFamilyIndexCount = 0,
+        pQueueFamilyIndices = null,
+        preTransform = support.capabilities.currentTransform,
+        compositeAlpha = .OPAQUE,
+        presentMode = present_mode,
+        clipped = VK_TRUE,
+        // oldSwapchain = old_swapchain, // I don't care about oldswapchain
+    };
+
+    result: VkResult;
+    swapchain.format = format;
+    swapchain.extent = extent;
+    result = check_vk(vkCreateSwapchainKHR(device, *swapchain_create_info, vka, *swapchain.vk));
+    assert_vk_result(result);
+
+    result, swapchain.images = vkGetSwapchainImagesKHR(device, swapchain.vk);
+    assert_vk_result(result);
+
+    swapchain.image_views = Basic.NewArray(image_count, VkImageView);
+    for * swapchain.image_views {
+        image_view_create_info := VkImageViewCreateInfo.{
+            image = image,
+            viewType = .e2D,
+            format = swapchain.format,
+            subresourceRange = .{
+                aspectMask = .COLOR,
+                baseMipLevel = 0,
+                levelCount = 1,
+                baseArrayLayer = 0,
+                layerCount = 1,
+            },
+        };
+
+        result = check_vk(vkCreateImageView(device, *image_view_create_info, vka, it));
+        assert_vk_result(result);
+    }
+}
+
+
 
 #import "Vulkan";
 #import "SDL3";

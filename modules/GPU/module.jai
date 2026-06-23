@@ -9,6 +9,10 @@
 // the description. One way of implementing it would be create a
 // lambda function, or macros, which I don't really want to.
 
+// GPU allocation is identical to Jai built-in Allocator, change
+// context.gpu_allocator to do any allocation by GPU.alloc or
+// GPU.free, currently, resize is not supported.
+
 // Here are the functions that declared in different implementations,
 // almost a one to one translation from No Graphics API.
 
@@ -16,11 +20,6 @@
 // init :: (window: *SDL_Window = null)
 
 // deinit :: ()
-
-// GPU allocation is identical to Jai built-in Allocator, change
-// context.gpu_allocator to do any allocation by GPU.alloc or
-// GPU.free, currently, resize is not supported.
-
 
 // texture_size_align :: (desc: Texture_Desc) -> Texture_Size_Align
 
