@@ -802,6 +802,8 @@ to_metal_depth_attachment :: (target: Render_Pass_Attachment_Desc) -> *MTLRender
     MTLRenderPassAttachmentDescriptor.setStoreAction_(xx desc, to_metal_store_action(target.store_op));
 
     desc.setClearDepth_(desc, xx target.clear_value.depth);
+
+    return desc;
 }
 
 to_metal_stencil_attachment :: (target: Render_Pass_Attachment_Desc) -> *MTLRenderPassStencilAttachmentDescriptor {
@@ -812,6 +814,7 @@ to_metal_stencil_attachment :: (target: Render_Pass_Attachment_Desc) -> *MTLRend
     MTLRenderPassAttachmentDescriptor.setStoreAction_(xx desc, to_metal_store_action(target.store_op));
 
     desc.setClearStencil_(desc, target.clear_value.stencil);
+    return desc;
 }
 
 set_metal_render_pass_descriptor :: (descriptor: *MTL4RenderPassDescriptor, desc: Render_Pass_Desc) {
@@ -896,7 +899,7 @@ aquire_next_command_buffer :: () -> *Command_Buffer {
 
     a := *command_buffers[current_command_buffer_index];
 
-    if current_command_buffer_index >= DEFAULT_COMMAND_BUFFER_COUNT {
+    if current_command_buffer_index >= DEFAULT_COMMAND_BUFFER_COUNT - 1 {
         current_command_buffer_index = 0;
     } else {
         current_command_buffer_index += 1;
