@@ -858,7 +858,13 @@ make_device :: (device_extensions: [] *u8) -> VkResult, VkDevice {
     }
 
     chain: *void;
+    features_descriptor_heap := VkPhysicalDeviceDescriptorHeapFeaturesEXT.{
+        descriptorHeap = VK_TRUE,
+    };
+    chain = *features_descriptor_heap;
+
     features_shader_object := VkPhysicalDeviceShaderObjectFeaturesEXT.{
+        pNext = chain,
         shaderObject = VK_TRUE
     };
     chain = *features_shader_object;
