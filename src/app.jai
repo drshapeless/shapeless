@@ -52,26 +52,23 @@ app_iter :: (appstate: *void) -> SDL_AppResult {
 
     if !is_running return .SUCCESS;
 
-    cb := GPU.start_command_recording();
+    // cb := GPU.start_command_recording();
 
-    success, draw_texture := GPU.aquire_next_texture();
-    if !success return .CONTINUE;
+    // color_attachment :GPU.Render_Pass_Attachment_Desc = .{
+    //     texture = draw_texture,
+    //     load_op = .CLEAR,
+    //     store_op = .STORE,
+    //     clear_color = .{0.2, 0.3, 0.4, 1.0}
+    // };
 
-    color_attachment :GPU.Render_Pass_Attachment_Desc = .{
-        texture = draw_texture,
-        load_op = .CLEAR,
-        store_op = .STORE,
-        clear_color = .{0.2, 0.3, 0.4, 1.0}
-    };
+    // render_pass_desc := GPU.Render_Pass_Desc.{
+    //         color_targets = .[color_attachment],
+    //         };
 
-    render_pass_desc := GPU.Render_Pass_Desc.{
-            color_targets = .[color_attachment],
-            };
+    // GPU.begin_render_pass(cb, render_pass_desc);
+    // GPU.end_render_pass(cb);
 
-    GPU.begin_render_pass(cb, render_pass_desc);
-    GPU.end_render_pass(cb);
-
-    GPU.submit_and_present(queue, draw_texture, .[cb]);
+    // GPU.submit_and_present(queue, .[cb]);
 
     return .CONTINUE;
 }
