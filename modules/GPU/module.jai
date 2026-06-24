@@ -54,13 +54,6 @@ u32x3 :: struct {
     z: u32;
 }
 
-Format :: enum u32 {
-    NONE :: 0;
-    RGBA8_UNORM;
-    D32_FLOAT;
-    D24_UNORM_S8;
-}
-
 Texture_Usage :: enum_flags u32 {
     UNKNOWN       :: 0x0000;
     SHADER_READ   :: 0x0001;
@@ -74,7 +67,7 @@ Texture_Desc :: struct {
     mip_count:    u32;
     layer_count:  u32;
     sample_count: u32;
-    format:       Format = .NONE;
+    format:       Format;
     usage:        Texture_Usage = 0;
 }
 
@@ -84,7 +77,7 @@ Texture_Size_Align :: struct {
 }
 
 View_Desc :: struct {
-    format:      Format = .NONE;
+    format:      Format;
     base_mip:    u8 = 0;
     mip_count:   u8;
     base_layer:  u16;
@@ -135,7 +128,7 @@ Blend_Desc :: struct {
 }
 
 Color_Target :: struct {
-    format:     Format = .NONE;
+    format:     Format;
     write_mask: u8 = 0xf;
 }
 
@@ -148,8 +141,8 @@ Raster_Desc :: struct {
     alpha_to_coverage:            bool = false;
     support_dual_source_blending: bool = false; // This is implicitly set in Metal
     sample_count:                 u8 = 1;
-    depth_format:                 Format = .NONE;
-    stencil_format:               Format = .NONE;
+    depth_format:                 Format;
+    stencil_format:               Format;
     color_targets:                []Color_Target;
     blendstate:                   *Blend_Desc;
 }

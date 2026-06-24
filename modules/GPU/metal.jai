@@ -15,6 +15,8 @@
 
 DEFAULT_COMMAND_BUFFER_COUNT :: 5;
 
+Format :: Vulkan.VkFormat;
+
 GPU_Context :: struct {
     device:          *MTLDevice;
     sdl_window:      *SDL_Window;
@@ -661,19 +663,7 @@ to_metal_texture_descriptor :: (metal_descriptor: *MTLTextureDescriptor, desc: T
     MTLTextureDescriptor.setStorageMode_(metal_descriptor, .Shared);
 }
 
-to_metal_format :: (format: Format) -> MTLPixelFormat {
-    metal_format: MTLPixelFormat = .Invalid;
-    if format == {
-    case .RGBA8_UNORM;
-        metal_format = .RGBA8Unorm;
-    case .D32_FLOAT;
-        metal_format = .Depth32Float;
-    case .D24_UNORM_S8;
-        metal_format = .Depth24Unorm_Stencil8;
-    }
-
-    return metal_format;
-}
+to_metal_format :: vulkan_format_to_metal_format;
 
 to_metal_texture_type :: (texture_type: Texture_Type) -> MTLTextureType {
     metal_texture_type: MTLTextureType;
@@ -1110,3 +1100,5 @@ File :: #import "File";
 String :: #import "String";
 #import "spirv_cross";
 #import "Hash_Table";
+Vulkan :: #import "Vulkan";
+#load "format.jai";
