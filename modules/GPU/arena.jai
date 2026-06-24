@@ -20,10 +20,17 @@ fini :: (arena: *Arena) {
     a.proc(.FREE, 0, 0, arena.memory_base, a.data);
 }
 
-get :: (using arena: *Arena, size: s64) -> *void {
-    if !memory_base init(arena);
+get :: (using arena: *Arena, size: s64, requested_alignment := -1) -> *void {
+    // if !memory_base init(arena);
 
-    result := Align(current_point, alignment);
+    result: *u8;
+
+    if requested_alignment >= 0 {
+        result = Align(current_point, requested_alignment);
+    } else {
+        result = Align(current_point, alignment);
+    }
+
     end := size + result;
 
     Basic.assert(end <= address_limit, "Arena % is full! (Allocation size %; alignment %; address space size %; already allocated %.)\n", arena, size, alignment, address_limit - memory_base, current_point - memory_base);
