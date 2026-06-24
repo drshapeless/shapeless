@@ -215,7 +215,7 @@ create_texture :: (desc: Texture_Desc, ptr_gpu: u64) -> Texture {
 
     allocation := gpu_pointer_to_allocation(ptr_gpu);
 
-    return MTLBuffer.newTextureWithDescriptor_offset_bytesPerRow_(allocation.buffer, metal_desc, ptr_gpu - allocation.gpu, bytes_per_pixel(to_metal_format(desc.format)));
+    return MTLBuffer.newTextureWithDescriptor_offset_bytesPerRow_(allocation.buffer, metal_desc, ptr_gpu - allocation.gpu, bytes_per_pixel(to_metal_format(desc.format)) * desc.dimensions.x);
 }
 
 texture_view_descriptor :: (texture: Texture, desc: View_Desc) -> Texture_Descriptor {
@@ -550,6 +550,38 @@ memcpy :: (cb: *Command_Buffer, dest: u64, src: u64, size: s64) {
     src_allocation  := gpu_pointer_to_allocation(src);
 
     cb.compute_encoder.copyFromBuffer_sourceOffset_toBuffer_destinationOffset_size_(cb.compute_encoder, src_allocation.buffer, src - src_allocation.gpu, dest_allocation.buffer, dest - dest_allocation.gpu, xx size);
+}
+
+// The original API is
+// void gpuCopyToTexture(GpuCommandBuffer cb, void* destGpu, void* srcGpu, GpuTexture texture);
+// But I scratch my head to find the value of the bytes_per_row and source size, maybe those thing can be calculated from the texture...
+copy_to_texture :: (cb: *Command_Buffer, dest: Texture, src: u64) {
+    maybe_create_compute_encoder(cb);
+    src_allocation := gpu_pointer_to_allocation(src);
+
+    src_size := MTLSize.{
+        width = MTLTexture.width(dest.mtl),
+        height = MTLTexture.height(dest.mtl),
+        depth = MTLTexture.depth(dest.mtl),
+    };
+
+    bytes_per_row := MTLTexture.bufferBytesPerRow(dest.mtl);
+    MTL4ComputeCommandEncoder.copyFromBuffer_sourceOffset_sourceBytesPerRow_sourceBytesPerImage_sourceSize_toTexture_destinationSlice_destinationLevel_destinationOrigin_(cb.compute_encoder, src_allocation.buffer, src - src_allocation.gpu, bytes_per_row, 0, src_size, dest.mtl, 0, 1, .{0, 0, 0});
+}
+
+copy_from_texture :: (cb: *Command_Buffer, dest: u64, src: Texture) {
+    maybe_create_compute_encoder(cb);
+
+    src_size := MTLSize.{
+        width = MTLTexture.width(src.mtl),
+        height = MTLTexture.height(src.mtl),
+        depth = MTLTexture.depth(src.mtl),
+    };
+
+    dest_allocation := gpu_pointer_to_allocation(dest);
+
+    bytes_per_row := MTLTexture.bufferBytesPerRow(src.mtl);
+    MTL4ComputeCommandEncoder.copyFromTexture_sourceSlice_sourceLevel_sourceOrigin_sourceSize_toBuffer_destinationOffset_destinationBytesPerRow_destinationBytesPerImage_(cb.compute_encoder, src.mtl, 0, 1, .{0, 0, 0}, src_size, dest_allocation.buffer, dest - dest_allocation.gpu, bytes_per_row, 0);
 }
 
 set_pipeline :: (cb: *Command_Buffer, pipeline: Pipeline) {
