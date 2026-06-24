@@ -24,24 +24,33 @@
 
 DEFAULT_COMMAND_BUFFER_COUNT :: 5;
 
+Format :: VkFormat;
+
 GPU_Context :: struct {
-    sdl_window                 : *SDL_Window;
-    instance                   : VkInstance;
-    device                     : VkDevice;
-    vka                        : *VkAllocationCallbacks;
-    surface                    : VkSurfaceKHR;
-    queue_family_indices       : Queue_Family_Indices;
-    physical_device            : VkPhysicalDevice;
-    memory_indices             : Memory_Indices;
-    main_queue                 : VkQueue;
-    command_pools              : [DEFAULT_COMMAND_BUFFER_COUNT]VkCommandPool;
-    current_command_pool_index := 0;
+    sdl_window:           *SDL_Window;
+    instance:             VkInstance;
+    device:               VkDevice;
+    vka:                  *VkAllocationCallbacks;
+    surface:              VkSurfaceKHR;
+    queue_family_indices: Queue_Family_Indices;
+    physical_device:      VkPhysicalDevice;
+    memory_indices:       Memory_Indices;
+    main_queue:           VkQueue;
 
     cpu_pointer_table: Table(*void, Allocation);
     gpu_pointer_table: Table(u64, Allocation);
 
     swapchain: Swapchain;
-    frame:     []FRAME;
+    frames:     []Frame;
+    frame_index: s64 = 0;
+
+    // The command buffer count depends on frame count, if swapchain
+    // is not supported, the command buffer count will be
+    // DEFAULT_COMMAND_BUFFER_COUNT
+    command_buffers: []Command_Buffer;
+    #overlay (frame_index) command_buffer_index: s64;
+
+    internal_arena: Arena;
 }
 #add_context gpu_context: GPU_Context;
 
@@ -57,7 +66,10 @@ Allocation :: struct {
 
 Texture :: struct {
     image: VkImage;
+    view:  VkImageView;
     format: VkFormat;
+    extent: VkExtent3D;
+    gpu: u64;
 }
 
 Pipeline :: struct {
@@ -74,6 +86,7 @@ Queue :: struct {
 
 Command_Buffer :: struct {
     #as vk: VkCommandBuffer;
+    pool: VkCommandPool;
 }
 
 Semaphore :: struct {
@@ -124,6 +137,8 @@ init :: (window: *SDL_Window = null) {
 
     memory_indices = get_memory_indices();
 
+    init(*internal_arena);
+
     vkGetDeviceQueue(device, queue_family_indices.graphics, 0, *main_queue);
 
     command_pool_create_info := VkCommandPoolCreateInfo.{
@@ -131,14 +146,31 @@ init :: (window: *SDL_Window = null) {
         queueFamilyIndex = queue_family_indices.graphics,
     };
 
-    for command_pools {
-        result = check_vk(vkCreateCommandPool(device, *command_pool_create_info, vka, *command_pools[it_index]));
+    if window {
+        init_swapchain();
+
+        frames = Basic.NewArray(swapchain.images.count, Frame);
+
+        semaphore_create_info: VkSemaphoreCreateInfo;
+        for * frame: frames {
+            result = check_vk(vkCreateSemaphore(device, *semaphore_create_info, vka, *frame.acquire_semaphore));
+            assert_vk_result(result);
+            result = check_vk(vkCreateSemaphore(device, *semaphore_create_info, vka, *frame.present_semaphore));
+            assert_vk_result(result);
+
+            frame.timeline = create_semaphore(0);
+        }
+
+        command_buffers = Basic.NewArray(swapchain.images.count, Command_Buffer);
+    } else {
+        command_buffers = Basic.NewArray(DEFAULT_COMMAND_BUFFER_COUNT, Command_Buffer);
+    }
+
+    for * cb: command_buffers {
+        result = check_vk(vkCreateCommandPool(device, *command_pool_create_info, vka, *cb.pool));
         assert_vk_result(result);
     }
 
-    if window {
-        create_swapchain();
-    }
 }
 
 deinit :: () {
@@ -147,8 +179,22 @@ deinit :: () {
     result = vkDeviceWaitIdle(device);
     assert_vk_result(result);
 
-    for command_pools {
-        if it vkDestroyCommandPool(device, it, vka);
+    for frames {
+        vkDestroySemaphore(device, it.acquire_semaphore, vka);
+        vkDestroySemaphore(device, it.present_semaphore, vka);
+        destroy_semaphore(it.timeline);
+    }
+
+    for command_buffers {
+        if it.pool vkDestroyCommandPool(device, it.pool, vka);
+    }
+
+    fini(*internal_arena);
+
+    if sdl_window {
+        vkDestroySwapchainKHR(device, swapchain.vk, vka);
+        destroy_texture(swapchain.draw_texture);
+        destroy_texture(swapchain.depth_texture);
     }
 
     if device {
@@ -180,6 +226,8 @@ vulkan_allocator_proc :: (mode: Allocator_Mode, requested_size: s64, old_size: s
         found, allocation := table_find(*cpu_pointer_table, old_memory);
         if found {
             vulkan_deallocate(allocation);
+            table_remove(*cpu_pointer_table, old_memory);
+            table_remove(*gpu_pointer_table, allocation.gpu);
         }
     case;
         Basic.assert(false, "% mode is not supported in Vulkan allocator", mode);
@@ -273,14 +321,22 @@ create_texture :: (desc: Texture_Desc, ptr_gpu: u64) -> Texture {
     allocation := gpu_pointer_to_allocation(ptr_gpu);
     image_create_info := to_vulkan_image_create_info(desc);
     texture: Texture;
+    texture.format = desc.format;
+    texture.extent = cast,force(VkExtent3D) desc.dimensions;
+    texture.gpu = ptr_gpu;
     result: VkResult;
     result = check_vk(vkCreateImage(device, *image_create_info, vka, *texture.image));
     assert_vk_result(result);
 
-    result = check_vk(vkBindImageMemory(device, texture.image, allocation.memory, allocation.offset));
+    result = check_vk(vkBindImageMemory(device, texture.image, allocation.memory, ptr_gpu - allocation.gpu));
     assert_vk_result(result);
 
     return texture;
+}
+
+destroy_texture :: (texture: Texture) {
+    using context.gpu_context;
+    vkDestroyImage(device, texture.image, vka);
 }
 
 load_spirv :: (spirv: string, entry_points: []string) -> []IR {
@@ -394,22 +450,35 @@ create_queue :: () -> Queue {
     return .{vk = main_queue};
 }
 
-// TODO: the command pool selection should base on the queue passed
-start_command_recording :: () -> Command_Buffer {
+start_command_recording :: () -> *Command_Buffer {
     using context.gpu_context;
 
-    bump_command_pool_index();
-
     result: VkResult;
-    cb: Command_Buffer;
-    // Here we optimistically reset the command pool
-    // TODO: we should have a semaphore to track the finish of the command pool
-    command_pool := command_pools[current_command_pool_index];
-    result = check_vk(vkResetCommandPool(device, command_pool, 0));
+    cb := *command_buffers[command_buffer_index];
+
+    // Here we do a very weird thing, if the gpu context has swapchain
+    // support, we will wait for the timeline semaphore before
+    // resetting the command pool.
+    if sdl_window {
+        frame := *frames[frame_index];
+        wait_semaphore(frame.timeline, 1, 100000);
+
+        // Set it back to zero.
+        // TODO: I realize the API does not have a way to signal a semaphore
+        // from CPU, why is that?
+        signal_info := VkSemaphoreSignalInfo.{
+            semaphore = frame.timeline.vk,
+            value = 0,
+        };
+        result = check_vk(vkSignalSemaphore(device, *signal_info));
+        assert_vk_result(result);
+    }
+
+    result = check_vk(vkResetCommandPool(device, cb.pool, 0));
     assert_vk_result(result);
 
     allocate_info := VkCommandBufferAllocateInfo.{
-        commandPool = command_pool,
+        commandPool = cb.pool,
         level = .PRIMARY,
         commandBufferCount = 1,
     };
@@ -419,22 +488,21 @@ start_command_recording :: () -> Command_Buffer {
     begin_info := VkCommandBufferBeginInfo.{
         flags = .ONE_TIME_SUBMIT,
     };
-    result = vkBeginCommandBuffer(cb, *begin_info);
+    result = vkBeginCommandBuffer(cb.vk, *begin_info);
     assert_vk_result(result);
     return cb;
 }
 
-submit :: (queue: Queue, command_buffers: []Command_Buffer, wait: []Semaphore_Pair = .[], signal: []Semaphore_Pair = .[]) {
+submit :: (queue: Queue, command_buffers: []*Command_Buffer, wait: []Semaphore_Pair = .[], signal: []Semaphore_Pair = .[]) {
     Basic.auto_release_temp();
     Basic.push_allocator(Basic.temp);
 
     command_buffer_submit_infos := Basic.NewArray(command_buffers.count, VkCommandBufferSubmitInfo);
 
-    for 0..command_buffers.count - 1 {
-        vkEndCommandBuffer(command_buffers[it]);
-        command_buffer_submit_infos[it].commandBuffer = command_buffers[it];
+    for cb: command_buffers {
+        vkEndCommandBuffer(cb.vk);
+        command_buffer_submit_infos[it_index].commandBuffer = cb.vk;
     }
-
 
     submit_info := VkSubmitInfo2.{
         commandBufferInfoCount = xx command_buffers.count,
@@ -467,9 +535,15 @@ submit :: (queue: Queue, command_buffers: []Command_Buffer, wait: []Semaphore_Pa
 
     result := check_vk(vkQueueSubmit2(queue.vk, 1, *submit_info, null));
     assert_vk_result(result);
+
+    command_buffer_index = (command_buffer_index + 1) % xx command_buffers.count;
 }
 
-memcpy :: (cb: Command_Buffer, dst: u64, src: u64, size: u64) {
+submit_and_present :: (queue: Queue, command_buffers: []*Command_Buffer, wait: []Semaphore_Pair = .[], signal: []Semaphore_Pair = .[]) {
+
+}
+
+memcpy :: (cb: *Command_Buffer, dst: u64, src: u64, size: u64) {
     using context.gpu_context;
 
     dst_allocation := gpu_pointer_to_allocation(dst);
@@ -488,7 +562,62 @@ memcpy :: (cb: Command_Buffer, dst: u64, src: u64, size: u64) {
         pRegions = *copy_region,
     };
 
-    vkCmdCopyBuffer2(cb, *copy_info);
+    vkCmdCopyBuffer2(cb.vk, *copy_info);
+}
+
+copy_to_texture :: (cb: *Command_Buffer, dst: Texture, src: u64) {
+    src_allocation := gpu_pointer_to_allocation(src);
+
+    region := VkBufferImageCopy2.{
+        bufferOffset = src - src_allocation.gpu,
+        bufferRowLength = 0, // Let vulkan do the job
+        bufferImageHeight = 0,
+        imageSubresource = VkImageSubresourceLayers.{
+            aspectMask = .COLOR,
+            mipLevel = 0,
+            baseArrayLayer = 0,
+            layerCount = 1,
+        },
+        imageOffset = VkOffset3D.{0, 0, 0},
+        imageExtent = dst.extent,
+    };
+
+    info := VkCopyBufferToImageInfo2.{
+        srcBuffer = src_allocation.buffer,
+        dstImage = dst.image,
+        dstImageLayout = .GENERAL,
+        regionCount = 1,
+        pRegions = *region,
+    };
+
+    vkCmdCopyBufferToImage2(cb.vk, *info);
+}
+
+copy_from_texture :: (cb: *Command_Buffer, dst: u64, src: Texture) {
+    dst_allocation := gpu_pointer_to_allocation(dst);
+
+    region := VkBufferImageCopy2.{
+        bufferOffset = dst - dst_allocation.gpu,
+        bufferRowLength = 0, // Let vulkan do the job
+        bufferImageHeight = 0,
+        imageSubresource = VkImageSubresourceLayers.{
+            aspectMask = .COLOR,
+            mipLevel = 0,
+            baseArrayLayer = 0,
+            layerCount = 1,
+        },
+        imageOffset = VkOffset3D.{0, 0, 0},
+        imageExtent = src.extent,
+    };
+
+    info := VkCopyImageToBufferInfo2.{
+        srcImage = src.image,
+        srcImageLayout = .GENERAL,
+        dstBuffer = dst_allocation.buffer,
+        regionCount = 1,
+        pRegions = *region,
+    };
+    vkCmdCopyImageToBuffer2(cb.vk, *info);
 }
 
 create_semaphore :: (init_value: u64) -> Semaphore {
@@ -588,6 +717,14 @@ aquire_next_texture :: () -> success:bool, Texture {
     using context.gpu_context;
 }
 
+begin_render_pass :: (cb: *Command_Buffer, desc: Render_Pass_Desc) {
+
+}
+
+end_render_pass :: (cb: *Command_Buffer) {
+
+}
+
 #scope_file
 application_info :: VkApplicationInfo.{
     pApplicationName = "shapeless",
@@ -598,26 +735,30 @@ application_info :: VkApplicationInfo.{
 };
 
 Swapchain :: struct {
-    vk: VkSwapchainKHR;
-    format: VkFormat;
-    extent: VkExtent3D;
-    images: []VkImage;
-    image_views: []VkImageView;
+    vk:          VkSwapchainKHR;
+    format:      VkFormat;
+    extent:      VkExtent2D;
+    images:      []VkImage;
+    // We are not rendering directly into swapchain images, so we can
+    // omit the image view creation of swapchain images.
+
+    draw_texture: Texture;
+    depth_texture: Texture;
 }
 
 Frame :: struct {
     acquire_semaphore: VkSemaphore;
     present_semaphore: VkSemaphore;
 
-    timeline_semaphore: VkSemaphore;
-
-    command_pool: VkCommandPool;
+    // Since this is a timeline semaphore, just use my abstraction
+    timeline: Semaphore;
 }
 
 VALIDATION_LAYERS :: (*u8).["VK_LAYER_KHRONOS_validation"];
 DEVICE_EXTENSIONS :: (*u8).[
 VK_EXT_SHADER_OBJECT_EXTENSION_NAME,
 VK_EXT_DESCRIPTOR_HEAP_EXTENSION_NAME,
+VK_KHR_UNIFIED_IMAGE_LAYOUTS_EXTENSION_NAME,
 ];
 
 assert_vk_result :: (result: VkResult) #expand {
@@ -790,7 +931,6 @@ device_supports_extensions :: (physical_device: VkPhysicalDevice, extensions: []
         }
 
         if !supported {
-            Basic.log("device does not support %", to_string(extension));
             return false;
         };
     }
@@ -888,7 +1028,13 @@ make_device :: (device_extensions: [] *u8) -> VkResult, VkDevice {
     }
 
     chain: *void;
+    features_unified_image_layouts := VkPhysicalDeviceUnifiedImageLayoutsFeaturesKHR.{
+        unifiedImageLayouts = VK_TRUE,
+    };
+    chain = *features_unified_image_layouts;
+
     features_descriptor_heap := VkPhysicalDeviceDescriptorHeapFeaturesEXT.{
+        pNext = chain,
         descriptorHeap = VK_TRUE,
     };
     chain = *features_descriptor_heap;
@@ -987,22 +1133,6 @@ get_memory_indices :: () -> Memory_Indices {
     return indices;
 }
 
-to_vulkan_format :: (format: Format) -> VkFormat {
-    vk_format: VkFormat = UNDEFINED;
-    if format == {
-    case .NONE;
-        vk_format = .UNDEFINED;
-    case .RGBA8_UNORM;
-        vk_format = .R8G8B8A8_UNORM;
-    case .D32_FLOAT;
-        vk_format = .D32_SFLOAT;
-    case .D24_UNORM_S8;
-        vk_format = .D24_UNORM_S8_UINT;
-    }
-
-    return vk_format;
-}
-
 to_vulkan_image_type :: (type: Texture_Type) -> VkImageType {
     image_type: VkImageType;
     if type == {
@@ -1048,21 +1178,21 @@ to_vulkan_sample_count :: (count: u32) -> VkSampleCountFlagBits {
 }
 
 to_vulkan_image_usage :: (usage: Texture_Usage) -> VkImageUsageFlags {
-
+    return cast(VkImageUsageFlags) usage;
 }
 
 to_vulkan_image_create_info :: (desc: Texture_Desc) -> VkImageCreateInfo {
     info := VkImageCreateInfo.{
         imageType = to_vulkan_image_type(desc.type),
-        format = to_vulkan_format(desc.format),
-        extent = cast(VkExtent3D) desc.dimensions,
+        format = desc.format,
+        extent = cast,force(VkExtent3D) desc.dimensions,
         mipLevels = desc.mip_count,
         arrayLayers = desc.layer_count,
         samples = to_vulkan_sample_count(desc.sample_count),
         tiling = .OPTIMAL,
-        usage = .TRANSFER_SRC | .TRANSFER_DST | .SAMPLED | .STORAGE,
+        usage = to_vulkan_image_usage(desc.usage),
         sharingMode = .EXCLUSIVE,
-        initialLayout = UNDEFINED,
+        initialLayout = .UNDEFINED,
     };
 
     return info;
@@ -1092,17 +1222,7 @@ to_vulkan_pipeline_stage :: (stage: Stage) -> VkPipelineStageFlags2 {
     return vk;
 }
 
-bump_command_pool_index :: () {
-    using context.gpu_context;
-
-    if current_command_pool_index >= DEFAULT_COMMAND_BUFFER_COUNT - 1 {
-        current_command_pool_index = 0;
-    } else {
-        current_command_pool_index += 1;
-    }
-}
-
-create_swapchain :: () {
+init_swapchain :: () {
     using context.gpu_context;
 
     support := get_swapchain_support(physical_device, surface);
@@ -1128,10 +1248,15 @@ create_swapchain :: () {
         image_count = support.capabilities.maxImageCount;
     }
 
+    window_width: s32;
+    window_height: s32;
+    ok := SDL_GetWindowSize(sdl_window, *window_width, *window_height);
+    if !ok return;
+
     swapchain_extent := support.capabilities.currentExtent;
     if swapchain_extent.width == Math.U32_MAX {
-        swapchain_extent.width = Math.clamp(extent.width, support.capabilities.minImageExtent.width, support.capabilities.maxImageExtent.width);
-        swapchain_extent.height = Math.clamp(extent.height, support.capabilities.minImageExtent.height, support.capabilities.maxImageExtent.height);
+        swapchain_extent.width = Basic.clamp(window_width.(u32),  support.capabilities.minImageExtent.width, support.capabilities.maxImageExtent.width);
+        swapchain_extent.height = Basic.clamp(window_height.(u32), support.capabilities.minImageExtent.height, support.capabilities.maxImageExtent.height);
     }
 
     swapchain_create_info := VkSwapchainCreateInfoKHR.{
@@ -1153,34 +1278,60 @@ create_swapchain :: () {
     };
 
     result: VkResult;
-    swapchain.format = format;
-    swapchain.extent = extent;
+    swapchain.format = format.format;
+    swapchain.extent = swapchain_extent;
     result = check_vk(vkCreateSwapchainKHR(device, *swapchain_create_info, vka, *swapchain.vk));
     assert_vk_result(result);
 
     result, swapchain.images = vkGetSwapchainImagesKHR(device, swapchain.vk);
     assert_vk_result(result);
 
-    swapchain.image_views = Basic.NewArray(image_count, VkImageView);
-    for * swapchain.image_views {
-        image_view_create_info := VkImageViewCreateInfo.{
-            image = image,
-            viewType = .e2D,
-            format = swapchain.format,
-            subresourceRange = .{
-                aspectMask = .COLOR,
-                baseMipLevel = 0,
-                levelCount = 1,
-                baseArrayLayer = 0,
-                layerCount = 1,
-            },
-        };
 
-        result = check_vk(vkCreateImageView(device, *image_view_create_info, vka, it));
-        assert_vk_result(result);
-    }
+    draw_texture_desc := Texture_Desc.{
+        dimensions = .{swapchain.extent.width, swapchain.extent.height, 1},
+        format = swapchain.format,
+        usage = .COLOR_ATTACHMENT | .TRANSFER_SRC,
+    };
+
+    // The alignment for a draw image is huge
+    draw_size_align := texture_size_align(draw_texture_desc);
+
+    draw_texture_ptr := get(*internal_arena, xx draw_size_align.size, xx draw_size_align.align);
+
+    draw_texture_ptr_gpu := host_to_device_pointer(draw_texture_ptr);
+
+    swapchain.draw_texture = create_texture(draw_texture_desc, draw_texture_ptr_gpu);
+
+    depth_texture_desc := Texture_Desc.{
+        dimensions = .{swapchain.extent.width, swapchain.extent.height, 1},
+        format = find_depth_format(),
+        usage = .DEPTH_STENCIL_ATTACHMENT,
+    };
+    depth_size_align := texture_size_align(depth_texture_desc);
+    depth_texture_ptr := get(*internal_arena, xx depth_size_align.size, xx depth_size_align.align);
+    depth_texture_ptr_gpu := host_to_device_pointer(depth_texture_ptr);
+    swapchain.depth_texture = create_texture(depth_texture_desc, depth_texture_ptr_gpu);
+
+
 }
 
+find_depth_format :: () -> VkFormat {
+    using context.gpu_context;
+
+    depth_formats :: VkFormat.[.D32_SFLOAT_S8_UINT, .D24_UNORM_S8_UINT];
+
+    format := depth_formats[0];
+    for depth_formats {
+        format_properties : VkFormatProperties2;
+        vkGetPhysicalDeviceFormatProperties2(physical_device, it, *format_properties);
+        if format_properties.formatProperties.optimalTilingFeatures & .DEPTH_STENCIL_ATTACHMENT {
+            format = it;
+            break;
+        }
+    }
+
+    return format;
+}
 
 
 #import "Vulkan";

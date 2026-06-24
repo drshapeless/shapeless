@@ -55,18 +55,21 @@ u32x3 :: struct {
 }
 
 Texture_Usage :: enum_flags u32 {
-    UNKNOWN       :: 0x0000;
-    SHADER_READ   :: 0x0001;
-    SHADER_WRITE  :: 0x0002;
-    RENDER_TARGET :: 0x0004;
+    UNKNOWN                  :: 0x0000;
+    TRANSFER_SRC             :: 1 << 0;
+    TRANSFER_DST             :: 1 << 1;
+    SAMPLED                  :: 1 << 2;
+    STORAGE                  :: 1 << 3;
+    COLOR_ATTACHMENT         :: 1 << 4;
+    DEPTH_STENCIL_ATTACHMENT :: 1 << 5;
 }
 
 Texture_Desc :: struct {
     type:         Texture_Type = .e2D;
     dimensions:   u32x3;
-    mip_count:    u32;
-    layer_count:  u32;
-    sample_count: u32;
+    mip_count:    u32 = 1;
+    layer_count:  u32 = 1;
+    sample_count: u32 = 1;
     format:       Format;
     usage:        Texture_Usage = 0;
 }
