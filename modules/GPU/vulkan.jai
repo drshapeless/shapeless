@@ -1200,23 +1200,26 @@ to_vulkan_image_create_info :: (desc: Texture_Desc) -> VkImageCreateInfo {
 
 to_vulkan_pipeline_stage :: (stage: Stage) -> VkPipelineStageFlags2 {
     vk: VkPipelineStageFlags2 = .NONE;
-    if stage == {
-    case .TOP;
-        vk = .TOP_OF_PIPE;
-    case .BOTTOM;
-        vk = .BOTTOM_OF_PIPE;
-    case .COMPUTE;
-        vk = .COMPUTE_SHADER;
-    case .TRANSFER;
-        vk = .ALL_TRANSFER;
-    case .VERTEX;
-        vk = .VERTEX_SHADER;
-    case .FRAGMENT;
-        vk = .FRAGMENT_SHADER;
-    case .ALL_GRAPHICS;
-        vk = .ALL_GRAPHICS;
-    case .ALL_COMMANDS;
-        vk = .ALL_COMMANDS;
+    if stage & .COMPUTE {
+        vk |= .COMPUTE_SHADER;
+    }
+    if stage & .VERTEX {
+        vk |= .VERTEX_SHADER;
+    }
+    if stage & .FRAGMENT {
+        vk |= .FRAGMENT_SHADER;
+    }
+    if stage & .COPY {
+        vk |= .COPY;
+    }
+    if stage & .BLIT {
+        vk |= .BLIT;
+    }
+    if stage & .ALL {
+        s |= .ALL_COMMANDS;
+    }
+    if stage & .TRANSFER {
+        s |= .TRANSFER;
     }
 
     return vk;

@@ -38,6 +38,9 @@ GPU_Context :: struct {
     argument_table:            *MTL4ArgumentTable;
 
     residency_set: *MTLResidencySet;
+    draw_texture: Texture;
+
+    internal_arena: Arena;
 }
 
 #add_context gpu_context: GPU_Context;
@@ -51,7 +54,8 @@ Allocation :: struct {
 
 Texture :: struct {
     mtl: *MTLTexture;
-    drawable: *MTLDrawable;
+    cpu: *void;
+    gpu: u64;
 };
 
 Pipeline :: struct {
@@ -132,6 +136,8 @@ init :: (window: *SDL_Window = null) {
     residency_set = MTLDevice.newResidencySetWithDescriptor_error_(device, residency_set_descriptor, *error);
     assert_metal(error);
 
+    init(*internal_arena);
+
     if window {
         sdl_window = window;
         view = SDL_Metal_CreateView(window);
@@ -139,6 +145,24 @@ init :: (window: *SDL_Window = null) {
         layer.setDevice_(layer, device);
         // Metal only support MTLPixelFormatBGRA8Unorm and MTLPixelFormatBGRA8Unorm_sRGB
         layer.setPixelFormat_(layer, .BGRA8Unorm);
+        layer.setFramebufferOnly_(layer, 0);
+
+        width: s32;
+        height: s32;
+        ok := SDL_GetWindowSize(sdl_window, *width, *height);
+        Basic.assert(ok);
+
+
+        // Metal uses bgra, but I like rgba more
+        draw_texture_desc := Texture_Desc.{
+            dimensions = .{xx width, xx height, 1},
+            format = .B8G8R8A8_UNORM,
+            usage = .STORAGE | .COLOR_ATTACHMENT,
+        };
+        draw_size_align := texture_size_align(draw_texture_desc);
+        draw_ptr := get(*internal_arena, xx draw_size_align.size, xx draw_size_align.align);
+        draw_ptr_gpu := host_to_device_pointer(draw_ptr);
+        draw_texture = create_texture(draw_texture_desc, draw_ptr_gpu);
     }
 }
 
@@ -210,14 +234,17 @@ texture_size_align :: (desc: Texture_Desc) -> Texture_Size_Align {
 
 create_texture :: (desc: Texture_Desc, ptr_gpu: u64) -> Texture {
     using context.gpu_context;
-    metal_desc := objc_new(MTLTextureDescriptor);
+    metal_desc := to_metal_texture_descriptor(desc);
     defer release(metal_desc);
-
-    to_metal_texture_descriptor(metal_desc, desc);
 
     allocation := gpu_pointer_to_allocation(ptr_gpu);
 
-    return MTLBuffer.newTextureWithDescriptor_offset_bytesPerRow_(allocation.buffer, metal_desc, ptr_gpu - allocation.gpu, bytes_per_pixel(to_metal_format(desc.format)) * desc.dimensions.x);
+    texture: Texture;
+    texture.mtl = MTLBuffer.newTextureWithDescriptor_offset_bytesPerRow_(allocation.buffer, metal_desc, ptr_gpu - allocation.gpu, bytes_per_pixel(to_metal_format(desc.format)) * desc.dimensions.x);
+    texture.gpu = ptr_gpu;
+    texture.cpu = allocation.cpu + (ptr_gpu - allocation.gpu);
+
+    return texture;
 }
 
 texture_view_descriptor :: (texture: Texture, desc: View_Desc) -> Texture_Descriptor {
@@ -448,9 +475,12 @@ free_pipeline :: (pipeline: Pipeline) {
 // should submit everything to the main queue.
 create_queue :: () -> Queue {
     using context.gpu_context;
-    // Currently, a simple queue is created
     queue := MTLDevice.newMTL4CommandQueue(device);
     MTL4CommandQueue.addResidencySet_(queue, residency_set);
+    if sdl_window {
+        // Who would have thought CAMetalLayer have a residency set...
+        MTL4CommandQueue.addResidencySet_(queue, layer.residencySet(layer));
+    }
     return .{queue};
 }
 
@@ -498,30 +528,40 @@ submit :: (queue: Queue, command_buffers: []*Command_Buffer, wait: []Semaphore_P
 }
 
 // I can't think of a way to correctly decouple present from submit.
-submit_and_present :: (queue: Queue, texture: Texture, command_buffers: []*Command_Buffer, wait: []Semaphore_Pair = .[], signal: []Semaphore_Pair = .[]) {
+submit_and_present :: (queue: Queue, cb: *Command_Buffer, wait: []Semaphore_Pair = .[], signal: []Semaphore_Pair = .[]) {
+    using context.gpu_context;
+    drawable :*CAMetalDrawable = layer.nextDrawable(layer);
+    if drawable == null {
+        Basic.log("Cannot aquire drawable");
+        return;
+    }
+
     Basic.auto_release_temp();
     for wait {
         MTL4CommandQueue.waitForEvent_value_(queue.mtl, xx it.semaphore.shared_event, it.value);
     }
 
-    MTL4CommandQueue.waitForDrawable_(queue.mtl, texture.drawable);
+    MTL4CommandQueue.waitForDrawable_(queue.mtl, xx drawable);
 
-    buffers := Basic.NewArray(command_buffers.count, *MTL4CommandBuffer,, Basic.temp);
-    for cb: command_buffers {
-        buffers[it_index] = cb.cmd;
-        maybe_end_compute_encoder(cb);
-        MTL4CommandBuffer.endCommandBuffer(cb.cmd);
-    }
+    // We need a barrier here
 
-    MTL4CommandQueue.commit_count_(queue.mtl, buffers.data, xx command_buffers.count);
+    maybe_create_compute_encoder(cb);
+    barrier(cb, .BLIT, .COMPUTE);
+
+    MTL4ComputeCommandEncoder.copyFromTexture_toTexture_(cb.compute_encoder, draw_texture.mtl, drawable.texture(drawable));
+
+    maybe_end_compute_encoder(cb);
+    MTL4CommandBuffer.endCommandBuffer(cb.cmd);
+
+    MTL4CommandQueue.commit_count_(queue.mtl, *cb.cmd, 1);
 
     for signal {
         MTL4CommandQueue.signalEvent_value_(queue.mtl, xx it.semaphore.shared_event, it.value);
     }
 
-    MTL4CommandQueue.signalDrawable_(queue.mtl, texture.drawable);
+    MTL4CommandQueue.signalDrawable_(queue.mtl, xx drawable);
 
-    MTLDrawable.present(texture.drawable);
+    MTLDrawable.present(xx drawable);
 }
 
 create_semaphore :: (init_value: u64) -> Semaphore {
@@ -632,18 +672,23 @@ end_render_pass :: (cb: *Command_Buffer) {
     end_render_encoder(cb);
 }
 
-aquire_next_texture :: () -> success:bool, Texture {
+draw_texture :: () -> Texture {
     using context.gpu_context;
 
-    drawable :*CAMetalDrawable = layer.nextDrawable(layer);
-    if drawable == null {
-        Basic.log("Cannot aquire drawable");
-        return false, .{};
+    return draw_texture;
+}
+
+// Metal does not care about hazards
+barrier :: (cb: *Command_Buffer, before: Stage, after: Stage, hazards: Hazard = 0) {
+    encoder: *MTL4CommandEncoder;
+    if cb.render_encoder {
+        encoder = xx cb.render_encoder;
+    } else {
+        maybe_create_compute_encoder(cb);
+        encoder = xx cb.compute_encoder;
     }
 
-    t := drawable.texture(drawable);
-
-    return true, .{t, xx drawable};
+    MTL4CommandEncoder.barrierAfterEncoderStages_beforeEncoderStages_visibilityOptions_(encoder, to_metal_stages(after), to_metal_stages(before), .Device);
 }
 
 #scope_file
@@ -661,6 +706,19 @@ to_metal_texture_descriptor :: (metal_descriptor: *MTLTextureDescriptor, desc: T
     // M-series chip, always shared mode
     // Maybe for swapchain texture, we may need private, but whatever.
     MTLTextureDescriptor.setStorageMode_(metal_descriptor, .Shared);
+}
+
+to_metal_texture_descriptor :: (desc: Texture_Desc) -> *MTLTextureDescriptor {
+    metal_desc: *MTLTextureDescriptor;
+    if desc.type == .e2D {
+        metal_desc = MTLTextureDescriptor.texture2DDescriptorWithPixelFormat_width_height_mipmapped_(to_metal_format(desc.format), desc.dimensions.x, desc.dimensions.y, xx (desc.mip_count > 0));
+        metal_desc.setResourceOptions_(metal_desc, .StorageModeShared);
+    } else {
+        metal_desc: *MTLTextureDescriptor = objc_new(MTLTextureDescriptor);
+        to_metal_texture_descriptor(metal_desc, desc);
+    }
+
+    return metal_desc;
 }
 
 to_metal_format :: vulkan_format_to_metal_format;
@@ -686,8 +744,14 @@ to_metal_texture_type :: (texture_type: Texture_Type) -> MTLTextureType {
 }
 
 to_metal_texture_usage :: (texture_usage: Texture_Usage) -> MTLTextureUsage {
-    // They are exactly the same
-    return cast(MTLTextureUsage)texture_usage;
+    mtl_usage: MTLTextureUsage;
+    if texture_usage & .STORAGE {
+        mtl_usage |= .ShaderRead | .ShaderWrite;
+    }
+    if texture_usage & .COLOR_ATTACHMENT || texture_usage & .DEPTH_STENCIL_ATTACHMENT {
+        mtl_usage |= .RenderTarget;
+    }
+    return mtl_usage;
 }
 
 to_metal_blend_factor :: (factor: Factor) -> MTLBlendFactor {
@@ -904,8 +968,6 @@ spirv_to_metal_shader :: (spirv: string) -> string {
     assert_spvc(result);
     result = spvc_compiler_options_set_uint(my_options, .MSL_VERSION, SPVC_MAKE_MSL_VERSION(4, 0, 0));
     assert_spvc(result);
-    // result = spvc_compiler_options_set_bool(my_options, .MSL_ARGUMENT_BUFFERS, SPVC_TRUE);
-    // assert_spvc(result);
 
     spvc_compiler_install_compiler_options(my_compiler, my_options);
 
@@ -1090,6 +1152,26 @@ bytes_per_pixel :: (format: MTLPixelFormat) -> u64 {
     }
 }
 
+to_metal_stages :: (stage: Stage) -> MTLStages {
+    s: MTLStages;
+    if stage & .COMPUTE {
+        s |= .Dispatch;
+    }
+    if stage & .VERTEX {
+        s |= .Vertex;
+    }
+    if stage & .FRAGMENT {
+        s |= .Fragment;
+    }
+    if stage & .COPY || stage & .BLIT{
+        s |= .Blit;
+    }
+    if stage & .ALL {
+        s |= .All;
+    }
+
+    return s;
+}
 
 #import "Metal";
 Basic :: #import "Basic";

@@ -2,6 +2,17 @@ App_State :: struct {
     window: *SDL_Window;
     queue: GPU.Queue;
     is_running: bool = true;
+
+    clear_pipeline: GPU.Pipeline;
+    arena: GPU.Arena;
+    params: *Params;
+    params_gpu: u64;
+
+    last_frame_time: Apollo_Time;
+}
+
+Params :: struct {
+    texture: u64;
 }
 
 app_init :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
@@ -22,8 +33,19 @@ app_init :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
 
     GPU.init(window);
 
-    queue = GPU.create_queue();
+    clear_shader := read_entire_file("shaders/clear.slang.spv");
+    clear_ir := GPU.load_compute_ir(clear_shader);
+    clear_pipeline = GPU.create_compute_pipeline(clear_ir);
 
+    GPU.init(*arena, 1024);
+    {
+        GPU.push_allocator(GPU.arena_allocator_proc, *arena);
+
+        params = GPU.New(Params);
+        params_gpu = GPU.host_to_device_pointer(params);
+    }
+
+    queue = GPU.create_queue();
     return .CONTINUE;
 }
 
@@ -52,24 +74,20 @@ app_iter :: (appstate: *void) -> SDL_AppResult {
 
     if !is_running return .SUCCESS;
 
-    // cb := GPU.start_command_recording();
+    // current_frame_time := current_time_monotonic();
 
-    // color_attachment :GPU.Render_Pass_Attachment_Desc = .{
-    //     texture = draw_texture,
-    //     load_op = .CLEAR,
-    //     store_op = .STORE,
-    //     clear_color = .{0.2, 0.3, 0.4, 1.0}
-    // };
+    // if to_milliseconds(current_frame_time - last_frame_time) < 13000 return .CONTINUE;
 
-    // render_pass_desc := GPU.Render_Pass_Desc.{
-    //         color_targets = .[color_attachment],
-    //         };
+    // last_frame_time = current_frame_time;
 
-    // GPU.begin_render_pass(cb, render_pass_desc);
-    // GPU.end_render_pass(cb);
+    cb := GPU.start_command_recording();
 
-    // GPU.submit_and_present(queue, .[cb]);
+    draw_texture := GPU.draw_texture();
+    params.texture = draw_texture.gpu;
 
+    GPU.set_pipeline(cb, clear_pipeline);
+    GPU.dispatch(cb, params_gpu, 800 * 600 / 256);
+    GPU.submit_and_present(queue, cb);
     return .CONTINUE;
 }
 

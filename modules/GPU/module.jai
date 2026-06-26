@@ -67,7 +67,7 @@ Texture_Usage :: enum_flags u32 {
 Texture_Desc :: struct {
     type:         Texture_Type = .e2D;
     dimensions:   u32x3;
-    mip_count:    u32 = 1;
+    mip_count:    u32 = 0;
     layer_count:  u32 = 1;
     sample_count: u32 = 1;
     format:       Format;
@@ -201,14 +201,14 @@ Semaphore_Pair :: struct {
 }
 
 Stage :: enum {
-    TOP;
-    TRANSFER;
-    COMPUTE;
-    VERTEX;
-    FRAGMENT;
-    BOTTOM;
-    ALL_GRAPHICS;
-    ALL_COMMANDS;
+    NONE     :: 0;
+    VERTEX   :: 1 << 0;
+    FRAGMENT :: 1 << 1;
+    COMPUTE  :: 1 << 2;
+    BLIT     :: 1 << 3;
+    COPY     :: 1 << 4;
+    TRANSFER :: 1 << 5;
+    ALL      :: 1 << 15;
 }
 
 Hazard :: enum_flags {
