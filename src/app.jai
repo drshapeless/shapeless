@@ -13,6 +13,7 @@ App_State :: struct {
 
 Params :: struct {
     texture: u64;
+    clear_color: GPU.Color;
 }
 
 app_init :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
@@ -43,6 +44,7 @@ app_init :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
 
         params = GPU.New(Params);
         params_gpu = GPU.host_to_device_pointer(params);
+        params.clear_color = .{0.2, 0.3, 0.4, 1.0};
     }
 
     queue = GPU.create_queue();
