@@ -7,6 +7,7 @@ App_State :: struct {
     arena: GPU.Arena;
     params: *Params;
     params_gpu: u64;
+    draw_texture: GPU.Texture;
 
     last_frame_time: Apollo_Time;
 }
@@ -38,13 +39,28 @@ app_init :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
     clear_ir := GPU.load_compute_ir(clear_shader);
     clear_pipeline = GPU.create_compute_pipeline(clear_ir);
 
-    GPU.init(*arena, 1024);
+    GPU.init(*arena);
     {
         GPU.push_allocator(GPU.arena_allocator_proc, *arena);
 
         params = GPU.New(Params);
         params_gpu = GPU.host_to_device_pointer(params);
         params.clear_color = .{0.2, 0.3, 0.4, 1.0};
+
+        width: s32;
+        height: s32;
+        ok := SDL_GetWindowSize(window, *width, *height);
+        assert(ok);
+        draw_texture_desc := GPU.Texture_Desc.{
+            dimensions = .{xx width, xx height, 1},
+            format = .B8G8R8A8_UNORM,
+            usage = .STORAGE | .COLOR_ATTACHMENT,
+        };
+        draw_size_align := GPU.texture_size_align(draw_texture_desc);
+
+        draw_ptr := GPU.get(*arena, xx draw_size_align.size, xx draw_size_align.align);
+        draw_ptr_gpu := GPU.host_to_device_pointer(draw_ptr);
+        draw_texture = GPU.create_texture(draw_texture_desc, draw_ptr_gpu);
     }
 
     queue = GPU.create_queue();
@@ -82,14 +98,17 @@ app_iter :: (appstate: *void) -> SDL_AppResult {
 
     // last_frame_time = current_frame_time;
 
-    cb := GPU.start_command_recording();
+    ok, swapchain_texture := GPU.acquire_swapchain_texture();
+    if !ok return .CONTINUE;
 
-    draw_texture := GPU.draw_texture();
+    cb := GPU.start_command_recording();
     params.texture = draw_texture.gpu;
 
     GPU.set_pipeline(cb, clear_pipeline);
     GPU.dispatch(cb, params_gpu, 800 * 600 / 256);
-    GPU.submit_and_present(queue, cb);
+    GPU.barrier(cb, .BLIT, .COMPUTE);
+    GPU.copy_texture(cb, swapchain_texture, draw_texture);
+    GPU.submit_and_present(queue, swapchain_texture, cb);
     return .CONTINUE;
 }
 

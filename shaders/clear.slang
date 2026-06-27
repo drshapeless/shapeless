@@ -9,10 +9,11 @@ struct Params {
     uint8_t *texture;
     Color clear_color;
 };
+ParameterBlock<Params> p;
 
 [shader("compute")]
 [numthreads(256, 1, 1)]
-void compute_main(uint thread_id : SV_DispatchThreadID, ParameterBlock<Params> p) {
+void compute_main(uint thread_id : SV_DispatchThreadID) {
     var i = thread_id * 4;
 
     p.texture[i+0] = (uint8_t)(p.clear_color.b * 255.0);

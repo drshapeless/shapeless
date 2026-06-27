@@ -54,6 +54,7 @@ Allocation :: struct {
 
 Texture :: struct {
     mtl: *MTLTexture;
+    drawable: *MTLDrawable;
     cpu: *void;
     gpu: u64;
 };
@@ -145,24 +146,8 @@ init :: (window: *SDL_Window = null) {
         layer.setDevice_(layer, device);
         // Metal only support MTLPixelFormatBGRA8Unorm and MTLPixelFormatBGRA8Unorm_sRGB
         layer.setPixelFormat_(layer, .BGRA8Unorm);
+        // This can let us copy to the drawable texture
         layer.setFramebufferOnly_(layer, 0);
-
-        width: s32;
-        height: s32;
-        ok := SDL_GetWindowSize(sdl_window, *width, *height);
-        Basic.assert(ok);
-
-
-        // Metal uses bgra, but I like rgba more
-        draw_texture_desc := Texture_Desc.{
-            dimensions = .{xx width, xx height, 1},
-            format = .B8G8R8A8_UNORM,
-            usage = .STORAGE | .COLOR_ATTACHMENT,
-        };
-        draw_size_align := texture_size_align(draw_texture_desc);
-        draw_ptr := get(*internal_arena, xx draw_size_align.size, xx draw_size_align.align);
-        draw_ptr_gpu := host_to_device_pointer(draw_ptr);
-        draw_texture = create_texture(draw_texture_desc, draw_ptr_gpu);
     }
 }
 
@@ -528,27 +513,16 @@ submit :: (queue: Queue, command_buffers: []*Command_Buffer, wait: []Semaphore_P
 }
 
 // I can't think of a way to correctly decouple present from submit.
-submit_and_present :: (queue: Queue, cb: *Command_Buffer, wait: []Semaphore_Pair = .[], signal: []Semaphore_Pair = .[]) {
+submit_and_present :: (queue: Queue, swapchain_texture: Texture, cb: *Command_Buffer, wait: []Semaphore_Pair = .[], signal: []Semaphore_Pair = .[]) {
     using context.gpu_context;
-    drawable :*CAMetalDrawable = layer.nextDrawable(layer);
-    if drawable == null {
-        Basic.log("Cannot aquire drawable");
-        return;
-    }
+    drawable := swapchain_texture.drawable;
 
     Basic.auto_release_temp();
     for wait {
         MTL4CommandQueue.waitForEvent_value_(queue.mtl, xx it.semaphore.shared_event, it.value);
     }
 
-    MTL4CommandQueue.waitForDrawable_(queue.mtl, xx drawable);
-
-    // We need a barrier here
-
-    maybe_create_compute_encoder(cb);
-    barrier(cb, .BLIT, .COMPUTE);
-
-    MTL4ComputeCommandEncoder.copyFromTexture_toTexture_(cb.compute_encoder, draw_texture.mtl, drawable.texture(drawable));
+    MTL4CommandQueue.waitForDrawable_(queue.mtl, drawable);
 
     maybe_end_compute_encoder(cb);
     MTL4CommandBuffer.endCommandBuffer(cb.cmd);
@@ -559,9 +533,9 @@ submit_and_present :: (queue: Queue, cb: *Command_Buffer, wait: []Semaphore_Pair
         MTL4CommandQueue.signalEvent_value_(queue.mtl, xx it.semaphore.shared_event, it.value);
     }
 
-    MTL4CommandQueue.signalDrawable_(queue.mtl, xx drawable);
+    MTL4CommandQueue.signalDrawable_(queue.mtl, drawable);
 
-    MTLDrawable.present(xx drawable);
+    MTLDrawable.present(drawable);
 }
 
 create_semaphore :: (init_value: u64) -> Semaphore {
@@ -626,6 +600,13 @@ copy_from_texture :: (cb: *Command_Buffer, dest: u64, src: Texture) {
     MTL4ComputeCommandEncoder.copyFromTexture_sourceSlice_sourceLevel_sourceOrigin_sourceSize_toBuffer_destinationOffset_destinationBytesPerRow_destinationBytesPerImage_(cb.compute_encoder, src.mtl, 0, 1, .{0, 0, 0}, src_size, dest_allocation.buffer, dest - dest_allocation.gpu, bytes_per_row, 0);
 }
 
+// In Metal, the src and dest texture must of the same format and size.
+// TODO: Make it supports different sizes.
+copy_texture :: (cb: *Command_Buffer, dest: Texture, src: Texture) {
+    maybe_create_compute_encoder(cb);
+    MTL4ComputeCommandEncoder.copyFromTexture_toTexture_(cb.compute_encoder, src.mtl, dest.mtl);
+}
+
 set_pipeline :: (cb: *Command_Buffer, pipeline: Pipeline) {
     if pipeline.is_compute {
         maybe_create_compute_encoder(cb);
@@ -676,6 +657,22 @@ draw_texture :: () -> Texture {
     using context.gpu_context;
 
     return draw_texture;
+}
+
+acquire_swapchain_texture :: () -> bool, Texture {
+    using context.gpu_context;
+
+    drawable :*CAMetalDrawable = layer.nextDrawable(layer);
+    if drawable == null {
+        Basic.log("Cannot acquire drawable");
+        return false, .{};
+    }
+
+    texture: Texture;
+    texture.mtl = drawable.texture(drawable);
+    texture.drawable = xx drawable;
+
+    return true, texture;
 }
 
 // Metal does not care about hazards
