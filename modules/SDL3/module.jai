@@ -6,20 +6,27 @@
     #load "macos/macos.jai";
     libsdl3 :: #library "macos/libsdl3";
     // The following mess is the cost of linking SDL staticly
-    CoreVideo              :: #library,system,link_always "CoreVideo";
-    CoreAudio              :: #library,system,link_always "CoreAudio";
-    CoreMedia              :: #library,system,link_always "CoreMedia";
-    CoreHaptics            :: #library,system,link_always "CoreHaptics";
-    AudioToolbox           :: #library,system,link_always "AudioToolbox";
-    IOKit                  :: #library,system,link_always "IOKit";
-    Cocoa                  :: #library,system,link_always "Cocoa";
-    Carbon                 :: #library,system,link_always "Carbon";
-    Foundation             :: #library,system,link_always "Foundation";
     AVFoundation           :: #library,system,link_always "AVFoundation";
-    GameController         :: #library,system,link_always "GameController";
+    AudioToolbox           :: #library,system,link_always "AudioToolbox";
+    Carbon                 :: #library,system,link_always "Carbon";
+    Cocoa                  :: #library,system,link_always "Cocoa";
+    CoreAudio              :: #library,system,link_always "CoreAudio";
+    CoreHaptics            :: #library,system,link_always "CoreHaptics";
+    CoreMedia              :: #library,system,link_always "CoreMedia";
+    CoreVideo              :: #library,system,link_always "CoreVideo";
     ForceFeedback          :: #library,system,link_always "ForceFeedback";
-    UniformTypeIdentifiers :: #library,system,link_always "UniformTypeIdentifiers";
+    Foundation             :: #library,system,link_always "Foundation";
+    GameController         :: #library,system,link_always "GameController";
+    IOKit                  :: #library,system,link_always "IOKit";
     QuartzCore             :: #library,system,link_always "QuartzCore";
+    UniformTypeIdentifiers :: #library,system,link_always "UniformTypeIdentifiers";
+}
+
+SDL_GetWindowSize :: (window: *SDL_Window) -> bool, width:s32, height:s32 {
+    width: s32;
+    height: s32;
+    ok := SDL_GetWindowSize(window, *width, *height);
+    return ok, width, height;
 }
 
 #load "sdl_callbacks.jai";
