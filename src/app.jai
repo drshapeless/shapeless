@@ -37,6 +37,7 @@ app_init :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
 
     clear_shader := read_entire_file("shaders/clear.slang.spv");
     clear_ir := GPU.load_compute_ir(clear_shader);
+    defer GPU.destroy_ir(clear_ir);
     clear_pipeline = GPU.create_compute_pipeline(clear_ir);
 
     GPU.init(*arena);
@@ -47,9 +48,7 @@ app_init :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
         params_gpu = GPU.host_to_device_pointer(params);
         params.clear_color = .{0.2, 0.3, 0.4, 1.0};
 
-        width: s32;
-        height: s32;
-        ok := SDL_GetWindowSize(window, *width, *height);
+        ok, width, height := SDL_GetWindowSize(window);
         assert(ok);
         draw_texture_desc := GPU.Texture_Desc.{
             dimensions = .{xx width, xx height, 1},

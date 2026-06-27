@@ -1,3 +1,5 @@
+#module_parameters(VALIDATION := true, DEBUG_ASSERT := true);
+
 // The GPU module is a very minimalistic GPU API targeting very new
 // hardware. It uses Metal 4 on macOS, and Vulkan 1.4 on
 // Linux. Windows platform is not tested, should works under Vulkan.
@@ -13,6 +15,9 @@
 // context.gpu_allocator to do any allocation by GPU.alloc or
 // GPU.free, currently, resize is not supported.
 
+// One major thing in this implementation is the abstraction of IR,
+// works well in Metal, but somewhat stupid in Vulkan
+
 // Here are the functions that declared in different implementations,
 // almost a one to one translation from No Graphics API.
 
@@ -23,7 +28,42 @@
 
 // texture_size_align :: (desc: Texture_Desc) -> Texture_Size_Align
 
-#module_parameters(VALIDATION := true, DEBUG_ASSERT := true);
+// create_texture :: (desc: Texture_Desc, ptr_gpu: u64) -> Texture
+
+// load_spirv :: (spirv: string, entry_points: []string) -> []IR
+// create_compute_pipeline :: (compute_ir: IR) -> Pipeline
+// create_graphics_pipeline :: (vertex_ir: IR, fragment_ir: IR, desc: Raster_Desc) -> Pipeline
+// free_pipeline :: (pipeline: Pipeline)
+
+// create_queue :: () -> Queue
+// start_command_recording :: () -> *Command_Buffer
+// submit :: (queue: Queue, command_buffers: ..*Command_Buffer, wait: []Semaphore_Pair = .[], signal: []Semaphore_Pair = .[])
+
+// create_semaphore :: (init_value: u64) -> Semaphore
+// wait_semaphore :: (sema: Semaphore, value: u64, timeout: u64 = 0)
+// destroy_semaphore :: (sema: Semaphore)
+
+// memcpy :: (cb: *Command_Buffer, dest: u64, src: u64, size: s64)
+// copy_to_texture :: (cb: *Command_Buffer, dest: Texture, src: u64)
+// copy_from_texture :: (cb: *Command_Buffer, dest: u64, src: Texture)
+// copy_texture :: (cb: *Command_Buffer, dest: Texture, src: Texture)
+
+// set_pipeline :: (cb: *Command_Buffer, pipeline: Pipeline)
+// dispatch :: (cb: *Command_Buffer, data_gpu: u64, groups: u32x3, threads: u32x3)
+// dispatch :: (cb: *Command_Buffer, data_gpu: u64, count: u32)
+
+// begin_render_pass :: (cb: *Command_Buffer, desc: Render_Pass_Desc)
+// end_render_pass :: (cb: *Command_Buffer)
+
+// barrier :: (cb: *Command_Buffer, before: Stage, after: Stage, hazards: Hazard = 0)
+
+
+//// Functions that are necessary for a GPU api but not in No Graphics API
+// acquire_swapchain_texture :: () -> bool, Texture
+// submit_and_present :: (queue: Queue, swapchain_texture: Texture, command_buffers: ..*Command_Buffer, wait: []Semaphore_Pair = .[], signal: []Semaphore_Pair = .[])
+
+//// Metal specific function
+// load_msl :: (msl: string, entry_points: []string) -> []IR
 
 Memory_Type :: enum {
     SHARED;
@@ -254,7 +294,15 @@ Render_Pass_Desc :: struct {
     color_targets: [] Render_Pass_Attachment_Desc;
 }
 
-// Allocator
+load_compute_ir :: inline (spirv: string, entry_point: string = "compute_main") -> IR {
+    Basic.auto_release_temp();
+    irs := load_spirv(spirv, .[entry_point],, Basic.temp);
+    return irs[0];
+}
+
+load_graphics_ir :: #bake_arguments load_spirv(entry_points = .["vertex_main", "fragment_main"]);
+
+//// Allocator
 // A GPU allocator has the same interface as a Jai allocator
 alloc :: (size: s64) -> *void {
     a := context.gpu_allocator;

@@ -38,7 +38,6 @@ GPU_Context :: struct {
     argument_table:            *MTL4ArgumentTable;
 
     residency_set: *MTLResidencySet;
-    draw_texture: Texture;
 
     internal_arena: Arena;
 }
@@ -250,6 +249,8 @@ rw_texture_view_descriptor :: (texture: Texture, desc: View_Desc) -> Texture_Des
     return texture_view_descriptor(texture, desc);
 }
 
+// The purpose of this function is for debug only, I recommend using
+// spirv for everything because of consistency.
 load_msl :: (msl: string, entry_points: []string) -> []IR {
     using context.gpu_context;
     compile_options: *MTLCompileOptions = objc_new(MTLCompileOptions);
@@ -286,17 +287,8 @@ load_spirv :: (spirv: string, entry_points: []string) -> []IR {
     return load_msl(shader_string, entry_points);
 }
 
-// The shader passed here is spirv, we use spirv cross to turn spirv into metal shader
-// load_compute_ir :: #bake_arguments load_spirv(entry_points = .["compute_main"]);
-load_compute_ir :: inline (spirv: string, entry_point: string = "compute_main") -> IR {
-    Basic.auto_release_temp();
-    irs := load_spirv(spirv, .[entry_point],, Basic.temp);
-    return irs[0];
-}
-load_graphics_ir :: #bake_arguments load_spirv(entry_points = .["vertex_main", "fragment_main"]);
-
 destroy_ir :: (ir: IR) {
-    release(IR.library_function_descriptor);
+    release(ir.library_function_descriptor);
 }
 
 create_compute_pipeline :: (compute_ir: IR) -> Pipeline {
@@ -492,7 +484,7 @@ start_command_recording :: () -> *Command_Buffer {
 // the case in Vulkan. In Vulkan the wait and signal semaphores are
 // grouped together in a single submit info, otherwise, it might have
 // a significant performance impact(?)
-submit :: (queue: Queue, command_buffers: []*Command_Buffer, wait: []Semaphore_Pair = .[], signal: []Semaphore_Pair = .[]) {
+submit :: (queue: Queue, command_buffers: ..*Command_Buffer, wait: []Semaphore_Pair = .[], signal: []Semaphore_Pair = .[]) {
     Basic.auto_release_temp();
     for wait {
         MTL4CommandQueue.waitForEvent_value_(queue.mtl, xx it.semaphore.shared_event, it.value);
@@ -513,8 +505,7 @@ submit :: (queue: Queue, command_buffers: []*Command_Buffer, wait: []Semaphore_P
 }
 
 // I can't think of a way to correctly decouple present from submit.
-submit_and_present :: (queue: Queue, swapchain_texture: Texture, cb: *Command_Buffer, wait: []Semaphore_Pair = .[], signal: []Semaphore_Pair = .[]) {
-    using context.gpu_context;
+submit_and_present :: (queue: Queue, swapchain_texture: Texture, command_buffers: ..*Command_Buffer, wait: []Semaphore_Pair = .[], signal: []Semaphore_Pair = .[]) {
     drawable := swapchain_texture.drawable;
 
     Basic.auto_release_temp();
@@ -524,10 +515,14 @@ submit_and_present :: (queue: Queue, swapchain_texture: Texture, cb: *Command_Bu
 
     MTL4CommandQueue.waitForDrawable_(queue.mtl, drawable);
 
-    maybe_end_compute_encoder(cb);
-    MTL4CommandBuffer.endCommandBuffer(cb.cmd);
+    buffers := Basic.NewArray(command_buffers.count, *MTL4CommandBuffer,, Basic.temp);
+    for cb: command_buffers {
+        buffers[it_index] = cb.cmd;
+        maybe_end_compute_encoder(cb);
+        MTL4CommandBuffer.endCommandBuffer(cb.cmd);
+    }
 
-    MTL4CommandQueue.commit_count_(queue.mtl, *cb.cmd, 1);
+    MTL4CommandQueue.commit_count_(queue.mtl, buffers.data, xx buffers.count);
 
     for signal {
         MTL4CommandQueue.signalEvent_value_(queue.mtl, xx it.semaphore.shared_event, it.value);
@@ -620,7 +615,7 @@ set_pipeline :: (cb: *Command_Buffer, pipeline: Pipeline) {
     }
 }
 
-dispatch :: (cb: *Command_Buffer, data_gpu: u64, count: u32) {
+dispatch :: (cb: *Command_Buffer, data_gpu: u64, groups: u32x3, threads: u32x3) {
     using context.gpu_context;
 
     MTL4ArgumentTable.setAddress_atIndex_(argument_table, data_gpu, 0);
@@ -629,15 +624,22 @@ dispatch :: (cb: *Command_Buffer, data_gpu: u64, count: u32) {
 
     cb.compute_encoder.setArgumentTable_(cb.compute_encoder, argument_table);
 
-    dispatch_threads := MTLSize.{count, 1, 1};
+    mtl_thread_groups := MTLSize.{groups.x, groups.y, groups.z};
 
-    // 256 is hardcoded, always use 256 in the slang shader
-    //
+    mtl_threads := MTLSize.{threads.x, threads.y, threads.z};
+
     // Caution!!!
     // dispatchThreads_threadsPerThreadgroup_ and
     // dispatchThreadgroups_threadsPerThreadgroup_ is completely
     // different thing, the latter one is what we want.
-    cb.compute_encoder.dispatchThreadgroups_threadsPerThreadgroup_(cb.compute_encoder, dispatch_threads, .{256, 1, 1});
+    MTL4ComputeCommandEncoder.dispatchThreadgroups_threadsPerThreadgroup_(cb.compute_encoder, mtl_thread_groups, mtl_threads);
+}
+
+// This is a handy function for dispatching 1D array of 256 threads
+// per group
+dispatch :: (cb: *Command_Buffer, data_gpu: u64, count: u32) {
+    // 256 is hardcoded.
+    dispatch(cb, data_gpu, .{count, 1, 1}, .{256, 1, 1});
 }
 
 begin_render_pass :: (cb: *Command_Buffer, desc: Render_Pass_Desc) {
@@ -651,12 +653,6 @@ begin_render_pass :: (cb: *Command_Buffer, desc: Render_Pass_Desc) {
 
 end_render_pass :: (cb: *Command_Buffer) {
     end_render_encoder(cb);
-}
-
-draw_texture :: () -> Texture {
-    using context.gpu_context;
-
-    return draw_texture;
 }
 
 acquire_swapchain_texture :: () -> bool, Texture {
