@@ -127,9 +127,9 @@ View_Desc :: struct {
     layer_count: u16;
 }
 
-Texture_Descriptor :: struct {
-    data: [4]u64;
-}
+// Texture_Descriptor :: struct {
+//     data: [4]u64;
+// }
 
 Topology :: enum {
     TRIANGLE_LIST;
@@ -294,13 +294,14 @@ Render_Pass_Desc :: struct {
     color_targets: [] Render_Pass_Attachment_Desc;
 }
 
-load_compute_ir :: inline (spirv: string, entry_point: string = "compute_main") -> IR {
+load_compute_ir :: inline (shader: string, entry_point: string = "compute_main") -> IR {
     Basic.auto_release_temp();
-    irs := load_spirv(spirv, .[entry_point],, Basic.temp);
+    Basic.push_allocator(Basic.temp);
+    irs := load_slang(shader, .[entry_point]);
     return irs[0];
 }
 
-load_graphics_ir :: #bake_arguments load_spirv(entry_points = .["vertex_main", "fragment_main"]);
+load_graphics_ir :: #bake_arguments load_slang(entry_points = .["vertex_main", "fragment_main"]);
 
 //// Allocator
 // A GPU allocator has the same interface as a Jai allocator

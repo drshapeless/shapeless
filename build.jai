@@ -28,6 +28,7 @@ OUTPUT_EXECUTABLE_NAME := "shapeless";
     array_add(*import_paths, "modules");
 
     compiler_add_library_search_directory("/usr/local/lib");
+    compiler_add_library_search_directory("/opt/homebrew/lib");
 
     set_build_options(options, w);
 

@@ -28,6 +28,7 @@ GPU_Context :: struct {
     current_command_buffer_index:= 0;
 
     spirv_cross_context:    spvc_context;
+    slang_global_session: *slang.IGlobalSession;
 
     // Useful for checking size and alignment.
     temp_texture_descriptor: *MTLTextureDescriptor;
@@ -51,11 +52,14 @@ Allocation :: struct {
     buffer: *MTLBuffer;
 }
 
+Texture_Descriptor :: MTLResourceID;
+
 Texture :: struct {
     mtl: *MTLTexture;
     drawable: *MTLDrawable;
     cpu: *void;
     gpu: u64;
+    descriptor: Texture_Descriptor;
 };
 
 Pipeline :: struct {
@@ -131,6 +135,9 @@ init :: (window: *SDL_Window = null) {
     spv_result := spvc_context_create(*spirv_cross_context);
     assert_spvc(spv_result);
 
+    slang_result := slang.slang_createGlobalSession(slang.SLANG_API_VERSION, *slang_global_session);
+    Basic.assert(!slang.SLANG_FAILED(slang_result));
+
     residency_set_descriptor :*MTLResidencySetDescriptor = objc_new(MTLResidencySetDescriptor);
 
     residency_set = MTLDevice.newResidencySetWithDescriptor_error_(device, residency_set_descriptor, *error);
@@ -156,6 +163,10 @@ deinit :: () {
         release(it.cmd);
         release(it.command_allocator);
         release(it.render_pass_descriptor);
+    }
+
+    if slang_global_session {
+        slang.ISlangUnknown_release(xx slang_global_session);
     }
 
     if spirv_cross_context {
@@ -224,33 +235,41 @@ create_texture :: (desc: Texture_Desc, ptr_gpu: u64) -> Texture {
     allocation := gpu_pointer_to_allocation(ptr_gpu);
 
     texture: Texture;
-    texture.mtl = MTLBuffer.newTextureWithDescriptor_offset_bytesPerRow_(allocation.buffer, metal_desc, ptr_gpu - allocation.gpu, bytes_per_pixel(to_metal_format(desc.format)) * desc.dimensions.x);
+
+    bytes_per_row := Basic.align_forward(cast(s64) (bytes_per_pixel(to_metal_format(desc.format)) * desc.dimensions.x), 16);
+    texture.mtl = MTLBuffer.newTextureWithDescriptor_offset_bytesPerRow_(allocation.buffer, metal_desc, ptr_gpu - allocation.gpu, xx bytes_per_row);
     texture.gpu = ptr_gpu;
     texture.cpu = allocation.cpu + (ptr_gpu - allocation.gpu);
+    texture.descriptor = MTLTexture.gpuResourceID(texture.mtl);
+
+    w := texture.mtl.width(texture.mtl);
+    h := texture.mtl.height(texture.mtl);
 
     return texture;
 }
 
-texture_view_descriptor :: (texture: Texture, desc: View_Desc) -> Texture_Descriptor {
-    // This is so weird, view desc does not state the type
-    type := MTLTexture.textureType(texture);
-    view := MTLTexture.newTextureViewWithPixelFormat_textureType_levels_slices_(texture, to_metal_format(desc.format), type, .{desc.base_mip, desc.mip_count}, .{desc.base_layer, desc.layer_count});
-
-    gpu_handle := MTLTexture.gpuResourceID(view);
-    descriptor: Texture_Descriptor;
-    memcpy(*descriptor, *gpu_handle, size_of(gpu_handle));
-
-    return descriptor;
+destroy_texture :: (texture: Texture) {
+    release(texture.mtl);
 }
 
-// TODO: WTF is this, I have no idea why we need to have a rw version,
-// now it just call the same thing.
-rw_texture_view_descriptor :: (texture: Texture, desc: View_Desc) -> Texture_Descriptor {
-    return texture_view_descriptor(texture, desc);
-}
+// texture_view_descriptor :: (texture: Texture, desc: View_Desc) -> Texture_Descriptor {
+//     // This is so weird, view desc does not state the type
+//     type := MTLTexture.textureType(texture);
+//     view := MTLTexture.newTextureViewWithPixelFormat_textureType_levels_slices_(texture, to_metal_format(desc.format), type, .{desc.base_mip, desc.mip_count}, .{desc.base_layer, desc.layer_count});
 
-// The purpose of this function is for debug only, I recommend using
-// spirv for everything because of consistency.
+//     gpu_handle := MTLTexture.gpuResourceID(view);
+//     descriptor: Texture_Descriptor;
+//     memcpy(*descriptor, *gpu_handle, size_of(gpu_handle));
+
+//     return descriptor;
+// }
+
+// // TODO: WTF is this, I have no idea why we need to have a rw version,
+// // now it just call the same thing.
+// rw_texture_view_descriptor :: (texture: Texture, desc: View_Desc) -> Texture_Descriptor {
+//     return texture_view_descriptor(texture, desc);
+// }
+
 load_msl :: (msl: string, entry_points: []string) -> []IR {
     using context.gpu_context;
     compile_options: *MTLCompileOptions = objc_new(MTLCompileOptions);
@@ -278,13 +297,22 @@ load_msl :: (msl: string, entry_points: []string) -> []IR {
     return irs;
 }
 
+// I do not recommend anyone to use spirv in Metal shader, not
+// everything can be translated to metal. If you have slang shader
+// code, use that instead.
 load_spirv :: (spirv: string, entry_points: []string) -> []IR {
     using context.gpu_context;
 
-    shader_string := spirv_to_metal_shader(spirv);
+    shader_string := spirv_to_metal(spirv, spirv_cross_context);
     defer spvc_context_release_allocations(spirv_cross_context);
 
     return load_msl(shader_string, entry_points);
+}
+
+load_slang :: (shader: string, entry_points: []string) -> []IR {
+    metal_code := slang_to_metal(shader, entry_points, context.gpu_context.slang_global_session);
+
+    return load_msl(metal_code, entry_points);
 }
 
 destroy_ir :: (ir: IR) {
@@ -505,7 +533,7 @@ submit :: (queue: Queue, command_buffers: ..*Command_Buffer, wait: []Semaphore_P
 }
 
 // I can't think of a way to correctly decouple present from submit.
-submit_and_present :: (queue: Queue, swapchain_texture: Texture, command_buffers: ..*Command_Buffer, wait: []Semaphore_Pair = .[], signal: []Semaphore_Pair = .[]) {
+submit_and_present :: (queue: Queue, swapchain_texture: Texture, command_buffer: *Command_Buffer, wait: []Semaphore_Pair = .[], signal: []Semaphore_Pair = .[]) {
     drawable := swapchain_texture.drawable;
 
     Basic.auto_release_temp();
@@ -515,14 +543,14 @@ submit_and_present :: (queue: Queue, swapchain_texture: Texture, command_buffers
 
     MTL4CommandQueue.waitForDrawable_(queue.mtl, drawable);
 
-    buffers := Basic.NewArray(command_buffers.count, *MTL4CommandBuffer,, Basic.temp);
-    for cb: command_buffers {
-        buffers[it_index] = cb.cmd;
-        maybe_end_compute_encoder(cb);
-        MTL4CommandBuffer.endCommandBuffer(cb.cmd);
-    }
+    // buffers := Basic.NewArray(command_buffers.count, *MTL4CommandBuffer,, Basic.temp);
+    // for cb: command_buffers {
+    //     buffers[it_index] = cb.cmd;
+        maybe_end_compute_encoder(command_buffer);
+        MTL4CommandBuffer.endCommandBuffer(command_buffer.cmd);
+    // }
 
-    MTL4CommandQueue.commit_count_(queue.mtl, buffers.data, xx buffers.count);
+    MTL4CommandQueue.commit_count_(queue.mtl, *command_buffer.cmd, 1);
 
     for signal {
         MTL4CommandQueue.signalEvent_value_(queue.mtl, xx it.semaphore.shared_event, it.value);
@@ -549,7 +577,11 @@ wait_semaphore :: (sema: Semaphore, value: u64, timeout: u64 = 0) {
 }
 
 destroy_semaphore :: (sema: Semaphore) {
-    release(sema.event);
+    release(sema.shared_event);
+}
+
+signal_semaphore :: (sema: Semaphore, value: u64) {
+    MTLSharedEvent.setSignaledValue_(sema.shared_event, value);
 }
 
 memcpy :: (cb: *Command_Buffer, dest: u64, src: u64, size: s64) {
@@ -599,7 +631,14 @@ copy_from_texture :: (cb: *Command_Buffer, dest: u64, src: Texture) {
 // TODO: Make it supports different sizes.
 copy_texture :: (cb: *Command_Buffer, dest: Texture, src: Texture) {
     maybe_create_compute_encoder(cb);
-    MTL4ComputeCommandEncoder.copyFromTexture_toTexture_(cb.compute_encoder, src.mtl, dest.mtl);
+    src_size := metal_texture_size(src.mtl);
+    dest_size := metal_texture_size(dest.mtl);
+
+    if src_size.width != dest_size.width || src_size.height != dest_size.height || src_size.depth != dest_size.depth {
+        MTL4ComputeCommandEncoder.copyFromTexture_sourceSlice_sourceLevel_sourceOrigin_sourceSize_toTexture_destinationSlice_destinationLevel_destinationOrigin_(cb.compute_encoder, src.mtl, 0, 0, .{0, 0, 0}, src_size, dest.mtl, 0, 0, .{0, 0, 0});
+    } else {
+        MTL4ComputeCommandEncoder.copyFromTexture_toTexture_(cb.compute_encoder, src.mtl, dest.mtl);
+    }
 }
 
 set_pipeline :: (cb: *Command_Buffer, pipeline: Pipeline) {
@@ -667,6 +706,7 @@ acquire_swapchain_texture :: () -> bool, Texture {
     texture: Texture;
     texture.mtl = drawable.texture(drawable);
     texture.drawable = xx drawable;
+    texture.descriptor = MTLTexture.gpuResourceID(texture.mtl);
 
     return true, texture;
 }
@@ -682,6 +722,12 @@ barrier :: (cb: *Command_Buffer, before: Stage, after: Stage, hazards: Hazard = 
     }
 
     MTL4CommandEncoder.barrierAfterEncoderStages_beforeEncoderStages_visibilityOptions_(encoder, to_metal_stages(after), to_metal_stages(before), .Device);
+}
+
+resize_callback :: (width: float64, height: float64) {
+    using context.gpu_context;
+
+    CAMetalLayer.setDrawableSize_(layer, .{width, height});
 }
 
 #scope_file
@@ -943,33 +989,6 @@ assert_metal :: (error: *NSError) #expand {
     `Basic.assert(error == null, "%", to_string(NSError.localizedDescription(error)));
 }
 
-// The return string's memory is managed by spvc context, no need to free.
-spirv_to_metal_shader :: (spirv: string) -> string {
-    using context.gpu_context;
-
-    ir: spvc_parsed_ir;
-    // In spirv, a word is 32bits, and the count is word count
-    result := spvc_context_parse_spirv(spirv_cross_context, xx spirv.data, xx (spirv.count / 4), *ir);
-    assert_spvc(result);
-
-    my_compiler: spvc_compiler;
-    result = spvc_context_create_compiler(spirv_cross_context, .MSL, ir, .TAKE_OWNERSHIP, *my_compiler);
-    assert_spvc(result);
-
-    my_options: spvc_compiler_options;
-    result = spvc_compiler_create_compiler_options(my_compiler, *my_options);
-    assert_spvc(result);
-    result = spvc_compiler_options_set_uint(my_options, .MSL_VERSION, SPVC_MAKE_MSL_VERSION(4, 0, 0));
-    assert_spvc(result);
-
-    spvc_compiler_install_compiler_options(my_compiler, my_options);
-
-    msl_source: *u8;
-    result = spvc_compiler_compile(my_compiler, *msl_source);
-    assert_spvc(result);
-
-    return to_string(msl_source);
-}
 
 aquire_next_command_buffer :: () -> *Command_Buffer {
     using context.gpu_context;
@@ -1166,6 +1185,14 @@ to_metal_stages :: (stage: Stage) -> MTLStages {
     return s;
 }
 
+metal_texture_size :: (metal_texture: *MTLTexture) -> MTLSize {
+    return .{
+        width = MTLTexture.width(metal_texture),
+        height = MTLTexture.height(metal_texture),
+        depth = MTLTexture.depth(metal_texture),
+    };
+}
+
 #import "Metal";
 Basic :: #import "Basic";
 #import "SDL3";
@@ -1177,3 +1204,5 @@ String :: #import "String";
 #import "Hash_Table";
 Vulkan :: #import "Vulkan";
 #load "format.jai";
+slang :: #import "slang";
+#import,file "shader_conversion.jai";

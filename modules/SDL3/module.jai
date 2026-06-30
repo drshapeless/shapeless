@@ -4,6 +4,7 @@
     #load "linux/linux.jai";
 } else #if OS == .MACOS {
     #load "macos/macos.jai";
+    // libsdl3 :: #library,system "libSDL3";
     libsdl3 :: #library "macos/libsdl3";
     // The following mess is the cost of linking SDL staticly
     AVFoundation           :: #library,system,link_always "AVFoundation";
@@ -26,6 +27,13 @@ SDL_GetWindowSize :: (window: *SDL_Window) -> bool, width:s32, height:s32 {
     width: s32;
     height: s32;
     ok := SDL_GetWindowSize(window, *width, *height);
+    return ok, width, height;
+}
+
+SDL_GetWindowSizeInPixels :: (window: *SDL_Window) -> bool, width:s32, height:s32 {
+    width: s32;
+    height: s32;
+    ok := SDL_GetWindowSizeInPixels(window, *width, *height);
     return ok, width, height;
 }
 
