@@ -70,7 +70,12 @@ Texture :: struct {
     format: VkFormat;
     extent: VkExtent3D;
     gpu: u64;
+    image_index: u32;
 }
+
+// We should query the real descriptor size for different type of
+// things. But 64bits should be enough for an image.
+Texture_Descriptor :: u64;
 
 Pipeline :: struct {
     // At most we can have two shaders in a pipeline
@@ -350,13 +355,10 @@ load_spirv :: (spirv: string, entry_points: []string) -> []IR {
     return irs;
 }
 
-load_compute_ir :: inline (spirv: string, entry_point: string = "compute_main") -> IR {
-    Basic.auto_release_temp();
-    irs := load_spirv(spirv, .[entry_point],, Basic.temp);
-    return irs[0];
+load_slang :: (shader: string, entry_points: [] string) -> []IR {
+    spirv_code := slang_to_spirv(shader, entry_points);
+    return load_spirv(spirv_code, entry_points);
 }
-
-load_graphics_ir :: #bake_arguments load_spirv(entry_points = .["vertex_main", "fragment_main"]);
 
 create_compute_pipeline :: (ir: IR) -> Pipeline {
     using context.gpu_context;
@@ -463,15 +465,7 @@ start_command_recording :: () -> *Command_Buffer {
         frame := *frames[frame_index];
         wait_semaphore(frame.timeline, 1, 100000);
 
-        // Set it back to zero.
-        // TODO: I realize the API does not have a way to signal a semaphore
-        // from CPU, why is that?
-        signal_info := VkSemaphoreSignalInfo.{
-            semaphore = frame.timeline.vk,
-            value = 0,
-        };
-        result = check_vk(vkSignalSemaphore(device, *signal_info));
-        assert_vk_result(result);
+        signal_semaphore(frame.timeline, 0);
     }
 
     result = check_vk(vkResetCommandPool(device, cb.pool, 0));
@@ -493,11 +487,11 @@ start_command_recording :: () -> *Command_Buffer {
     return cb;
 }
 
-submit :: (queue: Queue, command_buffers: []*Command_Buffer, wait: []Semaphore_Pair = .[], signal: []Semaphore_Pair = .[]) {
+submit :: (queue: Queue, command_buffers: ..*Command_Buffer, wait: []Semaphore_Pair = .[], signal: []Semaphore_Pair = .[]) {
     Basic.auto_release_temp();
     Basic.push_allocator(Basic.temp);
 
-    command_buffer_submit_infos := Basic.NewArray(command_buffers.count, VkCommandBufferSubmitInfo);
+    command_buffer_submit_infos := Basic.NewArray(command_buffers.count, VkCommandBufferSubmitInfo,, Basic.temp);
 
     for cb: command_buffers {
         vkEndCommandBuffer(cb.vk);
@@ -539,7 +533,7 @@ submit :: (queue: Queue, command_buffers: []*Command_Buffer, wait: []Semaphore_P
     command_buffer_index = (command_buffer_index + 1) % xx command_buffers.count;
 }
 
-submit_and_present :: (queue: Queue, command_buffers: []*Command_Buffer, wait: []Semaphore_Pair = .[], signal: []Semaphore_Pair = .[]) {
+submit_and_present :: (queue: Queue, swapchain_texture: Texture, command_buffers: ..*Command_Buffer, wait: []Semaphore_Pair = .[], signal: []Semaphore_Pair = .[]) {
 
 }
 
@@ -620,6 +614,32 @@ copy_from_texture :: (cb: *Command_Buffer, dst: u64, src: Texture) {
     vkCmdCopyImageToBuffer2(cb.vk, *info);
 }
 
+// It only supports color image
+copy_texture :: (cb: *Command_Buffer, dst: Texture, src: Texture) {
+    region := VkImageBlit2.{
+        srcSubresource = .{
+            aspectMask = .COLOR,
+            layerCount = 1
+        },
+        dstSubresource = .{
+            aspectMask = .COLOR,
+            layerCount = 1
+        },
+    };
+    region.srcOffsets[1] = src.extent;
+    region.dstOffsets[1] = dst.extent;
+    info := VkBlitImageInfo2.{
+        srcImage = src.image,
+        srcImageLayout = .GENERAL,
+        dstImage = dst.image,
+        dstImageLayout = .GENERAL,
+        regionCount = 1,
+        pRegions = *region,
+        filter = .LINEAR,
+    };
+    vkCmdBlitImage2(cb.vk, *info);
+}
+
 create_semaphore :: (init_value: u64) -> Semaphore {
     using context.gpu_context;
 
@@ -647,6 +667,16 @@ wait_semaphore :: (semaphore: Semaphore, value: u64, timeout: u64 = 1000000) {
     };
 
     result := check_vk(vkWaitSemaphores(device, *wait_info, timeout));
+    assert_vk_result(result);
+}
+
+signal_semaphore :: (semaphore: Semaphore, value: u64) {
+    using context.gpu_context;
+    signal_info := VkSemaphoreSignalInfo.{
+        semaphore = semaphore.vk,
+        value = value,
+    };
+    result := check_vk(vkSignalSemaphore(device, *signal_info));
     assert_vk_result(result);
 }
 
@@ -713,16 +743,42 @@ dispatch :: (cb: Command_Buffer, data_gpu: u64, count: u32) {
     vkCmdDispatch(cb, count, 1, 1);
 }
 
-aquire_next_texture :: () -> success:bool, Texture {
+acquire_swapchain_texture :: () -> success:bool, Texture {
     using context.gpu_context;
+
+    acquire_info := VkAcquireNextImageInfoKHR.{
+        swapchain = swapchain.vk,
+        timeout = 10000,
+        semaphore = frames[frame_index].acquire_semaphore,
+        fence = null,
+        deviceMask = 1, // I still do not understand what deviceMask is
+    };
+
+    result: VkResult;
+    image_index: u32;
+    result = vkAcquireNextImage2KHR(device, *acquire_info, *image_index);
+    if result != .SUCCESS || result != .SUBOPTIMAL_KHR {
+        return false, .{};
+    }
+
+    current_image := swapchain.images[image_index];
+    texture: Texture;
+    texture.image = current_image;
+
+    return true, texture;
 }
 
 begin_render_pass :: (cb: *Command_Buffer, desc: Render_Pass_Desc) {
+    Basic.push_allocator(Basic.temp);
+    Basic.auto_release_temp();
+    rendering_info := to_vulkan_rendering_info(desc);
+    vkCmdBeginRendering(cb.vk, *rendering_info);
 
+    // Set viewport and scissor?
 }
 
 end_render_pass :: (cb: *Command_Buffer) {
-
+    vkCmdEndRendering(cb.vk);
 }
 
 #scope_file
@@ -1336,6 +1392,81 @@ find_depth_format :: () -> VkFormat {
     return format;
 }
 
+to_vulkan_load_op :: (op: Load_OP) -> VkAttachmentLoadOp {
+    if #complete op == {
+    case .DONT_CARE;
+        return .DONT_CARE;
+    case .LOAD;
+        return .LOAD;
+    case .CLEAR;
+        return .CLEAR;
+    }
+}
+
+to_vulkan_store_op :: (op: Store_OP) -> VkAttachmentStoreOp {
+    if #complete op == {
+    case .STORE;
+        return .STORE;
+    case .DONT_CARE;
+        return .DONT_CARE;
+    }
+}
+
+to_vulkan_clear_color :: (color: Color) -> VkClearValue {
+    clear_value: VkClearValue;
+
+    memcpy(*clear_value.color.float32_, *color, size_of(float32) * 4);
+
+    return clear_value;
+}
+
+// Recommend to use temp allocator
+to_vulkan_rendering_info :: (desc: Render_Pass_Desc) -> VkRenderingInfo {
+    color_attachments: [..] VkRenderingAttachmentInfo;
+    for desc.color_targets {
+        color_attachment := VkRenderingAttachmentInfo.{
+            imageView = it.texture.view,
+            imageLayout = .GENERAL,
+            loadOp = to_vulkan_load_op(it.load_op),
+            storeOp = to_vulkan_store_op(it.store_op),
+            clearValue = to_vulkan_clear_color(it.clear_color),
+        };
+        Basic.array_add(*color_attachments, color_attachment);
+    }
+
+    depth_attachment := Basic.New(VkRenderingAttachmentInfo);
+    depth_attachment.* = .{
+        imageView = desc.depth_target.texture.view,
+        imageLayout = .GENERAL,
+        loadOp = to_vulkan_load_op(desc.depth_target.load_op),
+        storeOp = to_vulkan_store_op(desc.depth_target.store_op),
+        clearValue = .{
+            depthStencil = .{depth = desc.depth_target.clear_value.depth}
+        },
+    };
+
+    stencil_attachment := Basic.New(VkRenderingAttachmentInfo);
+    stencil_attachment.* = .{
+        imageView = desc.stencil_target.texture.view,
+        imageLayout = .GENERAL,
+        loadOp = to_vulkan_load_op(desc.stencil_target.load_op),
+        storeOp = to_vulkan_store_op(desc.stencil_target.store_op),
+        clearValue = .{
+            depthStencil = .{stencil = desc.stencil_target.clear_value.stencil}
+        },
+    };
+
+    rendering_info := VkRenderingInfo.{
+        renderArea = .{offset = .{0, 0}, extent = swapchain.extent},
+        layerCount = 1,
+        colorAttachmentCount = xx color_attachments.count,
+        pColorAttachments = color_attachments.data,
+        pDepthAttachment = depth_attachment,
+        pStencilAttachment = stencil_attachment,
+    };
+
+    return rendering_info;
+}
 
 #import "Vulkan";
 #import "SDL3";

@@ -114,6 +114,96 @@ slang_to_metal :: (shader: string, entry_points: [] string, global_session: *sla
     return metal_code_raw;
 }
 
+slang_to_spirv :: (shader: string, entry_points: [] string) -> string {
+    options: [..] slang.CompilerOptionEntry;
+    options.allocator = Basic.temp;
+    Basic.array_add(*options, .{
+        name = .Language,
+        value = .{
+            kind = .String,
+            stringValue0 = "slang",
+        },
+    });
+    Basic.array_add(*options, .{
+        name = .GLSLForceScalarLayout,
+        value = .{
+            kind = .Int,
+            intValue0 = 1,
+        },
+    });
+
+    target_desc := slang.TargetDesc.{
+        format = .METAL,
+        profile = slang.IGlobalSession_findProfile(global_session, "spirv_1_6"),
+        forceGLSLScalarBufferLayout = true,
+        flags = slang.SLANG_TARGET_FLAG.GENERATE_SPIRV_DIRECTLY,
+        compilerOptionEntries = options.data,
+        compilerOptionEntryCount = xx options.count,
+    };
+
+    source_dir := String.path_strip_filename(shader);
+    search_paths := Basic.temp_c_string(source_dir);
+    session_desc := slang.SessionDesc.{
+        targets                  = *target_desc,
+        targetCount              = 1,
+        defaultMatrixLayoutMode  = .ROW_MAJOR,
+        searchPaths              = *search_paths,
+        searchPathCount          = 1,
+        compilerOptionEntries    = options.data,
+        compilerOptionEntryCount = xx options.count,
+        fileSystem               = null,
+    };
+
+    session: *slang.ISession;
+    slang.IGlobalSession_createSession(global_session, *session_desc, *session);
+    Basic.assert(session != null);
+    defer slang.ISlangUnknown_release(session);
+
+    diagnostic_blob: *slang.ISlangBlob;
+
+    slang_module := slang.ISession_loadModuleFromSourceString(session, "my_shader", null, Basic.temp_c_string(shader), *diagnostic_blob);
+    if diagnostic_blob log_diagnostic_blob(diagnostic_blob);
+    Basic.assert(slang_module != null);
+
+    slang_entry_points: [..] *slang.IEntryPoint;
+    slang_entry_points.allocator = Basic.temp;
+    for e: entry_points {
+        main := Basic.array_add(*slang_entry_points);
+        slang.IModule_findEntryPointByName(slang_module, Basic.temp_c_string(e), main);
+    }
+
+    components: [..] *slang.IComponentType;
+    components.allocator = Basic.temp;
+    Basic.array_add(*components, slang_module);
+    for slang_entry_points {
+        Basic.array_add(*components, it);
+    }
+
+    composed_program: *slang.IComponentType;
+    slang.ISession_createCompositeComponentType(session, components.data, components.count, *composed_program, *diagnostic_blob);
+    if diagnostic_blob log_diagnostic_blob(diagnostic_blob);
+    Basic.assert(composed_program != null);
+    defer slang.ISlangUnknown_release(composed_program);
+
+    linked_program: *slang.IComponentType;
+    slang.IComponentType_link(composed_program, *linked_program);
+    if diagnostic_blob then log_diagnostic_blob(diagnostic_blob);
+    Basic.assert(linked_program != null);
+
+    spirv_code: *slang.IBlob;
+
+    // Since there may be multiple entry points, we use getTargetCode instead.
+    slang.IComponentType_getTargetCode(linked_program, 0, *spirv_code, *diagnostic_blob);
+    if diagnostic_blob then log_diagnostic_blob(diagnostic_blob);
+
+    spirv_code_raw := Basic.alloc_string(xx slang.ISlangBlob_getBufferSize(spirv_code));
+
+    memcpy(spirv_code_raw.data, slang.ISlangBlob_getBufferPointer(spirv_code), spirv_code_raw.count);
+    slang.ISlangUnknown_release(spirv_code);
+
+    return spirv_code_raw;
+}
+
 #scope_file
 log_diagnostic_blob :: (blob: *slang.IBlob) {
     diagnostic_string := string.{
