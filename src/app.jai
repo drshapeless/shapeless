@@ -139,6 +139,9 @@ app_quit :: (appstate: *void, result: SDL_AppResult) {
     SDL_DestroyWindow(window);
     SDL_Quit();
     free(appstate);
+
+    // This line is not needed if SDL_EnterMain works
+    if result == .SUCCESS then exit(0); else exit(1);
 }
 
 resize_callback :: (using state: *App_State) {

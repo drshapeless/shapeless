@@ -14,14 +14,12 @@ main :: () {
             result = app_event(appstate, *event);
             if result != .CONTINUE {
                 app_quit(appstate, result);
-                exit(xx result);
             }
         }
 
         result = app_iter(appstate);
         if result != .CONTINUE {
             app_quit(appstate, result);
-            exit(xx result);
         }
 
     }
