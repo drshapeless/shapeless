@@ -1,3 +1,4 @@
+#if OS == .MACOS {
 // The return string's memory is managed by spvc context, no need to free.
 spirv_to_metal :: (spirv: string, spirv_cross_context: spvc_context) -> string {
     ir: spvc_parsed_ir;
@@ -22,6 +23,7 @@ spirv_to_metal :: (spirv: string, spirv_cross_context: spvc_context) -> string {
     assert_spvc(result);
 
     return to_string(msl_source);
+}
 }
 
 slang_to_metal :: (shader: string, entry_points: [] string, global_session: *slang.IGlobalSession) -> string {
@@ -215,7 +217,10 @@ log_diagnostic_blob :: (blob: *slang.IBlob) {
     slang.ISlangUnknown_release(blob);
 }
 
-#import "spirv_cross";
+#if OS == .MACOS {
+    #import "spirv_cross";
+}
+
 slang :: #import "slang";
 Basic :: #import "Basic";
 String :: #import "String";

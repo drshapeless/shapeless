@@ -49,8 +49,6 @@ GPU_Context :: struct {
     // DEFAULT_COMMAND_BUFFER_COUNT
     command_buffers: []Command_Buffer;
     #overlay (frame_index) command_buffer_index: s64;
-
-    internal_arena: Arena;
 }
 #add_context gpu_context: GPU_Context;
 
@@ -64,13 +62,14 @@ Allocation :: struct {
     buffer: VkBuffer; // Keeping a mapped buffer here makes copying much easier
 }
 
+// TODO: the Texture struct has too many field, some of them should be removed.
 Texture :: struct {
     image: VkImage;
     view:  VkImageView;
     format: VkFormat;
     extent: VkExtent3D;
     gpu: u64;
-    image_index: u32;
+    image_index: u32; // This is for swapchain image exclusively
 }
 
 // We should query the real descriptor size for different type of
@@ -142,8 +141,6 @@ init :: (window: *SDL_Window = null) {
 
     memory_indices = get_memory_indices();
 
-    init(*internal_arena);
-
     vkGetDeviceQueue(device, queue_family_indices.graphics, 0, *main_queue);
 
     command_pool_create_info := VkCommandPoolCreateInfo.{
@@ -193,8 +190,6 @@ deinit :: () {
     for command_buffers {
         if it.pool vkDestroyCommandPool(device, it.pool, vka);
     }
-
-    fini(*internal_arena);
 
     if sdl_window {
         vkDestroySwapchainKHR(device, swapchain.vk, vka);
@@ -533,8 +528,91 @@ submit :: (queue: Queue, command_buffers: ..*Command_Buffer, wait: []Semaphore_P
     command_buffer_index = (command_buffer_index + 1) % xx command_buffers.count;
 }
 
+// Very similar to submit() but consist of swapchain related semaphores
 submit_and_present :: (queue: Queue, swapchain_texture: Texture, command_buffers: ..*Command_Buffer, wait: []Semaphore_Pair = .[], signal: []Semaphore_Pair = .[]) {
+    Basic.auto_release_temp();
+    Basic.push_allocator(Basic.temp);
 
+    frame := frames[frame_index];
+
+    command_buffer_submit_infos := Basic.NewArray(command_buffers.count, VkCommandBufferSubmitInfo,, Basic.temp);
+
+    for cb: command_buffers {
+        vkEndCommandBuffer(cb.vk);
+        command_buffer_submit_infos[it_index].commandBuffer = cb.vk;
+    }
+
+
+    submit_info := VkSubmitInfo2.{
+        commandBufferInfoCount = xx command_buffers.count,
+        pCommandBufferInfos = command_buffer_submit_infos.data,
+    };
+
+    wait_infos := [..] VkSemaphoreSubmitInfo;
+    wait_infos.allocator = Basic.temp;
+    for wait {
+        sema_info := VkSemaphoreSubmitInfo.{
+            semaphore = it.semaphore,
+            value = it.value,
+            stageMask = .ALL_COMMANDS,
+        };
+        Basic.array_add(*wait_infos, sema_info);
+    }
+
+    wait_acquire_info := VkSemaphoreSubmitInfo.{
+        semaphore = frame.acquire_semaphore,
+        value = 1,
+        stageMask = .COLOR_ATTACHMENT_OUTPUT, // Not sure about this
+    };
+    Basic.array_add(*wait_infos, wait_acquire_info);
+
+    submit_info.waitSemaphoreInfoCount = xx wait_infos.count;
+    submit_info.pWaitSemaphoreInfos = wait_infos.data;
+
+    signal_infos: [..] VkSemaphoreSubmitInfo;
+    signal_infos.allocator = Basic.temp;
+    for signal {
+        sema_info := VkSemaphoreSubmitInfo.{
+            semaphore = it.semaphore,
+            value = it.value,
+        };
+        Basic.array_add(*signal_infos, sema_info);
+    }
+
+    signal_present_info := VkSemaphoreSubmitInfo.{
+        semaphore = frame.present_semaphore,
+        value = 1,
+        stageMask = .ALL_GRAPHICS,
+    };
+
+    submit_info.signalSemaphoreInfoCount = xx signal_infos.count;
+    submit_info.pSignalSemaphoreInfos = signal_infos.data;
+
+    result := check_vk(vkQueueSubmit2(queue.vk, 1, *submit_info, null));
+    assert_vk_result(result);
+
+    present_info := VkPresentInfoKHR.{
+        waitSemaphoreCount = 1,
+        pWaitSemaphores = *frame.present_semaphore,
+        swapchainCount = 1,
+        pSwapchains = *swapchain.vk,
+        pImageIndices = *swapchain_texture.image_index,
+    };
+
+    result := vkQueuePresentKHR(queue.vk, *present_info);
+    if result == {
+    case .ERROR_OUT_OF_DATE_KHR;
+        ;
+    case .SUBOPTIMAL_KHR;
+        ;
+    case .SUCCESS;
+        ;
+    case;
+        Basic.log_error("present failed");
+        return;
+    }
+
+    frame_index = (frame_index + 1) % xx swapchain.images.count;
 }
 
 memcpy :: (cb: *Command_Buffer, dst: u64, src: u64, size: u64) {
@@ -739,7 +817,15 @@ dispatch :: (cb: Command_Buffer, data_gpu: u64, count: u32) {
     using context.gpu_context;
 
     // We no longer use push constants.
-
+    range := VkHostAddressRangeConstEXT.{
+        address = *data_gpu,
+        size = size_of(u64),
+    };
+    push_data_info := VkPushDataInfoEXT.{
+        offset = 0,
+        data = range,
+    };
+    vkCmdPushDataEXT(cb, *push_data_info);
     vkCmdDispatch(cb, count, 1, 1);
 }
 
@@ -764,6 +850,7 @@ acquire_swapchain_texture :: () -> success:bool, Texture {
     current_image := swapchain.images[image_index];
     texture: Texture;
     texture.image = current_image;
+    texture.image_index = image_index;
 
     return true, texture;
 }
@@ -779,6 +866,29 @@ begin_render_pass :: (cb: *Command_Buffer, desc: Render_Pass_Desc) {
 
 end_render_pass :: (cb: *Command_Buffer) {
     vkCmdEndRendering(cb.vk);
+}
+
+resize_callback :: (window_width: s32, window_height: s32) {
+    using context.gpu_context;
+    // Recreate swapchain here
+
+    vkDestroySwapchainKHR(device, swapchain.vk, vka);
+    Basic.array_free(swapchain.images);
+
+    support := swapchain.support;
+
+    swapchain_extent: VkExtent2D;
+    swapchain_extent.width = Basic.clamp(window_width.(u32),  support.capabilities.minImageExtent.width, support.capabilities.maxImageExtent.width);
+    swapchain_extent.height = Basic.clamp(window_height.(u32), support.capabilities.minImageExtent.height, support.capabilities.maxImageExtent.height);
+
+    swapchain.create_info.imageExtent = swapchain_extent;
+
+    result: VkResult;
+    result = check_vk(vkCreateSwapchainKHR(device, *swapchain.create_info, vka, *swapchain.vk));
+    assert_vk_result(result);
+
+    result, swapchain.images = vkGetSwapchainImagesKHR(device, swapchain.vk);
+    assert_vk_result(result);
 }
 
 #scope_file
@@ -798,8 +908,9 @@ Swapchain :: struct {
     // We are not rendering directly into swapchain images, so we can
     // omit the image view creation of swapchain images.
 
-    draw_texture: Texture;
-    depth_texture: Texture;
+    create_info: VkSwapchainCreateInfoKHR;
+
+    support: Swapchain_Support;
 }
 
 Frame :: struct {
@@ -1309,7 +1420,7 @@ init_swapchain :: () {
 
     window_width: s32;
     window_height: s32;
-    ok := SDL_GetWindowSize(sdl_window, *window_width, *window_height);
+    ok := SDL_GetWindowSizeInPixels(sdl_window, *window_width, *window_height);
     if !ok return;
 
     swapchain_extent := support.capabilities.currentExtent;
@@ -1339,39 +1450,13 @@ init_swapchain :: () {
     result: VkResult;
     swapchain.format = format.format;
     swapchain.extent = swapchain_extent;
+    swapchain.support = support;
+    swapchain.create_info = swapchain_create_info;
     result = check_vk(vkCreateSwapchainKHR(device, *swapchain_create_info, vka, *swapchain.vk));
     assert_vk_result(result);
 
     result, swapchain.images = vkGetSwapchainImagesKHR(device, swapchain.vk);
     assert_vk_result(result);
-
-
-    draw_texture_desc := Texture_Desc.{
-        dimensions = .{swapchain.extent.width, swapchain.extent.height, 1},
-        format = swapchain.format,
-        usage = .COLOR_ATTACHMENT | .TRANSFER_SRC,
-    };
-
-    // The alignment for a draw image is huge
-    draw_size_align := texture_size_align(draw_texture_desc);
-
-    draw_texture_ptr := get(*internal_arena, xx draw_size_align.size, xx draw_size_align.align);
-
-    draw_texture_ptr_gpu := host_to_device_pointer(draw_texture_ptr);
-
-    swapchain.draw_texture = create_texture(draw_texture_desc, draw_texture_ptr_gpu);
-
-    depth_texture_desc := Texture_Desc.{
-        dimensions = .{swapchain.extent.width, swapchain.extent.height, 1},
-        format = find_depth_format(),
-        usage = .DEPTH_STENCIL_ATTACHMENT,
-    };
-    depth_size_align := texture_size_align(depth_texture_desc);
-    depth_texture_ptr := get(*internal_arena, xx depth_size_align.size, xx depth_size_align.align);
-    depth_texture_ptr_gpu := host_to_device_pointer(depth_texture_ptr);
-    swapchain.depth_texture = create_texture(depth_texture_desc, depth_texture_ptr_gpu);
-
-
 }
 
 find_depth_format :: () -> VkFormat {
