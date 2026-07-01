@@ -450,6 +450,7 @@ gpu_pointer_to_allocation :: (ptr: u64) -> Allocation {
     #load "vulkan.jai";
 }
 #load "arena.jai";
+#load "shader_conversion.jai";
 
 #scope_file
 Basic :: #import "Basic";

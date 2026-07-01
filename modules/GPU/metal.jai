@@ -38,9 +38,18 @@ GPU_Context :: struct {
     argument_table_descriptor: *MTL4ArgumentTableDescriptor;
     argument_table:            *MTL4ArgumentTable;
 
-    residency_set: *MTLResidencySet;
+    // The use this ring buffer as the backing buffer of passing a
+    // pointer to shader. Before Metal 4, the compute encoder used to
+    // have setBytes function, but in Metal 4, everything is managed
+    // by user, so we have to create a backing buffer for such
+    // usage. The backing buffer is set to be 4kb, which is very
+    // overkill for such usage, the real used size should only be 8
+    // bytes times the number of command buffers.
+    argument_ring_buffer: Allocation;
+    current_argument_ring_buffer_position: u64;
+    DEFAULT_ARGUMENT_RING_BUFFER_SIZE :: 4 * 1024;
 
-    internal_arena: Arena;
+    residency_set: *MTLResidencySet;
 }
 
 #add_context gpu_context: GPU_Context;
@@ -143,7 +152,7 @@ init :: (window: *SDL_Window = null) {
     residency_set = MTLDevice.newResidencySetWithDescriptor_error_(device, residency_set_descriptor, *error);
     assert_metal(error);
 
-    init(*internal_arena);
+    argument_ring_buffer = metal_allocate(DEFAULT_ARGUMENT_RING_BUFFER_SIZE);
 
     if window {
         sdl_window = window;
@@ -172,6 +181,7 @@ deinit :: () {
     if spirv_cross_context {
         spvc_context_destroy(spirv_cross_context);
     }
+    metal_deallocate(argument_ring_buffer);
     SDL_Metal_DestroyView(view);
     release(compiler);
     release(temp_texture_descriptor);
@@ -186,11 +196,6 @@ metal_allocator_proc :: (mode: Allocator_Mode, requested_size: s64, old_size: s6
     if mode == {
     case .ALLOCATE;
         allocation := metal_allocate(xx requested_size);
-        table_add(*cpu_pointer_table, allocation.cpu, allocation);
-        table_add(*gpu_pointer_table, allocation.gpu, allocation);
-
-        MTLResidencySet.addAllocation_(residency_set, xx allocation.buffer);
-        MTLResidencySet.commit(residency_set);
         return allocation.cpu;
     case .FREE;
         found, allocation := table_find(*cpu_pointer_table, old_memory);
@@ -212,11 +217,20 @@ metal_allocate :: (bytes: u64) -> Allocation {
         buffer = buffer,
     };
 
+    table_add(*cpu_pointer_table, allocation.cpu, allocation);
+    table_add(*gpu_pointer_table, allocation.gpu, allocation);
+
+    MTLResidencySet.addAllocation_(residency_set, xx allocation.buffer);
+    MTLResidencySet.commit(residency_set);
+
     return allocation;
 }
 
 metal_deallocate :: (allocation: Allocation) {
+    using context.gpu_context;
     release(allocation.buffer);
+    table_remove(*cpu_pointer_table, allocation.cpu);
+    table_remove(*gpu_pointer_table, allocation.gpu);
 }
 
 texture_size_align :: (desc: Texture_Desc) -> Texture_Size_Align {
@@ -657,7 +671,11 @@ set_pipeline :: (cb: *Command_Buffer, pipeline: Pipeline) {
 dispatch :: (cb: *Command_Buffer, data_gpu: u64, groups: u32x3, threads: u32x3) {
     using context.gpu_context;
 
-    MTL4ArgumentTable.setAddress_atIndex_(argument_table, data_gpu, 0);
+    ptr_cpu, ptr_gpu := get_next_pointer_from_argument_ring_buffer();
+
+    ptr_cpu.(*u64).* = data_gpu;
+
+    MTL4ArgumentTable.setAddress_atIndex_(argument_table, ptr_gpu, 0);
 
     maybe_create_compute_encoder(cb);
 
@@ -1193,6 +1211,22 @@ metal_texture_size :: (metal_texture: *MTLTexture) -> MTLSize {
     };
 }
 
+get_next_pointer_from_argument_ring_buffer :: () -> cpu:*void, gpu:u64 {
+    using context.gpu_context;
+
+    cpu: *void = argument_ring_buffer.cpu;
+    gpu: u64 = argument_ring_buffer.gpu;
+    if current_argument_ring_buffer_position < argument_ring_buffer.size {
+        cpu += current_argument_ring_buffer_position;
+        gpu += current_argument_ring_buffer_position;
+        current_argument_ring_buffer_position += 8;
+    } else {
+        current_argument_ring_buffer_position = 0;
+    }
+
+    return cpu, gpu;
+}
+
 #import "Metal";
 Basic :: #import "Basic";
 #import "SDL3";
@@ -1205,4 +1239,3 @@ String :: #import "String";
 Vulkan :: #import "Vulkan";
 #load "format.jai";
 slang :: #import "slang";
-#import,file "shader_conversion.jai";

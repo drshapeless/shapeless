@@ -2,7 +2,9 @@ struct Params {
     float4 clear_color;
     DescriptorHandle<RWTexture2D<float4>> texture;
 };
-ParameterBlock<Params> p;
+
+[[vk::push_constant]]
+Params *p;
 
 [shader("compute")]
 [numthreads(256, 1, 1)]
