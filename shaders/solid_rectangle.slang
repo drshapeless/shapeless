@@ -1,5 +1,7 @@
 struct Params {
-    float4 clear_color;
+    float4 color;
+    uint2  origin;
+    uint2  size;
     DescriptorHandle<RWTexture2D<float4>> texture;
 };
 
@@ -8,13 +10,16 @@ Params *p;
 
 [shader("compute")]
 [numthreads(8, 8, 1)]
-void compute_main(uint2 thread_id : SV_DispatchThreadID) {
-    int2 coords = thread_id;
+void compute_main(uint2 tid : SV_DispatchThreadID) {
+    if (tid.x >= p.size.x || tid.y >= p.size.y) {
+        return;
+    }
 
+    uint2 coords = p.origin + tid;
     uint2 dimensions;
     p.texture.GetDimensions(dimensions.x, dimensions.y);
 
     if (coords.x < dimensions.x && coords.y < dimensions.y) {
-        p.texture[coords] = p.clear_color;
+        p.texture[coords] = p.color;
     }
 }

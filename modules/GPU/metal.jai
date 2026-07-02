@@ -13,7 +13,7 @@
 // queue should always be created after any resource allocations. In
 // frame allocations should use arena instead.
 
-DEFAULT_COMMAND_BUFFER_COUNT :: 5;
+DEFAULT_COMMAND_BUFFER_COUNT :: 3;
 
 Format :: Vulkan.VkFormat;
 
@@ -25,7 +25,7 @@ GPU_Context :: struct {
     compiler:        *MTL4Compiler;
     command_buffers: [DEFAULT_COMMAND_BUFFER_COUNT] Command_Buffer;
 
-    current_command_buffer_index:= 0;
+    command_buffer_index:= 0;
 
     spirv_cross_context:    spvc_context;
     slang_global_session: *slang.IGlobalSession;
@@ -68,7 +68,6 @@ Texture :: struct {
     drawable: *MTLDrawable;
     cpu: *void;
     gpu: u64;
-    descriptor: Texture_Descriptor;
 };
 
 Pipeline :: struct {
@@ -254,7 +253,6 @@ create_texture :: (desc: Texture_Desc, ptr_gpu: u64) -> Texture {
     texture.mtl = MTLBuffer.newTextureWithDescriptor_offset_bytesPerRow_(allocation.buffer, metal_desc, ptr_gpu - allocation.gpu, xx bytes_per_row);
     texture.gpu = ptr_gpu;
     texture.cpu = allocation.cpu + (ptr_gpu - allocation.gpu);
-    texture.descriptor = MTLTexture.gpuResourceID(texture.mtl);
 
     w := texture.mtl.width(texture.mtl);
     h := texture.mtl.height(texture.mtl);
@@ -264,6 +262,10 @@ create_texture :: (desc: Texture_Desc, ptr_gpu: u64) -> Texture {
 
 destroy_texture :: (texture: Texture) {
     release(texture.mtl);
+}
+
+texture_view_descriptor :: (texture: Texture) -> Texture_Descriptor {
+    return MTLTexture.gpuResourceID(texture.mtl);
 }
 
 // texture_view_descriptor :: (texture: Texture, desc: View_Desc) -> Texture_Descriptor {
@@ -510,7 +512,7 @@ create_queue :: () -> Queue {
 // would affect performance.
 start_command_recording :: () -> *Command_Buffer {
     using context.gpu_context;
-    command_buffer := aquire_next_command_buffer();
+    command_buffer := *command_buffers[command_buffer_index];
     {
         using command_buffer;
         command_allocator.reset(command_allocator);
@@ -526,28 +528,27 @@ start_command_recording :: () -> *Command_Buffer {
 // the case in Vulkan. In Vulkan the wait and signal semaphores are
 // grouped together in a single submit info, otherwise, it might have
 // a significant performance impact(?)
-submit :: (queue: Queue, command_buffers: ..*Command_Buffer, wait: []Semaphore_Pair = .[], signal: []Semaphore_Pair = .[]) {
+submit :: (queue: Queue, command_buffers: *Command_Buffer, wait: []Semaphore_Pair = .[], signal: []Semaphore_Pair = .[]) {
     Basic.auto_release_temp();
     for wait {
         MTL4CommandQueue.waitForEvent_value_(queue.mtl, xx it.semaphore.shared_event, it.value);
     }
 
-    buffers := Basic.NewArray(command_buffers.count, *MTL4CommandBuffer,, Basic.temp);
-    for cb: command_buffers {
-        buffers[it_index] = cb.cmd;
-        maybe_end_compute_encoder(cb);
-        MTL4CommandBuffer.endCommandBuffer(cb.cmd);
-    }
+    maybe_end_compute_encoder(command_buffer);
+    MTL4CommandBuffer.endCommandBuffer(command_buffer.cmd);
 
-    MTL4CommandQueue.commit_count_(queue.mtl, buffers.data, xx command_buffers.count);
+    MTL4CommandQueue.commit_count_(queue.mtl, *command_buffer.cmd, 1);
 
     for signal {
         MTL4CommandQueue.signalEvent_value_(queue.mtl, xx it.semaphore.shared_event, it.value);
     }
+
+    command_buffer_index = (command_buffer_index + 1) % xx command_buffers.count;
 }
 
 // I can't think of a way to correctly decouple present from submit.
 submit_and_present :: (queue: Queue, swapchain_texture: Texture, command_buffer: *Command_Buffer, wait: []Semaphore_Pair = .[], signal: []Semaphore_Pair = .[]) {
+    using context.gpu_context;
     drawable := swapchain_texture.drawable;
 
     Basic.auto_release_temp();
@@ -557,12 +558,8 @@ submit_and_present :: (queue: Queue, swapchain_texture: Texture, command_buffer:
 
     MTL4CommandQueue.waitForDrawable_(queue.mtl, drawable);
 
-    // buffers := Basic.NewArray(command_buffers.count, *MTL4CommandBuffer,, Basic.temp);
-    // for cb: command_buffers {
-    //     buffers[it_index] = cb.cmd;
-        maybe_end_compute_encoder(command_buffer);
-        MTL4CommandBuffer.endCommandBuffer(command_buffer.cmd);
-    // }
+    maybe_end_compute_encoder(command_buffer);
+    MTL4CommandBuffer.endCommandBuffer(command_buffer.cmd);
 
     MTL4CommandQueue.commit_count_(queue.mtl, *command_buffer.cmd, 1);
 
@@ -573,6 +570,8 @@ submit_and_present :: (queue: Queue, swapchain_texture: Texture, command_buffer:
     MTL4CommandQueue.signalDrawable_(queue.mtl, drawable);
 
     MTLDrawable.present(drawable);
+
+    command_buffer_index = (command_buffer_index + 1) % xx command_buffers.count;
 }
 
 create_semaphore :: (init_value: u64) -> Semaphore {
@@ -582,8 +581,7 @@ create_semaphore :: (init_value: u64) -> Semaphore {
     return .{event};
 }
 
-wait_semaphore :: (sema: Semaphore, value: u64, timeout: u64 = 0) {
-    // The current timeout is 0, which is infinite
+wait_semaphore :: (sema: Semaphore, value: u64, timeout: u64 = 10000) {
     success := MTLSharedEvent.waitUntilSignaledValue_timeoutMS_(sema.shared_event, value, timeout);
     if !success {
         Basic.log("Timeout waiting semaphore, value: %, timeout: %", value, timeout);
@@ -642,16 +640,21 @@ copy_from_texture :: (cb: *Command_Buffer, dest: u64, src: Texture) {
 }
 
 // In Metal, the src and dest texture must of the same format and size.
-// TODO: Make it supports different sizes.
-copy_texture :: (cb: *Command_Buffer, dest: Texture, src: Texture) {
-    maybe_create_compute_encoder(cb);
+copy_texture :: (cb: *Command_Buffer, dest: Texture, src: Texture, $IDENTICAL := false) {
     src_size := metal_texture_size(src.mtl);
     dest_size := metal_texture_size(dest.mtl);
 
-    if src_size.width != dest_size.width || src_size.height != dest_size.height || src_size.depth != dest_size.depth {
-        MTL4ComputeCommandEncoder.copyFromTexture_sourceSlice_sourceLevel_sourceOrigin_sourceSize_toTexture_destinationSlice_destinationLevel_destinationOrigin_(cb.compute_encoder, src.mtl, 0, 0, .{0, 0, 0}, src_size, dest.mtl, 0, 0, .{0, 0, 0});
-    } else {
+    #if IDENTICAL {
+        is_the_same := memcmp(*src_size, *dest_size, size_of(MTLSize));
+        if is_the_same != 0 {
+            return;
+        }
+        maybe_create_compute_encoder(cb);
+
         MTL4ComputeCommandEncoder.copyFromTexture_toTexture_(cb.compute_encoder, src.mtl, dest.mtl);
+    } else {
+        maybe_create_compute_encoder(cb);
+        MTL4ComputeCommandEncoder.copyFromTexture_sourceSlice_sourceLevel_sourceOrigin_sourceSize_toTexture_destinationSlice_destinationLevel_destinationOrigin_(cb.compute_encoder, src.mtl, 0, 0, .{0, 0, 0}, src_size, dest.mtl, 0, 0, .{0, 0, 0});
     }
 }
 
@@ -724,7 +727,6 @@ acquire_swapchain_texture :: () -> bool, Texture {
     texture: Texture;
     texture.mtl = drawable.texture(drawable);
     texture.drawable = xx drawable;
-    texture.descriptor = MTLTexture.gpuResourceID(texture.mtl);
 
     return true, texture;
 }
@@ -746,6 +748,16 @@ resize_callback :: (width: float64, height: float64) {
     using context.gpu_context;
 
     CAMetalLayer.setDrawableSize_(layer, .{width, height});
+}
+
+command_buffer_count :: () -> s64 {
+    using context.gpu_context;
+    return command_buffers.count;
+}
+
+current_command_buffer_index :: () -> s64 {
+    using context.gpu_context;
+    return command_buffer_index;
 }
 
 #scope_file
@@ -1011,12 +1023,12 @@ assert_metal :: (error: *NSError) #expand {
 aquire_next_command_buffer :: () -> *Command_Buffer {
     using context.gpu_context;
 
-    a := *command_buffers[current_command_buffer_index];
+    a := *command_buffers[command_buffer_index];
 
-    if current_command_buffer_index >= DEFAULT_COMMAND_BUFFER_COUNT - 1 {
-        current_command_buffer_index = 0;
+    if command_buffer_index >= DEFAULT_COMMAND_BUFFER_COUNT - 1 {
+        command_buffer_index = 0;
     } else {
-        current_command_buffer_index += 1;
+        command_buffer_index += 1;
     }
 
     return a;

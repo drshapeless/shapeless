@@ -3,12 +3,16 @@ App_State :: struct {
     is_running := true;
 
     clear_pipeline:  GPU.Pipeline;
+    rect_pipeline: GPU.Pipeline;
     arena: GPU.Arena;
     draw_arena: GPU.Arena;
     queue: GPU.Queue;
 
-    params:          *Params;
-    params_gpu:      u64;
+    clear_params:    [] Clear_Params;
+    clear_params_base_gpu: u64;
+
+    rect_params: [] Rect_Params;
+    rect_params_base_gpu: u64;
     draw_texture:    GPU.Texture;
 
     window_resize_requested := false;
@@ -17,8 +21,15 @@ App_State :: struct {
     window_height: s32;
 }
 
-Params :: struct {
+Clear_Params :: struct {
     clear_color: GPU.Color;
+    texture: GPU.Texture_Descriptor;
+}
+
+Rect_Params :: struct {
+    color: GPU.Color;
+    origin: [2]u32;
+    size:   [2]u32;
     texture: GPU.Texture_Descriptor;
 }
 
@@ -44,14 +55,33 @@ app_init :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
     defer GPU.destroy_ir(clear_ir);
     clear_pipeline = GPU.create_compute_pipeline(clear_ir);
 
+    rectangle_shader := read_entire_file("shaders/solid_rectangle.slang");
+    rectangle_ir := GPU.load_compute_ir(rectangle_shader);
+    defer GPU.destroy_ir(rectangle_ir);
+    rect_pipeline = GPU.create_compute_pipeline(rectangle_ir);
+
     GPU.init(*arena);
     GPU.init(*draw_arena, 32 * 1024 * 1024); // 32MB should be enough for draw texture
+
+    command_buffer_count := GPU.command_buffer_count();
     {
         GPU.push_allocator(GPU.arena_allocator_proc, *arena);
 
-        params = GPU.New(Params);
-        params_gpu = GPU.host_to_device_pointer(params);
-        params.clear_color = .{0.2, 0.3, 0.4, 1.0};
+        clear_params = GPU.NewArray(command_buffer_count, Clear_Params);
+        clear_params_base_gpu = GPU.host_to_device_pointer(clear_params.data);
+
+        for * params: clear_params {
+            params.clear_color = .{0.2, 0.3, 0.4, 1.0};
+        }
+
+        rect_params = GPU.NewArray(command_buffer_count, Rect_Params);
+        rect_params_base_gpu = GPU.host_to_device_pointer(rect_params.data);
+
+        for * params: rect_params {
+            params.color = .{1.0, 0, 0, 1.0};
+            params.origin = .[200, 200];
+            params.size = .[400, 200];
+        }
     }
 
     ok: bool;
@@ -106,7 +136,9 @@ app_iter :: (appstate: *void) -> SDL_AppResult {
     if !ok return .CONTINUE;
 
     cb := GPU.start_command_recording();
-    params.texture = draw_texture.descriptor;
+
+    i := GPU.current_command_buffer_index();
+    clear_params[i].texture = GPU.texture_view_descriptor(draw_texture);
 
     GPU.set_pipeline(cb, clear_pipeline);
     group_size: GPU.u32x3 = .{
@@ -114,13 +146,20 @@ app_iter :: (appstate: *void) -> SDL_AppResult {
         y = cast(u32) ((window_height + 8 - 1) / 8),
         z = 1
     };
-    GPU.dispatch(cb, params_gpu, group_size, .{8, 8, 1});
+    GPU.dispatch(cb, clear_params_base_gpu + cast(u64) (size_of(Clear_Params) * i), group_size, .{8, 8, 1});
+
+    GPU.barrier(cb, .COMPUTE, .COMPUTE);
+    GPU.set_pipeline(cb, rect_pipeline);
+
+    rect_params[i].texture = GPU.texture_view_descriptor(draw_texture);
+
+    GPU.dispatch(cb, rect_params_base_gpu + cast(u64) (size_of(Rect_Params) * i), group_size, .{8, 8, 1});
     GPU.barrier(cb, .BLIT, .COMPUTE);
-    GPU.copy_texture(cb, swapchain_texture, draw_texture);
+    GPU.copy_texture(cb, swapchain_texture, draw_texture, true);
 
     if window_resize_requested {
         GPU.submit_and_present(queue, swapchain_texture, cb, signal = .[.{resize_semaphore, 1}]);
-        GPU.wait_semaphore(resize_semaphore, 1, 10000);
+        GPU.wait_semaphore(resize_semaphore, 1);
         resize_callback(state);
         window_resize_requested = false;
     } else {
