@@ -40,7 +40,7 @@ GPU_Context :: struct {
     cpu_pointer_table: Table(*void, Allocation);
     gpu_pointer_table: Table(u64, Allocation);
 
-    swapchain: Swapchain;
+    swapchain:  Swapchain;
     frames:     []Frame;
     frame_index: s64 = 0;
 
@@ -49,6 +49,13 @@ GPU_Context :: struct {
     // DEFAULT_COMMAND_BUFFER_COUNT
     command_buffers: []Command_Buffer;
     #overlay (frame_index) command_buffer_index: s64;
+
+    descriptor_heap_properties: VkPhysicalDeviceDescriptorHeapPropertiesEXT;
+    // This has to be queried at init
+    storage_texture_descriptor_size: u64;
+    sampled_texture_descriptor_size: u64;
+
+    slang_global_session: *slang.IGlobalSession;
 }
 #add_context gpu_context: GPU_Context;
 
@@ -143,11 +150,6 @@ init :: (window: *SDL_Window = null) {
 
     vkGetDeviceQueue(device, queue_family_indices.graphics, 0, *main_queue);
 
-    command_pool_create_info := VkCommandPoolCreateInfo.{
-        // flags = .RESET_COMMAND_BUFFER,
-        queueFamilyIndex = queue_family_indices.graphics,
-    };
-
     if window {
         init_swapchain();
 
@@ -168,11 +170,22 @@ init :: (window: *SDL_Window = null) {
         command_buffers = Basic.NewArray(DEFAULT_COMMAND_BUFFER_COUNT, Command_Buffer);
     }
 
+    command_pool_create_info := VkCommandPoolCreateInfo.{
+        // flags = .RESET_COMMAND_BUFFER,
+        queueFamilyIndex = queue_family_indices.graphics,
+    };
     for * cb: command_buffers {
         result = check_vk(vkCreateCommandPool(device, *command_pool_create_info, vka, *cb.pool));
         assert_vk_result(result);
     }
 
+    sampled_texture_descriptor_size = vkGetPhysicalDeviceDescriptorSizeEXT(physical_device, .SAMPLED_IMAGE);
+    storage_texture_descriptor_size = vkGetPhysicalDeviceDescriptorSizeEXT(physical_device, .STORAGE_IMAGE);
+
+    Basic.log("sampled size: %, storage size: %", sampled_texture_descriptor_size, storage_texture_descriptor_size);
+
+    slang_result := slang.slang_createGlobalSession(slang.SLANG_API_VERSION, *slang_global_session);
+    Basic.assert(!slang.SLANG_FAILED(slang_result));
 }
 
 deinit :: () {
@@ -180,6 +193,10 @@ deinit :: () {
     result: VkResult;
     result = vkDeviceWaitIdle(device);
     assert_vk_result(result);
+
+    if slang_global_session {
+        slang.ISlangUnknown_release(xx slang_global_session);
+    }
 
     for frames {
         vkDestroySemaphore(device, it.acquire_semaphore, vka);
@@ -193,8 +210,6 @@ deinit :: () {
 
     if sdl_window {
         vkDestroySwapchainKHR(device, swapchain.vk, vka);
-        destroy_texture(swapchain.draw_texture);
-        destroy_texture(swapchain.depth_texture);
     }
 
     if device {
@@ -219,15 +234,11 @@ vulkan_allocator_proc :: (mode: Allocator_Mode, requested_size: s64, old_size: s
     if mode == {
     case .ALLOCATE;
         allocation := vulkan_allocate(xx requested_size);
-        table_add(*cpu_pointer_table, allocation.cpu, allocation);
-        table_add(*gpu_pointer_table, allocation.gpu, allocation);
         return allocation.cpu;
     case .FREE;
         found, allocation := table_find(*cpu_pointer_table, old_memory);
         if found {
             vulkan_deallocate(allocation);
-            table_remove(*cpu_pointer_table, old_memory);
-            table_remove(*gpu_pointer_table, allocation.gpu);
         }
     case;
         Basic.assert(false, "% mode is not supported in Vulkan allocator", mode);
@@ -282,6 +293,8 @@ vulkan_allocate :: (bytes: u64) -> Allocation {
     allocation.buffer = buffer;
     allocation.size = bytes;
 
+    table_add(*cpu_pointer_table, allocation.cpu, allocation);
+    table_add(*gpu_pointer_table, allocation.gpu, allocation);
     return allocation;
 }
 
@@ -293,6 +306,8 @@ vulkan_deallocate :: (allocation: Allocation) {
     if allocation.memory {
         vkFreeMemory(device, allocation.memory, vka);
     }
+    table_remove(*cpu_pointer_table, allocation.cpu);
+    table_remove(*gpu_pointer_table, allocation.gpu);
 }
 
 texture_size_align :: (desc: Texture_Desc) -> Texture_Size_Align {
@@ -339,6 +354,11 @@ destroy_texture :: (texture: Texture) {
     vkDestroyImage(device, texture.image, vka);
 }
 
+// We have to talk about descriptor heap. This is a very new extension. We first have to
+texture_view_descriptor :: (texture: Texture) -> Texture_Descriptor {
+    return 0;
+}
+
 load_spirv :: (spirv: string, entry_points: []string) -> []IR {
     irs := Basic.NewArray(entry_points.count, IR);
 
@@ -351,14 +371,20 @@ load_spirv :: (spirv: string, entry_points: []string) -> []IR {
 }
 
 load_slang :: (shader: string, entry_points: [] string) -> []IR {
-    spirv_code := slang_to_spirv(shader, entry_points);
+    spirv_code := slang_to_spirv(shader, entry_points, context.gpu_context.slang_global_session);
     return load_spirv(spirv_code, entry_points);
+}
+
+// This is a dummy function in Vulkan
+destroy_ir :: (ir: IR) {
+
 }
 
 create_compute_pipeline :: (ir: IR) -> Pipeline {
     using context.gpu_context;
     Basic.auto_release_temp();
     create_info := VkShaderCreateInfoEXT.{
+        flags = .DESCRIPTOR_HEAP,
         stage = .COMPUTE,
         nextStage = 0, // because we don't know what the next will be
         codeType = .SPIRV,
@@ -367,8 +393,8 @@ create_compute_pipeline :: (ir: IR) -> Pipeline {
         pName = Basic.temp_c_string(ir.entry_point),
         setLayoutCount = 0, // We don't use any descriptor set
         pSetLayouts = null,
-        pushConstantRangeCount = 1,
-        pPushConstantRanges = *PUSH_CONSTANT_RANGE,
+        pushConstantRangeCount = 0,
+        pPushConstantRanges = null,
         pSpecializationInfo = null, // Don't know what this is yet
     };
 
@@ -529,26 +555,25 @@ submit :: (queue: Queue, command_buffers: ..*Command_Buffer, wait: []Semaphore_P
 }
 
 // Very similar to submit() but consist of swapchain related semaphores
-submit_and_present :: (queue: Queue, swapchain_texture: Texture, command_buffers: ..*Command_Buffer, wait: []Semaphore_Pair = .[], signal: []Semaphore_Pair = .[]) {
+submit_and_present :: (queue: Queue, swapchain_texture: Texture, command_buffer: *Command_Buffer, wait: []Semaphore_Pair = .[], signal: []Semaphore_Pair = .[]) {
+    using context.gpu_context;
     Basic.auto_release_temp();
     Basic.push_allocator(Basic.temp);
 
     frame := frames[frame_index];
 
-    command_buffer_submit_infos := Basic.NewArray(command_buffers.count, VkCommandBufferSubmitInfo,, Basic.temp);
+    command_buffer_submit_info: VkCommandBufferSubmitInfo;
 
-    for cb: command_buffers {
-        vkEndCommandBuffer(cb.vk);
-        command_buffer_submit_infos[it_index].commandBuffer = cb.vk;
-    }
+    vkEndCommandBuffer(command_buffer.vk);
+    command_buffer_submit_info.commandBuffer = command_buffer.vk;
 
 
     submit_info := VkSubmitInfo2.{
-        commandBufferInfoCount = xx command_buffers.count,
-        pCommandBufferInfos = command_buffer_submit_infos.data,
+        commandBufferInfoCount = 1,
+        pCommandBufferInfos = *command_buffer_submit_info,
     };
 
-    wait_infos := [..] VkSemaphoreSubmitInfo;
+    wait_infos: [..] VkSemaphoreSubmitInfo;
     wait_infos.allocator = Basic.temp;
     for wait {
         sema_info := VkSemaphoreSubmitInfo.{
@@ -588,7 +613,8 @@ submit_and_present :: (queue: Queue, swapchain_texture: Texture, command_buffers
     submit_info.signalSemaphoreInfoCount = xx signal_infos.count;
     submit_info.pSignalSemaphoreInfos = signal_infos.data;
 
-    result := check_vk(vkQueueSubmit2(queue.vk, 1, *submit_info, null));
+    result: VkResult;
+    result = check_vk(vkQueueSubmit2(queue.vk, 1, *submit_info, null));
     assert_vk_result(result);
 
     present_info := VkPresentInfoKHR.{
@@ -599,7 +625,7 @@ submit_and_present :: (queue: Queue, swapchain_texture: Texture, command_buffers
         pImageIndices = *swapchain_texture.image_index,
     };
 
-    result := vkQueuePresentKHR(queue.vk, *present_info);
+    result = vkQueuePresentKHR(queue.vk, *present_info);
     if result == {
     case .ERROR_OUT_OF_DATE_KHR;
         ;
@@ -693,7 +719,7 @@ copy_from_texture :: (cb: *Command_Buffer, dst: u64, src: Texture) {
 }
 
 // It only supports color image
-copy_texture :: (cb: *Command_Buffer, dst: Texture, src: Texture) {
+copy_texture :: (cb: *Command_Buffer, dst: Texture, src: Texture, $IDENTICAL := false) {
     region := VkImageBlit2.{
         srcSubresource = .{
             aspectMask = .COLOR,
@@ -704,8 +730,16 @@ copy_texture :: (cb: *Command_Buffer, dst: Texture, src: Texture) {
             layerCount = 1
         },
     };
-    region.srcOffsets[1] = src.extent;
-    region.dstOffsets[1] = dst.extent;
+    region.srcOffsets[1] = .{
+        x = xx src.extent.width,
+        y = xx src.extent.height,
+        z = xx src.extent.depth,
+    };
+    region.dstOffsets[1] = .{
+        x = xx dst.extent.width,
+        y = xx dst.extent.height,
+        z = xx dst.extent.depth,
+    };
     info := VkBlitImageInfo2.{
         srcImage = src.image,
         srcImageLayout = .GENERAL,
@@ -764,7 +798,7 @@ destroy_semaphore :: (semaphore: Semaphore) {
 }
 
 // This function is weird
-barrier :: (cb: Command_Buffer, before: Stage, after: Stage, hazards: Hazard = 0) {
+barrier :: (cb: *Command_Buffer, before: Stage, after: Stage, hazards: Hazard = 0) {
     dependency_info := VkDependencyInfo.{
         dependencyFlags = 0,
     };
@@ -788,7 +822,7 @@ barrier :: (cb: Command_Buffer, before: Stage, after: Stage, hazards: Hazard = 0
 
     if hazards & .DEPTH_STENCIL {
         memory_barrier.srcAccessMask |= .DEPTH_STENCIL_ATTACHMENT_WRITE;
-        memory_barrier.dstAccessMask |= .DEPTH_STENCIL_ATTACHMENT_WRITE | DEPTH_STENCIL_ATTACHMENT_READ;
+        memory_barrier.dstAccessMask |= .DEPTH_STENCIL_ATTACHMENT_WRITE | .DEPTH_STENCIL_ATTACHMENT_READ;
     }
 
     // Generic
@@ -803,7 +837,7 @@ barrier :: (cb: Command_Buffer, before: Stage, after: Stage, hazards: Hazard = 0
     vkCmdPipelineBarrier2(cb, *dependency_info);
 }
 
-set_pipeline :: (cb: Command_Buffer, pipeline: Pipeline) {
+set_pipeline :: (cb: *Command_Buffer, pipeline: Pipeline) {
     if pipeline.is_compute {
         stage: VkShaderStageFlagBits = .COMPUTE;
         vkCmdBindShadersEXT(cb, 1, *stage, pipeline.shaders.data);
@@ -813,9 +847,8 @@ set_pipeline :: (cb: Command_Buffer, pipeline: Pipeline) {
     }
 }
 
-dispatch :: (cb: Command_Buffer, data_gpu: u64, count: u32) {
-    using context.gpu_context;
-
+// Threads is ignored in Vulkan, they can only be set in shader.
+dispatch :: (cb: *Command_Buffer, data_gpu: u64, groups: u32x3, threads: u32x3) {
     // We no longer use push constants.
     range := VkHostAddressRangeConstEXT.{
         address = *data_gpu,
@@ -826,7 +859,11 @@ dispatch :: (cb: Command_Buffer, data_gpu: u64, count: u32) {
         data = range,
     };
     vkCmdPushDataEXT(cb, *push_data_info);
-    vkCmdDispatch(cb, count, 1, 1);
+    vkCmdDispatch(cb, groups.x, groups.y, groups.z);
+}
+
+dispatch :: (cb: *Command_Buffer, data_gpu: u64, count: u32) {
+    dispatch(cb, data_gpu, .{count, 1, 1}, .{256, 1, 1});
 }
 
 acquire_swapchain_texture :: () -> success:bool, Texture {
@@ -891,6 +928,17 @@ resize_callback :: (window_width: s32, window_height: s32) {
     assert_vk_result(result);
 }
 
+command_buffer_count :: () -> s64 {
+    using context.gpu_context;
+    return command_buffers.count;
+}
+
+current_command_buffer_index :: () -> s64 {
+    using context.gpu_context;
+
+    return command_buffer_index;
+}
+
 #scope_file
 application_info :: VkApplicationInfo.{
     pApplicationName = "shapeless",
@@ -926,6 +974,7 @@ DEVICE_EXTENSIONS :: (*u8).[
 VK_EXT_SHADER_OBJECT_EXTENSION_NAME,
 VK_EXT_DESCRIPTOR_HEAP_EXTENSION_NAME,
 VK_KHR_UNIFIED_IMAGE_LAYOUTS_EXTENSION_NAME,
+VK_KHR_SHADER_UNTYPED_POINTERS_EXTENSION_NAME,
 ];
 
 assert_vk_result :: (result: VkResult) #expand {
@@ -1195,7 +1244,13 @@ make_device :: (device_extensions: [] *u8) -> VkResult, VkDevice {
     }
 
     chain: *void;
+    features_shader_untyped_pointer := VkPhysicalDeviceShaderUntypedPointersFeaturesKHR.{
+        shaderUntypedPointers = VK_TRUE,
+    };
+    chain = *features_shader_untyped_pointer;
+
     features_unified_image_layouts := VkPhysicalDeviceUnifiedImageLayoutsFeaturesKHR.{
+        pNext = chain,
         unifiedImageLayouts = VK_TRUE,
     };
     chain = *features_unified_image_layouts;
@@ -1233,6 +1288,8 @@ make_device :: (device_extensions: [] *u8) -> VkResult, VkDevice {
         descriptorBindingStorageBufferUpdateAfterBind = VK_TRUE,
         shaderInt8                                    = VK_TRUE,
         timelineSemaphore                             = VK_TRUE,
+        vulkanMemoryModel                             = VK_TRUE,
+        vulkanMemoryModelDeviceScope                  = VK_TRUE,
     };
     chain = *features12;
     features11 := VkPhysicalDeviceVulkan11Features.{
@@ -1383,10 +1440,10 @@ to_vulkan_pipeline_stage :: (stage: Stage) -> VkPipelineStageFlags2 {
         vk |= .BLIT;
     }
     if stage & .ALL {
-        s |= .ALL_COMMANDS;
+        vk |= .ALL_COMMANDS;
     }
     if stage & .TRANSFER {
-        s |= .TRANSFER;
+        vk |= .TRANSFER;
     }
 
     return vk;
@@ -1559,3 +1616,4 @@ Basic :: #import "Basic";
 Math :: #import "Math";
 Compiler :: #import "Compiler";
 #import "Hash_Table";
+slang :: #import "slang";

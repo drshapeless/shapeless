@@ -116,7 +116,7 @@ slang_to_metal :: (shader: string, entry_points: [] string, global_session: *sla
     return metal_code_raw;
 }
 
-slang_to_spirv :: (shader: string, entry_points: [] string) -> string {
+slang_to_spirv :: (shader: string, entry_points: [] string, global_session: *slang.IGlobalSession) -> string {
     options: [..] slang.CompilerOptionEntry;
     options.allocator = Basic.temp;
     Basic.array_add(*options, .{
@@ -133,12 +133,33 @@ slang_to_spirv :: (shader: string, entry_points: [] string) -> string {
             intValue0 = 1,
         },
     });
+    Basic.array_add(*options, .{
+        name = .VulkanUseEntryPointName,
+        value = .{
+            kind = .Int,
+            intValue0 = 1,
+        },
+    });
+    Basic.array_add(*options, .{
+        name = .Capability,
+        value = .{
+            kind = .String,
+            stringValue0 = "untyped_pointers",
+        },
+    });
+    Basic.array_add(*options, .{
+        name = .Capability,
+        value = .{
+            kind = .String,
+            stringValue0 = "vk_mem_model",
+        },
+    });
 
-    target_desc := slang.TargetDesc.{
-        format = .METAL,
+    target_desc: slang.TargetDesc = .{
+        format = .SPIRV,
         profile = slang.IGlobalSession_findProfile(global_session, "spirv_1_6"),
         forceGLSLScalarBufferLayout = true,
-        flags = slang.SLANG_TARGET_FLAG.GENERATE_SPIRV_DIRECTLY,
+        flags = xx slang.SLANG_TARGET_FLAG.GENERATE_SPIRV_DIRECTLY,
         compilerOptionEntries = options.data,
         compilerOptionEntryCount = xx options.count,
     };

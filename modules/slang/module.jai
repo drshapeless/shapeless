@@ -35,7 +35,7 @@
 #if OS == .WINDOWS {
     slang_compiler :: #library,no_dll,link_always "win/slang-compiler";
 } else #if OS == .LINUX {
-    libslang :: #library,no_dll,link_always "linux/libslang";
+    libslang :: #library,system "libslang";
 } else #if OS == .MACOS {
     libslang :: #library,system "libslang";
 }
