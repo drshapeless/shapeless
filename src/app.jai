@@ -19,6 +19,10 @@ App_State :: struct {
     resize_semaphore: GPU.Semaphore;
     window_width: s32;
     window_height: s32;
+
+    rect_origin: [2]s32;
+    rect_size: [2]s32;
+    rect_direction: [2]s32 = .[1, 1];
 }
 
 Clear_Params :: struct {
@@ -28,8 +32,8 @@ Clear_Params :: struct {
 
 Rect_Params :: struct {
     color: GPU.Color;
-    origin: [2]u32;
-    size:   [2]u32;
+    origin: [2]s32;
+    size:   [2]s32;
     texture: GPU.Texture_Descriptor;
 }
 
@@ -79,8 +83,6 @@ app_init :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
 
         for * params: rect_params {
             params.color = .{1.0, 0, 0, 1.0};
-            params.origin = .[200, 200];
-            params.size = .[400, 200];
         }
     }
 
@@ -101,6 +103,9 @@ app_init :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
     queue = GPU.create_queue();
 
     resize_semaphore = GPU.create_semaphore(0);
+
+    rect_origin = .[0, 0];
+    rect_size = .[200, 200];
 
     return .CONTINUE;
 }
@@ -152,6 +157,20 @@ app_iter :: (appstate: *void) -> SDL_AppResult {
     GPU.set_pipeline(cb, rect_pipeline);
 
     rect_params[i].texture = GPU.texture_view_descriptor(draw_texture);
+
+    rect_origin[0] += 3 * rect_direction[0];
+    rect_origin[1] += 3 * rect_direction[1];
+
+    if rect_origin[0] + rect_size[0] > xx window_width || rect_origin[0] < 0 {
+        rect_direction[0] *= -1;
+    }
+
+    if rect_origin[1] + rect_size[1] > xx window_height || rect_origin[1] < 0 {
+        rect_direction[1] *= -1;
+    }
+
+    rect_params[i].origin = rect_origin;
+    rect_params[i].size = rect_size;
 
     GPU.dispatch(cb, rect_params_base_gpu + cast(u64) (size_of(Rect_Params) * i), group_size, .{8, 8, 1});
     GPU.barrier(cb, .BLIT, .COMPUTE);

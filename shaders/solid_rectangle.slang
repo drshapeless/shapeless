@@ -1,7 +1,7 @@
 struct Params {
     float4 color;
-    uint2  origin;
-    uint2  size;
+    int2  origin;
+    int2  size;
     DescriptorHandle<RWTexture2D<float4>> texture;
 };
 
