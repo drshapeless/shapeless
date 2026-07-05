@@ -192,7 +192,7 @@ app_quit :: (appstate: *void, result: SDL_AppResult) {
     state := cast(*App_State) appstate;
     using state;
 
-    GPU.free_pipeline(clear_pipeline);
+    GPU.destroy_pipeline(clear_pipeline);
     GPU.deinit();
     SDL_DestroyWindow(window);
     SDL_Quit();

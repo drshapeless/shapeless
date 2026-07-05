@@ -444,7 +444,7 @@ create_graphics_pipeline :: (vertex_ir: IR, fragment_ir: IR, desc: Raster_Desc) 
 //     return .{render = pipeline_state};
 // }
 
-free_pipeline :: (pipeline: Pipeline) {
+destroy_pipeline :: (pipeline: Pipeline) {
     if pipeline.is_compute {
         release(pipeline.compute);
     } else {

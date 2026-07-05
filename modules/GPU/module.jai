@@ -33,7 +33,7 @@
 // load_spirv :: (spirv: string, entry_points: []string) -> []IR
 // create_compute_pipeline :: (compute_ir: IR) -> Pipeline
 // create_graphics_pipeline :: (vertex_ir: IR, fragment_ir: IR, desc: Raster_Desc) -> Pipeline
-// free_pipeline :: (pipeline: Pipeline)
+// destroy_pipeline :: (pipeline: Pipeline)
 
 // create_queue :: () -> Queue
 // start_command_recording :: () -> *Command_Buffer

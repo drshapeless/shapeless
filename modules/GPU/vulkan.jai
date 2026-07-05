@@ -456,7 +456,7 @@ create_graphics_pipeline :: (vertex_ir: IR, fragment_ir: IR, desc: Raster_Desc) 
     return pipeline;
 }
 
-free_pipeline :: (pipeline: Pipeline) {
+destroy_pipeline :: (pipeline: Pipeline) {
     using context.gpu_context;
     if pipeline.is_compute {
         vkDestroyShaderEXT(device, pipeline.shaders[0], vka);
