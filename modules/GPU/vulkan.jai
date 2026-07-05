@@ -34,11 +34,13 @@ GPU_Context :: struct {
     surface:              VkSurfaceKHR;
     queue_family_indices: Queue_Family_Indices;
     physical_device:      VkPhysicalDevice;
-    memory_indices:       Memory_Indices;
+    memory_properties:    VkPhysicalDeviceMemoryProperties;
     main_queue:           VkQueue;
 
     cpu_pointer_table: Table(*void, Allocation);
     gpu_pointer_table: Table(u64, Allocation);
+
+    slang_global_session: *slang.IGlobalSession;
 
     swapchain:  Swapchain;
     frames:     []Frame;
@@ -51,11 +53,9 @@ GPU_Context :: struct {
     #overlay (frame_index) command_buffer_index: s64;
 
     descriptor_heap_properties: VkPhysicalDeviceDescriptorHeapPropertiesEXT;
-    // This has to be queried at init
-    storage_texture_descriptor_size: u64;
-    sampled_texture_descriptor_size: u64;
 
-    slang_global_session: *slang.IGlobalSession;
+    // This only contains the texture currently
+    set_and_binding_mapping: VkDescriptorSetAndBindingMappingEXT;
 }
 #add_context gpu_context: GPU_Context;
 
@@ -146,7 +146,7 @@ init :: (window: *SDL_Window = null) {
     }
     vk_load_device_functions(device);
 
-    memory_indices = get_memory_indices();
+    vkGetPhysicalDeviceMemoryProperties(physical_device, *memory_properties);
 
     vkGetDeviceQueue(device, queue_family_indices.graphics, 0, *main_queue);
 
@@ -179,13 +179,41 @@ init :: (window: *SDL_Window = null) {
         assert_vk_result(result);
     }
 
-    sampled_texture_descriptor_size = vkGetPhysicalDeviceDescriptorSizeEXT(physical_device, .SAMPLED_IMAGE);
-    storage_texture_descriptor_size = vkGetPhysicalDeviceDescriptorSizeEXT(physical_device, .STORAGE_IMAGE);
-
-    Basic.log("sampled size: %, storage size: %", sampled_texture_descriptor_size, storage_texture_descriptor_size);
-
     slang_result := slang.slang_createGlobalSession(slang.SLANG_API_VERSION, *slang_global_session);
     Basic.assert(!slang.SLANG_FAILED(slang_result));
+
+    // Here we query the device properties for descriptor heap, we may
+    // do it in the physical device selection, but it is here now.
+    physical_device_properties: VkPhysicalDeviceProperties2;
+    physical_device_properties.pNext = *descriptor_heap_properties;
+    vkGetPhysicalDeviceProperties2(physical_device, *physical_device_properties);
+
+    // sampled_texture_descriptor_size = vkGetPhysicalDeviceDescriptorSizeEXT(physical_device, .SAMPLED_IMAGE);
+    // storage_texture_descriptor_size = vkGetPhysicalDeviceDescriptorSizeEXT(physical_device, .STORAGE_IMAGE);
+
+    // Basic.log("sampled size: %, storage size: %", sampled_texture_descriptor_size, storage_texture_descriptor_size);
+
+    // This is what the original descriptorheap.cpp by SaschaWillems,
+    // but by my observation, the descriptor size should already be
+    // aligned.
+    texture_descriptor_size := aligned_vk_size(descriptor_heap_properties.imageDescriptorSize, descriptor_heap_properties.imageDescriptorAlignment);
+
+
+    texture_descriptor_heap_size := aligned_vk_size(texture_descriptor_size * 1 + descriptor_heap_properties.minResourceHeapReservedRange, descriptor_heap_properties.resourceHeapAlignment);
+
+    texture_descriptor_heap_allocation := vulkan_allocate(texture_descriptor_heap_size, .SHADER_DEVICE_ADDRESS | .DESCRIPTOR_HEAP_EXT);
+
+    set_and_binding_mapping.descriptorSet = 0;
+    set_and_binding_mapping.firstBinding = 0;
+    set_and_binding_mapping.bindingCount = 1;
+    set_and_binding_mapping.resourceMask = .SAMPLED_IMAGE | .READ_WRITE_IMAGE;
+    set_and_binding_mapping.source = .HEAP_WITH_CONSTANT_OFFSET;
+    set_and_binding_mapping.sourceData.constantOffset = .{
+        heapOffset = 0,
+        heapArrayStride = xx descriptor_heap_properties.imageDescriptorSize,
+    };
+
+
 }
 
 deinit :: () {
@@ -248,13 +276,13 @@ vulkan_allocator_proc :: (mode: Allocator_Mode, requested_size: s64, old_size: s
 }
 
 // This only allocates shared memory (rebar).
-vulkan_allocate :: (bytes: u64) -> Allocation {
+vulkan_allocate :: (bytes: u64, usage: VkBufferUsageFlags = .SHADER_DEVICE_ADDRESS | .STORAGE_BUFFER | .TRANSFER_DST | .TRANSFER_SRC, required_flags: VkMemoryPropertyFlags = .DEVICE_LOCAL | .HOST_VISIBLE | .HOST_COHERENT, $mapped := true) -> Allocation {
     using context.gpu_context;
     buffer: VkBuffer;
     buffer_create_info := VkBufferCreateInfo.{
         flags = 0,
         size = bytes,
-        usage = .SHADER_DEVICE_ADDRESS | .STORAGE_BUFFER | .TRANSFER_DST | .TRANSFER_SRC,
+        usage = usage,
         sharingMode = .EXCLUSIVE,
     };
     result: VkResult;
@@ -270,7 +298,7 @@ vulkan_allocate :: (bytes: u64) -> Allocation {
     allocation_info := VkMemoryAllocateInfo.{
         pNext = *memory_allocate_flags,
         allocationSize = memory_requirements.size,
-        memoryTypeIndex = memory_indices.shared,
+        memoryTypeIndex = find_memory_type_index(memory_requirements.memoryTypeBits, required_flags),
     };
 
     memory: VkDeviceMemory;
@@ -286,12 +314,14 @@ vulkan_allocate :: (bytes: u64) -> Allocation {
 
     allocation: Allocation;
     allocation.gpu = vkGetBufferDeviceAddress(device, *address_info);
-
-    check_vk(vkMapMemory(device, memory, 0, memory_requirements.size, 0, *allocation.cpu));
-    Basic.assert(result == .SUCCESS);
     allocation.memory = memory;
     allocation.buffer = buffer;
     allocation.size = bytes;
+
+    #if mapped {
+        result = check_vk(vkMapMemory(device, memory, 0, memory_requirements.size, 0, *allocation.cpu));
+        Basic.assert(result == .SUCCESS);
+    }
 
     table_add(*cpu_pointer_table, allocation.cpu, allocation);
     table_add(*gpu_pointer_table, allocation.gpu, allocation);
@@ -383,7 +413,12 @@ destroy_ir :: (ir: IR) {
 create_compute_pipeline :: (ir: IR) -> Pipeline {
     using context.gpu_context;
     Basic.auto_release_temp();
+    descriptor_set_and_binding_mapping_info := VkShaderDescriptorSetAndBindingMappingInfoEXT.{
+        mappingCount = 1,
+        pMappings = *set_and_binding_mapping,
+    };
     create_info := VkShaderCreateInfoEXT.{
+        pNext = *descriptor_set_and_binding_mapping_info,
         flags = .DESCRIPTOR_HEAP,
         stage = .COMPUTE,
         nextStage = 0, // because we don't know what the next will be
@@ -1324,37 +1359,16 @@ make_device :: (device_extensions: [] *u8) -> VkResult, VkDevice {
     return result, my_device;
 }
 
-Memory_Indices :: struct {
-    shared: u32 = Math.U32_MAX;
-    private: u32 = Math.U32_MAX;
-}
-
-get_memory_indices :: () -> Memory_Indices {
+find_memory_type_index :: (memory_type_bits: u32, required_flags: VkMemoryPropertyFlags) -> u32 {
     using context.gpu_context;
-
-    indices: Memory_Indices;
-    properties: VkPhysicalDeviceMemoryProperties;
-    vkGetPhysicalDeviceMemoryProperties(physical_device, *properties);
-
-    SHARED_FLAGS: VkMemoryPropertyFlags = .DEVICE_LOCAL | .HOST_VISIBLE | .HOST_COHERENT;
-
-    for i: 0..properties.memoryTypeCount - 1 {
-        f := properties.memoryTypes[i].propertyFlags;
-        if (f & SHARED_FLAGS) == SHARED_FLAGS {
-            indices.shared = i;
-        }
-
-        // This ensure the private index return is not cpu visible
-        if (f & .DEVICE_LOCAL == .DEVICE_LOCAL) && (f & .HOST_VISIBLE == 0) {
-            indices.private = i;
-        }
-
-        if indices.shared != Math.U32_MAX && indices.private != Math.U32_MAX {
-            break;
+    for 0..memory_properties.memoryTypeCount - 1 {
+        if (memory_type_bits & (1 << cast(u32)it)) &&
+        (memory_properties.memoryTypes[it].propertyFlags & required_flags) == required_flags {
+            return cast(u32)it;
         }
     }
 
-    return indices;
+    return Math.U32_MAX;
 }
 
 to_vulkan_image_type :: (type: Texture_Type) -> VkImageType {
@@ -1608,6 +1622,10 @@ to_vulkan_rendering_info :: (desc: Render_Pass_Desc) -> VkRenderingInfo {
     };
 
     return rendering_info;
+}
+
+aligned_vk_size :: (value: u64, alignment: u64) -> u64 {
+    return (value + alignment - 1) & ~(alignment - 1);
 }
 
 #import "Vulkan";
