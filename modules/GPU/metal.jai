@@ -803,6 +803,8 @@ to_metal_texture_type :: (texture_type: Texture_Type) -> MTLTextureType {
         metal_texture_type = .e3D;
     case .CUBE;
         metal_texture_type = .Cube;
+    case .e1D_ARRAY;
+        metal_texture_type = .e1DArray;
     case .e2D_ARRAY;
         metal_texture_type = .e2DArray;
     case .CUBE_ARRAY;

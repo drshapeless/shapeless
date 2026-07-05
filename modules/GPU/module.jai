@@ -65,6 +65,16 @@
 //// Metal specific function
 // load_msl :: (msl: string, entry_points: []string) -> []IR
 
+//// Limitation
+// The proposed descriptor heap model by No Graphics API is not
+// realistic to implement, so many assumptions that limits what we
+// actually can do with the current API(Metal and Vulkan). The closest
+// thing we can get is VK_EXT_descriptor_heap and residencySet in
+// Metal. In fact, the residencySet is a good middle ground to
+// implement descriptor set. In Metal, residencySet with ArgumentTable
+// is a much simpler mind model to understand. Maybe we should imitate
+// it in Vulkan.
+
 Memory_Type :: enum {
     SHARED;
     PRIVATE;
@@ -78,6 +88,7 @@ Texture_Type :: enum {
     e2D;
     e3D;
     CUBE;
+    e1D_ARRAY;
     e2D_ARRAY;
     CUBE_ARRAY;
 }
@@ -121,6 +132,7 @@ Texture_Size_Align :: struct {
 
 View_Desc :: struct {
     format:      Format;
+    type:         Texture_Type = .e2D;
     base_mip:    u8 = 0;
     mip_count:   u8;
     base_layer:  u16;

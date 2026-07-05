@@ -72,15 +72,21 @@ Allocation :: struct {
 // TODO: the Texture struct has too many field, some of them should be removed.
 Texture :: struct {
     image: VkImage;
-    view:  VkImageView;
     format: VkFormat;
     extent: VkExtent3D;
     gpu: u64;
     image_index: u32; // This is for swapchain image exclusively
 }
 
-// We should query the real descriptor size for different type of
-// things. But 64bits should be enough for an image.
+Texture_Heap :: struct {
+    allocation: Allocation;
+    size: s64;
+    occupied: s64;
+}
+
+// Calling this texture descriptor is kind of silly, it is the offset
+// from the texture heap buffer, calculated by index *
+// descriptor_heap_properties.imageDescriptorSize
 Texture_Descriptor :: u64;
 
 Pipeline :: struct {
@@ -974,6 +980,99 @@ current_command_buffer_index :: () -> s64 {
     return command_buffer_index;
 }
 
+create_texture_heap :: (image_count: s64 = 10) -> Texture_Heap {
+    using context.gpu_context;
+
+    heap_size := aligned_vk_size(descriptor_heap_properties.imageDescriptorSize * image_count + descriptor_heap_properties.minResourceHeapReservedRange, descriptor_heap_properties.imageDescriptorAlignment);
+
+    // Here we ignore the gpu_allocator, we allocate new memory.
+    allocation := vulkan_allocate(heap_size, .SHADER_DEVICE_ADDRESS | .DESCRIPTOR_HEAP_EXT);
+
+    heap: Texture_Heap;
+    heap.allocation = allocation;
+    heap.size = image_count;
+    heap.occupied = 0;
+
+    return heap;
+}
+
+// This is kind of stupid
+Texture_And_View_Desc :: struct {
+    texture: Texture;
+    view_desc: View_Desc;
+}
+
+texture_heap_add :: (heap: *Texture_Heap, using texture_and_view: Texture_And_View_Desc) -> u64 {
+    image_view_create_info := to_vulkan_image_view_create_info(texture, view_desc);
+
+    image_descriptor_info := VkImageDescriptorInfoEXT.{
+        pView = *image_view_create_info,
+        layout = .GENERAL,
+    };
+
+    resource_descriptor_info := VkResourceDescriptorInfoEXT.{
+        type = .SAMPLED_IMAGE,
+    };
+    resource_descriptor_info.data.pImage = *image_descriptor_info;
+
+    Basic.assert(heap.occupied < heap.size, "The descriptor heap is full, size = %; occupied = %;", heap.size, heap.occupied);
+
+    offset := descriptor_heap_properties.imageDescriptorSize * heap.occupied;
+    host_address_range := VkHostAddressRangeEXT.{
+        address = heap.allocation.cpu + offset,
+        size = descriptor_heap_properties.imageDescriptorSize,
+    };
+
+    using context.gpu_context;
+    vkWriteResourceDescriptorsEXT(device, 1, *resource_descriptor_info, *host_address_range);
+
+    heap.occupied += 1;
+
+    return offset;
+}
+
+texture_heap_add :: (heap: *Texture_Heap, texture_and_views: ..Texture_And_View_Desc) -> u64 {
+    using context.gpu_context;
+
+    push_allocator(Basic.temp);
+    Basic.auto_release_temp();
+    Basic.assert(texture_and_views.count > 0);
+
+    Basic.assert(texture_and_views.count + heap.occupied < heap.size, "The descriptor heap is full, size = %; occupied = %; requested = %;", heap.size, heap.occupied, texture_and_views.count);
+
+    image_view_create_infos := Basic.NewArray(texture_and_views.count, VkImageViewCreateInfo);
+    image_descriptor_infos := Basic.NewArray(texture_and_views.count, VkImageDescriptorInfoEXT);
+    resource_descriptor_infos := Basic.NewArray(texture_and_views.count, VkResourceDescriptorInfoEXT);
+    host_address_ranges := Basic.NewArray(texture_and_views.count, VkHostAddressRangeEXT);
+
+    first_offset := descriptor_heap_properties.imageDescriptorSize * heap.occupied;
+
+    for texture_and_view, i: texture_and_views {
+        using texture_and_view;
+        image_view_create_infos[i] = to_vulkan_image_view_create_info(texture, view_desc);
+        image_descriptor_infos[i] = VkImageDescriptorInfoEXT.{
+            pView = *image_view_create_infos[i],
+            layout = .GENERAL,
+        };
+
+        resource_descriptor_infos[i] = VkResourceDescriptorInfoEXT.{
+            type = .SAMPLED_IMAGE,
+        };
+        resource_descriptor_infos[i].data.pImage = *image_descriptor_infos[i];
+
+        host_address_ranges[i] = VkHostAddressRangeEXT.{
+            address = heap.allocation.cpu + descriptor_heap_properties.imageDescriptorSize * (heap.occupied + i),
+            size = descriptor_heap_properties.imageDescriptorSize,
+        };
+    }
+
+    vkWriteResourceDescriptorsEXT(device, xx texture_and_views.count, resource_descriptor_infos.data, host_address_ranges.data);
+
+    heap.occupied += xx texture_and_views.count;
+
+    return first_offset;
+}
+
 #scope_file
 application_info :: VkApplicationInfo.{
     pApplicationName = "shapeless",
@@ -1382,6 +1481,8 @@ to_vulkan_image_type :: (type: Texture_Type) -> VkImageType {
         image_type = .e3D;
     case .CUBE;
         image_type = .e2D;
+    case .e1D_ARRAY;
+        image_type = .e1D;
     case .e2D_ARRAY;
         image_type = .e2D;
     case .CUBE_ARRAY;
@@ -1402,6 +1503,8 @@ to_vulkan_image_view_type :: (type: Texture_Type) -> VkImageViewType {
         image_view_type = .e3D;
     case .CUBE;
         image_view_type = .CUBE;
+    case .e1D_ARRAY;
+        image_view_type = .e1D_ARRAY;
     case .e2D_ARRAY;
         image_view_type = .e2D_ARRAY;
     case .CUBE_ARRAY;
@@ -1434,6 +1537,23 @@ to_vulkan_image_create_info :: (desc: Texture_Desc) -> VkImageCreateInfo {
     };
 
     return info;
+}
+
+to_vulkan_image_view_create_info :: (texture: Texture, desc: View_Desc) -> VkImageViewCreateInfo {
+    image_view_create_info := VkImageViewCreateInfo.{
+        image = texture.image,
+        viewType = to_vulkan_image_view_type(desc.type),
+        format = desc.format,
+        subresourceRange = VkImageSubresourceRange.{
+            aspectMask = .COLOR,
+            baseMipLevel = xx desc.base_mip,
+            levelCount = xx desc.mip_count,
+            baseArrayLayer = xx desc.base_layer,
+            layerCount = xx desc.layer_count,
+        }
+    };
+
+    return image_view_create_info;
 }
 
 to_vulkan_pipeline_stage :: (stage: Stage) -> VkPipelineStageFlags2 {
