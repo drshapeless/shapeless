@@ -38,18 +38,18 @@ init_renderer :: (sdl_window: *SDL_Window) {
         solid_rectangle_params_base_gpu = GPU.host_to_device_pointer(solid_rectangle_params.data);
     }
 
-    resize_semaphore = GPU.create_semaphore(0);
 }
 
 deinit_renderer :: () {
     GPU.destroy_pipeline(clear_pipeline);
     GPU.destroy_pipeline(solid_rectangle_pipeline);
     GPU.fini(*all_params_arena);
-    GPU.destroy_semaphore(resize_semaphore);
     GPU.destroy_texture(draw_texture);
     GPU.fini(*draw_arena);
 }
 
+// Note: I used to signal and wait for a semaphore when resizing, but
+// it does not matter at all.
 resize_callback :: () {
     GPU.destroy_texture(draw_texture);
     GPU.reset(*draw_arena);
@@ -73,12 +73,9 @@ resize_callback :: () {
     draw_ptr_gpu := GPU.host_to_device_pointer(draw_ptr);
     draw_texture = GPU.create_texture(draw_texture_desc, draw_ptr_gpu);
     draw_texture_descriptor_handle = GPU.texture_view_descriptor(draw_texture);
-
-    GPU.signal_semaphore(resize_semaphore, 0);
 }
 
 draw_texture: GPU.Texture;
-resize_semaphore: GPU.Semaphore;
 
 Clear_Data :: struct {
     clear_color: Color;

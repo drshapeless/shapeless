@@ -76,13 +76,10 @@ app_iter :: (appstate: *void) -> SDL_AppResult {
     GPU.barrier(cb, .BLIT, .COMPUTE);
     GPU.copy_texture(cb, swapchain_texture, draw_texture, true);
 
+    GPU.submit_and_present(queue, swapchain_texture, cb);
     if window_resize_requested {
-        GPU.submit_and_present(queue, swapchain_texture, cb, signal = .[.{resize_semaphore, 1}]);
-        GPU.wait_semaphore(resize_semaphore, 1);
         resize_callback();
         window_resize_requested = false;
-    } else {
-        GPU.submit_and_present(queue, swapchain_texture, cb);
     }
 
     return .CONTINUE;
