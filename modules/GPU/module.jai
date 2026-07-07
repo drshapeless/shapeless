@@ -66,14 +66,14 @@
 // load_msl :: (msl: string, entry_points: []string) -> []IR
 
 //// Limitation
-// The proposed descriptor heap model by No Graphics API is not
-// realistic to implement, so many assumptions that limits what we
-// actually can do with the current API(Metal and Vulkan). The closest
-// thing we can get is VK_EXT_descriptor_heap and residencySet in
-// Metal. In fact, the residencySet is a good middle ground to
-// implement descriptor set. In Metal, residencySet with ArgumentTable
-// is a much simpler mind model to understand. Maybe we should imitate
-// it in Vulkan.
+// Metal manages the descriptor heap internally, we have no way to
+// access the raw descriptor blob. We can only rely on
+// gpuResourceID. But it makes the public interface of this module not
+// universal.
+
+//// Thus I make this dummy function, for Metal, it returns the
+//// resourceID, for Vulkan, it returns the inputed index.
+// texture_handle :: (texture: Texture, index: u64) -> u64
 
 Memory_Type :: enum {
     SHARED;
@@ -144,9 +144,10 @@ View_Desc :: struct {
     layer_count: u32 = ALL_LAYERS;
 }
 
-// Texture_Descriptor :: struct {
-//     data: [4]u64;
-// }
+// This is the raw blob of descriptor data, in my AMD gpu, this is 32
+// bytes for a texture descriptor. This is completely useless in
+// Metal.
+Texture_Descriptor :: [4]u64;
 
 Topology :: enum {
     TRIANGLE_LIST;

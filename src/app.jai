@@ -68,9 +68,12 @@ app_iter :: (appstate: *void) -> SDL_AppResult {
     if !ok return .CONTINUE;
 
     cb := GPU.start_command_recording();
+    GPU.set_active_texture_heap(cb, draw_heap);
+    GPU.set_pipeline(cb, clear_pipeline);
     clear_screen(cb, .{0.2, 0.3, 0.4, 1.0});
 
     GPU.barrier(cb, .COMPUTE, .COMPUTE);
+    GPU.set_pipeline(cb, solid_rectangle_pipeline);
     draw_rectangle(cb, .{1.0, 0, 0, 1.0}, .{rect_origin, rect_size});
 
     GPU.barrier(cb, .BLIT, .COMPUTE);

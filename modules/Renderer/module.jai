@@ -41,10 +41,10 @@ init_renderer :: (sdl_window: *SDL_Window) {
         solid_rectangle_params_base_gpu = GPU.host_to_device_pointer(solid_rectangle_params.data);
     }
 
-    texture_heap = GPU.create_texture_heap();
-    view_desc: GPU.View_Desc = .{
-
-    };
+    draw_heap = GPU.create_texture_heap(1);
+    if draw_heap.count > 0 {
+        draw_heap[0] = draw_texture_descriptor;
+    }
 }
 
 deinit_renderer :: () {
@@ -52,6 +52,7 @@ deinit_renderer :: () {
     GPU.destroy_pipeline(solid_rectangle_pipeline);
     GPU.fini(*all_params_arena);
     GPU.destroy_texture(draw_texture);
+    GPU.free(draw_heap.data);
     GPU.fini(*draw_arena);
 }
 
@@ -83,17 +84,21 @@ resize_callback :: () {
     // Create a default descriptor heap
 }
 
+draw_heap: [] GPU.Texture_Descriptor;
+
 draw_texture: GPU.Texture;
+clear_pipeline: GPU.Pipeline;
+solid_rectangle_pipeline: GPU.Pipeline;
 
 Clear_Data :: struct {
     clear_color: Color;
-    texture_index: u32;
+    texture_index: u64;
 }
 
 Solid_Rectangle_Data :: struct {
     color: Color;
     rect:  Rectangle;
-    texture_index: u32;
+    texture_index: u64;
 }
 
 s32x2 :: struct {
@@ -110,10 +115,9 @@ Rectangle :: struct {
 }
 
 clear_screen :: (cb: *GPU.Command_Buffer, clear_color: Color) {
-    GPU.set_pipeline(cb, clear_pipeline);
     i := GPU.current_command_buffer_index();
 
-    clear_params[i].texture_index = 0;
+    clear_params[i].texture_index = GPU.texture_handle(draw_texture, 0);
     clear_params[i].clear_color = clear_color;
 
     threads_size: GPU.u32x3 = .{8, 8, 1};
@@ -124,9 +128,8 @@ clear_screen :: (cb: *GPU.Command_Buffer, clear_color: Color) {
 
 draw_rectangle :: (cb: *GPU.Command_Buffer, color: Color, rect: Rectangle) {
     i := GPU.current_command_buffer_index();
-    GPU.set_pipeline(cb, solid_rectangle_pipeline);
 
-    solid_rectangle_params[i].texture_index = 0;
+    solid_rectangle_params[i].texture_index = GPU.texture_handle(draw_texture, 0);
     solid_rectangle_params[i].color = color;
     solid_rectangle_params[i].rect = rect;
 
@@ -149,18 +152,14 @@ GPU :: #import "GPU";
 
 window: *SDL_Window;
 
-texture_heap: GPU.Texture_Heap;
-
 draw_arena:   GPU.Arena;
 draw_texture_descriptor: GPU.Texture_Descriptor;
 
 window_dimensions: GPU.u32x3;
 
-clear_pipeline: GPU.Pipeline;
 clear_params: [] Clear_Data;
 clear_params_base_gpu: u64;
 
-solid_rectangle_pipeline: GPU.Pipeline;
 solid_rectangle_params: [] Solid_Rectangle_Data;
 solid_rectangle_params_base_gpu: u64;
 
@@ -170,6 +169,7 @@ create_compute_pipeline_from_file :: (shader_path: string) -> GPU.Pipeline {
     shader := read_entire_file(shader_path);
     ir := GPU.load_compute_ir(shader);
     defer GPU.destroy_ir(ir);
+    log("Successfully compile %", shader_path);
     return GPU.create_compute_pipeline(ir);
 }
 

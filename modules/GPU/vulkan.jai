@@ -78,10 +78,6 @@ Texture :: struct {
     image_index: u32; // This is for swapchain image exclusively
 }
 
-// This is the raw blob of descriptor data, in my AMD gpu, this is 32
-// bytes for a texture descriptor
-Texture_Descriptor :: [4]u64;
-
 Pipeline :: struct {
     // At most we can have two shaders in a pipeline
     // For compute shader, only the first is useful
@@ -187,9 +183,7 @@ init :: (window: *SDL_Window = null) {
     physical_device_properties.pNext = *descriptor_heap_properties;
     vkGetPhysicalDeviceProperties2(physical_device, *physical_device_properties);
 
-    if descriptor_heap_properties.minResourceHeapReservedRange != 0 {
-        Basic.log("The minResourceHeapReservedRange is not zero, make sure you have think of it when allocating descriptor heap");
-    }
+    Basic.assert(descriptor_heap_properties.minResourceHeapReservedRange == 0, "The minResourceHeapReservedRange is not zero, if you want to support your gpu, you have to work on the create_texture_heap function");
 
     set_and_binding_mapping.descriptorSet = 0;
     set_and_binding_mapping.firstBinding = 0;
@@ -982,15 +976,32 @@ current_command_buffer_index :: () -> s64 {
 }
 
 // Currently we do not support minResourceHeapReservedRange != 0
-set_active_texture_heap_ptr :: (cb: *Command_Buffer, gpu_ptr: u64, size: u64) {
+set_active_texture_heap :: (cb: *Command_Buffer, texture_heap: [] Texture_Descriptor) {
+    gpu := host_to_device_pointer(texture_heap.data);
     bind_heap_info := VkBindHeapInfoEXT.{
         heapRange = .{
-            address = gpu_ptr,
-            size    = size
+            address = gpu,
+            size    = size_of(Texture_Descriptor) * xx texture_heap.count,
         },
     };
 
     vkCmdBindResourceHeapEXT(cb.vk, *bind_heap_info);
+}
+
+// The reason why we have a dedicated function for creating texture
+// heap than letting users to allocate arbitary buffer is because
+// descriptor heap requires a special buffer flags
+// DESCRIPTOR_HEAP_EXT. Making all memory allocated confront to
+// DESCRIPTOR_HEAP seems to be a bad idea. Also, by making a special
+// function, the Metal implementation can be a dummy function.
+create_texture_heap :: (count: s64) -> [] Texture_Descriptor {
+    allocation := vulkan_allocate(count * size_of(Texture_Descriptor), .SHADER_DEVICE_ADDRESS | .DESCRIPTOR_HEAP_EXT);
+
+    heap: [] Texture_Descriptor;
+    heap.count = count;
+    heap.data = allocation.cpu;
+
+    return heap;
 }
 
 #scope_file

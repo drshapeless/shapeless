@@ -61,13 +61,13 @@ Allocation :: struct {
     buffer: *MTLBuffer;
 }
 
-Texture_Descriptor :: MTLResourceID;
-
 Texture :: struct {
     mtl: *MTLTexture;
     drawable: *MTLDrawable;
     cpu: *void;
     gpu: u64;
+    resource_id: MTLResourceID;
+    dimensions: u32x3;
 };
 
 Pipeline :: struct {
@@ -254,8 +254,8 @@ create_texture :: (desc: Texture_Desc, ptr_gpu: u64) -> Texture {
     texture.gpu = ptr_gpu;
     texture.cpu = allocation.cpu + (ptr_gpu - allocation.gpu);
 
-    w := texture.mtl.width(texture.mtl);
-    h := texture.mtl.height(texture.mtl);
+    texture.resource_id = MTLTexture.gpuResourceID(texture.mtl);
+    texture.dimensions = desc.dimensions;
 
     return texture;
 }
@@ -264,8 +264,13 @@ destroy_texture :: (texture: Texture) {
     release(texture.mtl);
 }
 
-texture_view_descriptor :: (texture: Texture) -> Texture_Descriptor {
-    return MTLTexture.gpuResourceID(texture.mtl);
+texture_view_descriptor :: (texture: Texture, desc: View_Desc) -> Texture_Descriptor {
+    dummy: Texture_Descriptor;
+    return dummy;
+}
+
+texture_handle :: inline (texture: Texture, index: u64) -> u64 {
+    return texture.resource_id._impl;
 }
 
 // texture_view_descriptor :: (texture: Texture, desc: View_Desc) -> Texture_Descriptor {
@@ -758,6 +763,16 @@ command_buffer_count :: () -> s64 {
 current_command_buffer_index :: () -> s64 {
     using context.gpu_context;
     return command_buffer_index;
+}
+
+// This is just a dummy function in Metal, it does nothing.
+set_active_texture_heap :: (cb: *Command_Buffer, texture_heap: [] Texture_Descriptor) {
+
+}
+
+// This is also a dummy function, it returns an empty heap
+create_texture_heap :: (count: s64) -> [] Texture_Descriptor {
+    return .[];
 }
 
 #scope_file
