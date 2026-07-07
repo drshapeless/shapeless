@@ -118,7 +118,7 @@ Texture_Usage :: enum_flags u32 {
 Texture_Desc :: struct {
     type:         Texture_Type = .e2D;
     dimensions:   u32x3;
-    mip_count:    u32 = 0;
+    mip_count:    u32 = 1;
     layer_count:  u32 = 1;
     sample_count: u32 = 1;
     format:       Format;

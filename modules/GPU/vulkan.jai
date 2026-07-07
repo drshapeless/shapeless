@@ -151,13 +151,18 @@ init :: (window: *SDL_Window = null) {
         frames = Basic.NewArray(swapchain.images.count, Frame);
 
         semaphore_create_info: VkSemaphoreCreateInfo;
+        fence_create_info := VkFenceCreateInfo.{
+            flags = .SIGNALED
+        };
+
         for * frame: frames {
             result = check_vk(vkCreateSemaphore(device, *semaphore_create_info, vka, *frame.acquire_semaphore));
             assert_vk_result(result);
             result = check_vk(vkCreateSemaphore(device, *semaphore_create_info, vka, *frame.present_semaphore));
             assert_vk_result(result);
 
-            frame.timeline = create_semaphore(0);
+            result = check_vk(vkCreateFence(device, *fence_create_info, vka, *frame.render_fence));
+            // frame.timeline = create_semaphore(1);
         }
 
         command_buffers = Basic.NewArray(swapchain.images.count, Command_Buffer);
@@ -186,7 +191,7 @@ init :: (window: *SDL_Window = null) {
     Basic.assert(descriptor_heap_properties.minResourceHeapReservedRange == 0, "The minResourceHeapReservedRange is not zero, if you want to support your gpu, you have to work on the create_texture_heap function");
 
     set_and_binding_mapping.descriptorSet = 0;
-    set_and_binding_mapping.firstBinding = 0;
+    set_and_binding_mapping.firstBinding = 2;
     set_and_binding_mapping.bindingCount = 1;
     set_and_binding_mapping.resourceMask = .SAMPLED_IMAGE | .READ_WRITE_IMAGE;
     set_and_binding_mapping.source = .HEAP_WITH_CONSTANT_OFFSET;
@@ -209,6 +214,7 @@ deinit :: () {
     for frames {
         vkDestroySemaphore(device, it.acquire_semaphore, vka);
         vkDestroySemaphore(device, it.present_semaphore, vka);
+        vkDestroyFence(device, it.render_fence, vka);
         destroy_semaphore(it.timeline);
     }
 
@@ -375,7 +381,7 @@ texture_view_descriptor :: (texture: Texture, desc: View_Desc) -> Texture_Descri
     };
 
     resource_descriptor_info := VkResourceDescriptorInfoEXT.{
-        type = .SAMPLED_IMAGE,
+        type = .STORAGE_IMAGE,
     };
     resource_descriptor_info.data.pImage = *image_descriptor_info;
 
@@ -388,6 +394,10 @@ texture_view_descriptor :: (texture: Texture, desc: View_Desc) -> Texture_Descri
     vkWriteResourceDescriptorsEXT(device, 1, *resource_descriptor_info, *host_address_range);
 
     return texture_descriptor;
+}
+
+texture_handle :: inline (texture: Texture, index: u64) -> u64 {
+    return index;
 }
 
 load_spirv :: (spirv: string, entry_points: []string) -> []IR {
@@ -520,9 +530,9 @@ start_command_recording :: () -> *Command_Buffer {
     // resetting the command pool.
     if sdl_window {
         frame := *frames[frame_index];
-        wait_semaphore(frame.timeline, 1, 100000);
+        // wait_semaphore(frame.timeline, 1, 100000);
 
-        signal_semaphore(frame.timeline, 0);
+        // signal_semaphore(frame.timeline, 0);
     }
 
     result = check_vk(vkResetCommandPool(device, cb.pool, 0));
@@ -645,12 +655,14 @@ submit_and_present :: (queue: Queue, swapchain_texture: Texture, command_buffer:
         value = 1,
         stageMask = .ALL_GRAPHICS,
     };
+    Basic.array_add(*signal_infos, signal_present_info);
+
 
     submit_info.signalSemaphoreInfoCount = xx signal_infos.count;
     submit_info.pSignalSemaphoreInfos = signal_infos.data;
 
     result: VkResult;
-    result = check_vk(vkQueueSubmit2(queue.vk, 1, *submit_info, null));
+    result = check_vk(vkQueueSubmit2(queue.vk, 1, *submit_info, frame.render_fence));
     assert_vk_result(result);
 
     present_info := VkPresentInfoKHR.{
@@ -905,6 +917,9 @@ dispatch :: (cb: *Command_Buffer, data_gpu: u64, count: u32) {
 acquire_swapchain_texture :: () -> success:bool, Texture {
     using context.gpu_context;
 
+    frame := frames[frame_index];
+    check_vk(vkWaitForFences(device, 1, *frame.render_fence, VK_TRUE, 10000));
+    check_vk(vkResetFences(device, 1, *frame.render_fence));
     acquire_info := VkAcquireNextImageInfoKHR.{
         swapchain = swapchain.vk,
         timeout = 10000,
@@ -981,7 +996,7 @@ set_active_texture_heap :: (cb: *Command_Buffer, texture_heap: [] Texture_Descri
     bind_heap_info := VkBindHeapInfoEXT.{
         heapRange = .{
             address = gpu,
-            size    = size_of(Texture_Descriptor) * xx texture_heap.count,
+            size    = xx (size_of(Texture_Descriptor) * texture_heap.count),
         },
     };
 
@@ -995,7 +1010,7 @@ set_active_texture_heap :: (cb: *Command_Buffer, texture_heap: [] Texture_Descri
 // DESCRIPTOR_HEAP seems to be a bad idea. Also, by making a special
 // function, the Metal implementation can be a dummy function.
 create_texture_heap :: (count: s64) -> [] Texture_Descriptor {
-    allocation := vulkan_allocate(count * size_of(Texture_Descriptor), .SHADER_DEVICE_ADDRESS | .DESCRIPTOR_HEAP_EXT);
+    allocation := vulkan_allocate(xx (count * size_of(Texture_Descriptor)), .SHADER_DEVICE_ADDRESS | .DESCRIPTOR_HEAP_EXT);
 
     heap: [] Texture_Descriptor;
     heap.count = count;
@@ -1029,6 +1044,8 @@ Swapchain :: struct {
 Frame :: struct {
     acquire_semaphore: VkSemaphore;
     present_semaphore: VkSemaphore;
+
+    render_fence: VkFence;
 
     // Since this is a timeline semaphore, just use my abstraction
     timeline: Semaphore;
