@@ -78,16 +78,9 @@ Texture :: struct {
     image_index: u32; // This is for swapchain image exclusively
 }
 
-Texture_Heap :: struct {
-    allocation: Allocation;
-    size: s64;
-    occupied: s64;
-}
-
-// Calling this texture descriptor is kind of silly, it is the offset
-// from the texture heap buffer, calculated by index *
-// descriptor_heap_properties.imageDescriptorSize
-Texture_Descriptor :: u64;
+// This is the raw blob of descriptor data, in my AMD gpu, this is 32
+// bytes for a texture descriptor
+Texture_Descriptor :: [4]u64;
 
 Pipeline :: struct {
     // At most we can have two shaders in a pipeline
@@ -194,20 +187,9 @@ init :: (window: *SDL_Window = null) {
     physical_device_properties.pNext = *descriptor_heap_properties;
     vkGetPhysicalDeviceProperties2(physical_device, *physical_device_properties);
 
-    // sampled_texture_descriptor_size = vkGetPhysicalDeviceDescriptorSizeEXT(physical_device, .SAMPLED_IMAGE);
-    // storage_texture_descriptor_size = vkGetPhysicalDeviceDescriptorSizeEXT(physical_device, .STORAGE_IMAGE);
-
-    // Basic.log("sampled size: %, storage size: %", sampled_texture_descriptor_size, storage_texture_descriptor_size);
-
-    // This is what the original descriptorheap.cpp by SaschaWillems,
-    // but by my observation, the descriptor size should already be
-    // aligned.
-    texture_descriptor_size := aligned_vk_size(descriptor_heap_properties.imageDescriptorSize, descriptor_heap_properties.imageDescriptorAlignment);
-
-
-    texture_descriptor_heap_size := aligned_vk_size(texture_descriptor_size * 1 + descriptor_heap_properties.minResourceHeapReservedRange, descriptor_heap_properties.resourceHeapAlignment);
-
-    texture_descriptor_heap_allocation := vulkan_allocate(texture_descriptor_heap_size, .SHADER_DEVICE_ADDRESS | .DESCRIPTOR_HEAP_EXT);
+    if descriptor_heap_properties.minResourceHeapReservedRange != 0 {
+        Basic.log("The minResourceHeapReservedRange is not zero, make sure you have think of it when allocating descriptor heap");
+    }
 
     set_and_binding_mapping.descriptorSet = 0;
     set_and_binding_mapping.firstBinding = 0;
@@ -218,8 +200,6 @@ init :: (window: *SDL_Window = null) {
         heapOffset = 0,
         heapArrayStride = xx descriptor_heap_properties.imageDescriptorSize,
     };
-
-
 }
 
 deinit :: () {
@@ -390,9 +370,30 @@ destroy_texture :: (texture: Texture) {
     vkDestroyImage(device, texture.image, vka);
 }
 
-// We have to talk about descriptor heap. This is a very new extension. We first have to
-texture_view_descriptor :: (texture: Texture) -> Texture_Descriptor {
-    return 0;
+// This returns a 32 bytes texture descriptor that can be written in a texture heap
+texture_view_descriptor :: (texture: Texture, desc: View_Desc) -> Texture_Descriptor {
+    using context.gpu_context;
+    image_view_create_info := to_vulkan_image_view_create_info(texture, desc);
+
+    image_descriptor_info := VkImageDescriptorInfoEXT.{
+        pView = *image_view_create_info,
+        layout = .GENERAL,
+    };
+
+    resource_descriptor_info := VkResourceDescriptorInfoEXT.{
+        type = .SAMPLED_IMAGE,
+    };
+    resource_descriptor_info.data.pImage = *image_descriptor_info;
+
+    texture_descriptor: Texture_Descriptor;
+    host_address_range := VkHostAddressRangeEXT.{
+        address = texture_descriptor.data,
+        size = descriptor_heap_properties.imageDescriptorSize,
+    };
+
+    vkWriteResourceDescriptorsEXT(device, 1, *resource_descriptor_info, *host_address_range);
+
+    return texture_descriptor;
 }
 
 load_spirv :: (spirv: string, entry_points: []string) -> []IR {
@@ -980,97 +981,16 @@ current_command_buffer_index :: () -> s64 {
     return command_buffer_index;
 }
 
-create_texture_heap :: (image_count: s64 = 10) -> Texture_Heap {
-    using context.gpu_context;
-
-    heap_size := aligned_vk_size(descriptor_heap_properties.imageDescriptorSize * image_count + descriptor_heap_properties.minResourceHeapReservedRange, descriptor_heap_properties.imageDescriptorAlignment);
-
-    // Here we ignore the gpu_allocator, we allocate new memory.
-    allocation := vulkan_allocate(heap_size, .SHADER_DEVICE_ADDRESS | .DESCRIPTOR_HEAP_EXT);
-
-    heap: Texture_Heap;
-    heap.allocation = allocation;
-    heap.size = image_count;
-    heap.occupied = 0;
-
-    return heap;
-}
-
-// This is kind of stupid
-Texture_And_View_Desc :: struct {
-    texture: Texture;
-    view_desc: View_Desc;
-}
-
-texture_heap_add :: (heap: *Texture_Heap, using texture_and_view: Texture_And_View_Desc) -> u64 {
-    image_view_create_info := to_vulkan_image_view_create_info(texture, view_desc);
-
-    image_descriptor_info := VkImageDescriptorInfoEXT.{
-        pView = *image_view_create_info,
-        layout = .GENERAL,
+// Currently we do not support minResourceHeapReservedRange != 0
+set_active_texture_heap_ptr :: (cb: *Command_Buffer, gpu_ptr: u64, size: u64) {
+    bind_heap_info := VkBindHeapInfoEXT.{
+        heapRange = .{
+            address = gpu_ptr,
+            size    = size
+        },
     };
 
-    resource_descriptor_info := VkResourceDescriptorInfoEXT.{
-        type = .SAMPLED_IMAGE,
-    };
-    resource_descriptor_info.data.pImage = *image_descriptor_info;
-
-    Basic.assert(heap.occupied < heap.size, "The descriptor heap is full, size = %; occupied = %;", heap.size, heap.occupied);
-
-    offset := descriptor_heap_properties.imageDescriptorSize * heap.occupied;
-    host_address_range := VkHostAddressRangeEXT.{
-        address = heap.allocation.cpu + offset,
-        size = descriptor_heap_properties.imageDescriptorSize,
-    };
-
-    using context.gpu_context;
-    vkWriteResourceDescriptorsEXT(device, 1, *resource_descriptor_info, *host_address_range);
-
-    heap.occupied += 1;
-
-    return offset;
-}
-
-texture_heap_add :: (heap: *Texture_Heap, texture_and_views: ..Texture_And_View_Desc) -> u64 {
-    using context.gpu_context;
-
-    push_allocator(Basic.temp);
-    Basic.auto_release_temp();
-    Basic.assert(texture_and_views.count > 0);
-
-    Basic.assert(texture_and_views.count + heap.occupied < heap.size, "The descriptor heap is full, size = %; occupied = %; requested = %;", heap.size, heap.occupied, texture_and_views.count);
-
-    image_view_create_infos := Basic.NewArray(texture_and_views.count, VkImageViewCreateInfo);
-    image_descriptor_infos := Basic.NewArray(texture_and_views.count, VkImageDescriptorInfoEXT);
-    resource_descriptor_infos := Basic.NewArray(texture_and_views.count, VkResourceDescriptorInfoEXT);
-    host_address_ranges := Basic.NewArray(texture_and_views.count, VkHostAddressRangeEXT);
-
-    first_offset := descriptor_heap_properties.imageDescriptorSize * heap.occupied;
-
-    for texture_and_view, i: texture_and_views {
-        using texture_and_view;
-        image_view_create_infos[i] = to_vulkan_image_view_create_info(texture, view_desc);
-        image_descriptor_infos[i] = VkImageDescriptorInfoEXT.{
-            pView = *image_view_create_infos[i],
-            layout = .GENERAL,
-        };
-
-        resource_descriptor_infos[i] = VkResourceDescriptorInfoEXT.{
-            type = .SAMPLED_IMAGE,
-        };
-        resource_descriptor_infos[i].data.pImage = *image_descriptor_infos[i];
-
-        host_address_ranges[i] = VkHostAddressRangeEXT.{
-            address = heap.allocation.cpu + descriptor_heap_properties.imageDescriptorSize * (heap.occupied + i),
-            size = descriptor_heap_properties.imageDescriptorSize,
-        };
-    }
-
-    vkWriteResourceDescriptorsEXT(device, xx texture_and_views.count, resource_descriptor_infos.data, host_address_ranges.data);
-
-    heap.occupied += xx texture_and_views.count;
-
-    return first_offset;
+    vkCmdBindResourceHeapEXT(cb.vk, *bind_heap_info);
 }
 
 #scope_file
@@ -1545,11 +1465,11 @@ to_vulkan_image_view_create_info :: (texture: Texture, desc: View_Desc) -> VkIma
         viewType = to_vulkan_image_view_type(desc.type),
         format = desc.format,
         subresourceRange = VkImageSubresourceRange.{
-            aspectMask = .COLOR,
-            baseMipLevel = xx desc.base_mip,
-            levelCount = xx desc.mip_count,
-            baseArrayLayer = xx desc.base_layer,
-            layerCount = xx desc.layer_count,
+            aspectMask     = .COLOR,
+            baseMipLevel   = desc.base_mip,
+            levelCount     = desc.mip_count,
+            baseArrayLayer = desc.base_layer,
+            layerCount     = desc.layer_count,
         }
     };
 

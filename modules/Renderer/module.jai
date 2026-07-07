@@ -14,7 +14,10 @@ init_renderer :: (sdl_window: *SDL_Window) {
     draw_ptr := GPU.get(*draw_arena, xx draw_size_align.size, xx draw_size_align.align);
     draw_ptr_gpu := GPU.host_to_device_pointer(draw_ptr);
     draw_texture = GPU.create_texture(draw_texture_desc, draw_ptr_gpu);
-    draw_texture_descriptor_handle = GPU.texture_view_descriptor(draw_texture);
+    draw_texture_view_desc: GPU.View_Desc = .{
+        format = .B8G8R8A8_UNORM,
+    };
+    draw_texture_descriptor = GPU.texture_view_descriptor(draw_texture, draw_texture_view_desc);
 
     window_dimensions = .{
         x = xx window_width,
@@ -38,6 +41,10 @@ init_renderer :: (sdl_window: *SDL_Window) {
         solid_rectangle_params_base_gpu = GPU.host_to_device_pointer(solid_rectangle_params.data);
     }
 
+    texture_heap = GPU.create_texture_heap();
+    view_desc: GPU.View_Desc = .{
+
+    };
 }
 
 deinit_renderer :: () {
@@ -72,20 +79,21 @@ resize_callback :: () {
     draw_ptr := GPU.get(*draw_arena, xx draw_size_align.size, xx draw_size_align.align);
     draw_ptr_gpu := GPU.host_to_device_pointer(draw_ptr);
     draw_texture = GPU.create_texture(draw_texture_desc, draw_ptr_gpu);
-    draw_texture_descriptor_handle = GPU.texture_view_descriptor(draw_texture);
+
+    // Create a default descriptor heap
 }
 
 draw_texture: GPU.Texture;
 
 Clear_Data :: struct {
     clear_color: Color;
-    texture:     GPU.Texture_Descriptor;
+    texture_index: u32;
 }
 
 Solid_Rectangle_Data :: struct {
     color: Color;
     rect:  Rectangle;
-    texture_handle: GPU.Texture_Descriptor;
+    texture_index: u32;
 }
 
 s32x2 :: struct {
@@ -105,7 +113,7 @@ clear_screen :: (cb: *GPU.Command_Buffer, clear_color: Color) {
     GPU.set_pipeline(cb, clear_pipeline);
     i := GPU.current_command_buffer_index();
 
-    clear_params[i].texture = draw_texture_descriptor_handle;
+    clear_params[i].texture_index = 0;
     clear_params[i].clear_color = clear_color;
 
     threads_size: GPU.u32x3 = .{8, 8, 1};
@@ -118,7 +126,7 @@ draw_rectangle :: (cb: *GPU.Command_Buffer, color: Color, rect: Rectangle) {
     i := GPU.current_command_buffer_index();
     GPU.set_pipeline(cb, solid_rectangle_pipeline);
 
-    solid_rectangle_params[i].texture_handle = draw_texture_descriptor_handle;
+    solid_rectangle_params[i].texture_index = 0;
     solid_rectangle_params[i].color = color;
     solid_rectangle_params[i].rect = rect;
 
@@ -141,8 +149,10 @@ GPU :: #import "GPU";
 
 window: *SDL_Window;
 
+texture_heap: GPU.Texture_Heap;
+
 draw_arena:   GPU.Arena;
-draw_texture_descriptor_handle: GPU.Texture_Descriptor;
+draw_texture_descriptor: GPU.Texture_Descriptor;
 
 window_dimensions: GPU.u32x3;
 

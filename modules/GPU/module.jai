@@ -130,13 +130,18 @@ Texture_Size_Align :: struct {
     align: u64;
 }
 
+ALL_MIPS: u32 : ~cast(u32)0;
+ALL_LAYERS : u32 : ~cast(u32)0;
+
+// Originally the mips and layers are packed in u8 and u16, but it
+// because a pain to specify ALL_MIPS and ALL_LAYERS in different API
 View_Desc :: struct {
     format:      Format;
-    type:         Texture_Type = .e2D;
-    base_mip:    u8 = 0;
-    mip_count:   u8;
-    base_layer:  u16;
-    layer_count: u16;
+    type:        Texture_Type = .e2D;
+    base_mip:    u32 = 0;
+    mip_count:   u32 = ALL_MIPS;
+    base_layer:  u32 = 0;
+    layer_count: u32 = ALL_LAYERS;
 }
 
 // Texture_Descriptor :: struct {
