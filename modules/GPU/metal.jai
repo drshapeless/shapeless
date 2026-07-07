@@ -741,7 +741,7 @@ barrier :: (cb: *Command_Buffer, before: Stage, after: Stage, hazards: Hazard = 
         encoder = xx cb.compute_encoder;
     }
 
-    MTL4CommandEncoder.barrierAfterEncoderStages_beforeEncoderStages_visibilityOptions_(encoder, to_metal_stages(after), to_metal_stages(before), .Device);
+    MTL4CommandEncoder.barrierAfterEncoderStages_beforeEncoderStages_visibilityOptions_(encoder, to_metal_stages(before), to_metal_stages(after), .Device);
 }
 
 resize_callback :: (width: float64, height: float64) {
