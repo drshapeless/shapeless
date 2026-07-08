@@ -412,6 +412,12 @@ push_allocator :: (proc: Allocator_Proc, data: *void) #expand #no_debug {
     `defer context.gpu_allocator = old_allocator;
 }
 
+array_copy :: (array: [] $T) -> [] T {
+    dest := NewArray(array.count, T, initialized=false);
+    memcpy(dest.data, array.data, array.count * size_of(T));
+    return dest;
+}
+
 Ptr :: u64;
 
 host_to_device_pointer :: (ptr: *void) -> Ptr {
@@ -462,6 +468,19 @@ gpu_pointer_to_allocation :: (ptr: Ptr) -> Allocation {
     Basic.assert(found, "Invalid gpu device pointer");
 
     return allocation;
+}
+
+Array :: struct {
+    gpu_ptr: Ptr;
+    count:   s64;
+}
+
+to_device_array :: (arr: []$T) -> Array {
+    gpu_array: Array;
+    gpu_array.gpu_ptr = host_to_device_pointer(arr.data);
+    gpu_array.count = arr.count;
+
+    return gpu_array;
 }
 
 #if OS == .MACOS {
