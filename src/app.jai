@@ -63,6 +63,11 @@ app_iter :: (appstate: *void) -> SDL_AppResult {
     using state;
 
     if !is_running return .SUCCESS;
+    if window_resize_requested {
+        resize_callback();
+        window_resize_requested = false;
+        return .CONTINUE;
+    }
 
     ok, swapchain_texture := GPU.acquire_swapchain_texture();
     if !ok return .CONTINUE;
@@ -74,17 +79,22 @@ app_iter :: (appstate: *void) -> SDL_AppResult {
 
     GPU.barrier(cb, .COMPUTE, .COMPUTE);
     GPU.set_pipeline(cb, solid_rectangle_pipeline);
-    draw_rectangle(cb, .{1.0, 0, 0, 1.0}, .{rect_origin, rect_size});
+    rect1: Color_Rectangle = .{
+        origin = .{0, 0},
+        size   = .{200, 200},
+        color  = .{0.0, 1.0, 1.0, 1.0},
+    };
+    rect2: Color_Rectangle = .{
+        origin = .{100, 150},
+        size   = .{400, 700},
+        color  = .{0.0, 0.7, 1.0, 1.0},
+    };
+    draw_rectangles(cb, rect2, rect1);
 
     GPU.barrier(cb, .BLIT, .COMPUTE);
     GPU.copy_texture(cb, swapchain_texture, draw_texture, true);
 
     GPU.submit_and_present(queue, swapchain_texture, cb);
-    if window_resize_requested {
-        resize_callback();
-        window_resize_requested = false;
-    }
-
     return .CONTINUE;
 }
 

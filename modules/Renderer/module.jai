@@ -26,7 +26,7 @@ init_renderer :: (sdl_window: *SDL_Window) {
     };
 
     GPU.init(*all_params_arena);
-    params_count := GPU.command_buffer_count();
+    frame_count := GPU.frame_count();
 
     clear_pipeline = create_compute_pipeline_from_file("shaders/clear_texture.slang");
     solid_rectangle_pipeline = create_compute_pipeline_from_file("shaders/solid_rectangle.slang");
@@ -34,11 +34,17 @@ init_renderer :: (sdl_window: *SDL_Window) {
     {
         GPU.push_allocator(GPU.arena_allocator_proc, *all_params_arena);
 
-        clear_params = GPU.NewArray(params_count, Clear_Data);
+        clear_params = GPU.NewArray(frame_count, Clear_Data);
         clear_params_base_gpu = GPU.host_to_device_pointer(clear_params.data);
 
-        solid_rectangle_params = GPU.NewArray(params_count, Solid_Rectangle_Data);
+        solid_rectangle_params = GPU.NewArray(frame_count, Solid_Rectangle_Data);
         solid_rectangle_params_base_gpu = GPU.host_to_device_pointer(solid_rectangle_params.data);
+    }
+
+    frame_arenas = NewArray(frame_count, GPU.Arena);
+
+    for * frame_arenas {
+        GPU.init(it, 32 * 1024 * 1024); // 32 MB per frames
     }
 
     draw_heap = GPU.create_texture_heap(1);
@@ -96,8 +102,7 @@ Clear_Data :: struct {
 }
 
 Solid_Rectangle_Data :: struct {
-    color: Color;
-    rect:  Rectangle;
+    rects: GPU.Array;
     texture_index: u64;
 }
 
@@ -114,8 +119,13 @@ Rectangle :: struct {
     size:   s32x2;
 }
 
+Color_Rectangle :: struct {
+    using rect: Rectangle;
+    color: Color;
+}
+
 clear_screen :: (cb: *GPU.Command_Buffer, clear_color: Color) {
-    i := GPU.current_command_buffer_index();
+    i := GPU.frame_index();
 
     clear_params[i].texture_index = GPU.texture_handle(draw_texture, 0);
     clear_params[i].clear_color = clear_color;
@@ -126,20 +136,19 @@ clear_screen :: (cb: *GPU.Command_Buffer, clear_color: Color) {
     GPU.dispatch(cb, clear_params_base_gpu + cast(u64) (size_of(Clear_Data) * i), group_size, threads_size);
 }
 
-draw_rectangle :: (cb: *GPU.Command_Buffer, color: Color, rect: Rectangle) {
-    i := GPU.current_command_buffer_index();
+// This way of drawing is very much like ray tracing
+draw_rectangles :: (cb: *GPU.Command_Buffer, rects: .. Color_Rectangle) {
+    i := GPU.frame_index();
+
+    GPU.push_allocator(GPU.arena_allocator_proc, *frame_arenas[i]);
+
+    gpu_rects := GPU.array_copy(rects);
 
     solid_rectangle_params[i].texture_index = GPU.texture_handle(draw_texture, 0);
-    solid_rectangle_params[i].color = color;
-    solid_rectangle_params[i].rect = rect;
+    solid_rectangle_params[i].rects = GPU.to_device_array(gpu_rects);
 
-    dimensions: GPU.u32x3 = .{
-        x = cast(u32) rect.size.x,
-        y = cast(u32) rect.size.y,
-        z = 1,
-    };
     threads_size: GPU.u32x3 = .{8, 8, 1};
-    group_size := calculate_group_size(dimensions, threads_size);
+    group_size := calculate_group_size(window_dimensions, threads_size);
 
     GPU.dispatch(cb, solid_rectangle_params_base_gpu + cast(u64) (size_of(Solid_Rectangle_Data) * i), group_size, threads_size);
 }
@@ -164,6 +173,8 @@ solid_rectangle_params: [] Solid_Rectangle_Data;
 solid_rectangle_params_base_gpu: u64;
 
 all_params_arena: GPU.Arena;
+
+frame_arenas: [] GPU.Arena;
 
 create_compute_pipeline_from_file :: (shader_path: string) -> GPU.Pipeline {
     shader := read_entire_file(shader_path);
