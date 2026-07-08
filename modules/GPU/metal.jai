@@ -795,7 +795,7 @@ to_metal_texture_descriptor :: (metal_descriptor: *MTLTextureDescriptor, desc: T
 to_metal_texture_descriptor :: (desc: Texture_Desc) -> *MTLTextureDescriptor {
     metal_desc: *MTLTextureDescriptor;
     if desc.type == .e2D {
-        metal_desc = MTLTextureDescriptor.texture2DDescriptorWithPixelFormat_width_height_mipmapped_(to_metal_format(desc.format), desc.dimensions.x, desc.dimensions.y, xx (desc.mip_count > 0));
+        metal_desc = MTLTextureDescriptor.texture2DDescriptorWithPixelFormat_width_height_mipmapped_(to_metal_format(desc.format), desc.dimensions.x, desc.dimensions.y, xx (desc.mip_count > 1));
         metal_desc.setResourceOptions_(metal_desc, .StorageModeShared);
     } else {
         metal_desc: *MTLTextureDescriptor = objc_new(MTLTextureDescriptor);
