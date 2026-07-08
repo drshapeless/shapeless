@@ -140,20 +140,29 @@ slang_to_spirv :: (shader: string, entry_points: [] string, global_session: *sla
             intValue0 = 1,
         },
     });
-    Basic.array_add(*options, .{
-        name = .Capability,
-        value = .{
-            kind = .String,
-            stringValue0 = "untyped_pointers",
-        },
-    });
-    Basic.array_add(*options, .{
-        name = .Capability,
-        value = .{
-            kind = .String,
-            stringValue0 = "vk_mem_model",
-        },
-    });
+    // Basic.array_add(*options, .{
+    //     name = .Capability,
+    //     value = .{
+    //         kind = .String,
+    //         stringValue0 = "untyped_pointers",
+    //     },
+    // });
+    // Basic.array_add(*options, .{
+    //     name = .Capability,
+    //     value = .{
+    //         kind = .String,
+    //         stringValue0 = "vk_mem_model",
+    //     },
+    // });
+
+    // Maybe we should try to request spvDescriptorHeapEXT capability,
+    // but that makes the shader code ugly and the pass in handle
+    // becomes uint2 instead of plain u64. The only good thing about
+    // that is we can completely discard descriptor layout. Otherwise
+    // we are limited with Default Slang Behavior as described in
+    // https://shader-slang.org/slang/user-guide/convenience-features
+    // In short, the texture descriptor binds in index 2, and sampler
+    // binds in index 0.
 
     target_desc: slang.TargetDesc = .{
         format = .SPIRV,
