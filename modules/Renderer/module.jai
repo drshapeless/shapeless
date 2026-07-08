@@ -4,11 +4,12 @@ init_renderer :: (sdl_window: *SDL_Window) {
     GPU.init(*draw_arena, 32 * 1024 * 1024); // 32MB should be enough for draw texture
     ok, window_width, window_height := SDL_GetWindowSizeInPixels(window);
     assert(ok, "failed to get sdl window size");
-    draw_texture_desc := GPU.Texture_Desc.{
+    draw_texture_desc: GPU.Texture_Desc = .{
         dimensions = .{xx window_width, xx window_height, 1},
         format = .B8G8R8A8_UNORM,
-        usage = .STORAGE | .COLOR_ATTACHMENT,
+        usage = .STORAGE | .COLOR_ATTACHMENT | .TRANSFER_SRC,
     };
+
     draw_size_align := GPU.texture_size_align(draw_texture_desc);
 
     draw_ptr := GPU.get(*draw_arena, xx draw_size_align.size, xx draw_size_align.align);
@@ -65,11 +66,11 @@ deinit_renderer :: () {
 // Note: I used to signal and wait for a semaphore when resizing, but
 // it does not matter at all.
 resize_callback :: () {
-    GPU.destroy_texture(draw_texture);
-    GPU.reset(*draw_arena);
     ok, window_width, window_height := SDL_GetWindowSizeInPixels(window);
     assert(ok, "failed to get sdl window size");
     GPU.resize_callback(xx window_width, xx window_height);
+    GPU.destroy_texture(draw_texture);
+    GPU.reset(*draw_arena);
 
     window_dimensions = .{
         x = xx window_width,
@@ -80,7 +81,7 @@ resize_callback :: () {
     draw_texture_desc := GPU.Texture_Desc.{
         dimensions = .{xx window_width, xx window_height, 1},
         format = .B8G8R8A8_UNORM,
-        usage = .STORAGE | .COLOR_ATTACHMENT,
+        usage = .STORAGE | .COLOR_ATTACHMENT | .TRANSFER_SRC,
     };
     draw_size_align := GPU.texture_size_align(draw_texture_desc);
     draw_ptr := GPU.get(*draw_arena, xx draw_size_align.size, xx draw_size_align.align);

@@ -43,14 +43,30 @@ GPU_Context :: struct {
     slang_global_session: *slang.IGlobalSession;
 
     swapchain:  Swapchain;
+
+    // On the reason why present_semaphores are independent of frames,
+    // starting from Vulkan SDK 1.4.313, present_semaphores is
+    // strictly enforced to be with acquired_image_index instead of
+    // current frame. Yet, no one has told me about that. Back in a
+    // few years when I was learning Vulkan, the god-damn Vulkan
+    // Tutorial is obsolete, (which still uses ancient render pass). I
+    // then moved to vkguide, that knowledge is now obsolete
+    // too. SaschaWillems's latest tutorial is somewhat lacking behind
+    // the latest useful extensions. If you learn Vulkan, you are like
+    // in the middle of an ocean, helpless. AI is somehow useful as
+    // long as you know when it is hallucinating.
+    //     -drshapeless 8 Jul 2026
+
     frames:     []Frame;
-    frame_index: s64 = 0;
+    frame_index: s64;
+    acquired_image_index: u32 = 0;
+    present_semaphores: [] VkSemaphore;
 
     // The command buffer count depends on frame count, if swapchain
     // is not supported, the command buffer count will be
     // DEFAULT_COMMAND_BUFFER_COUNT
     command_buffers: []Command_Buffer;
-    #overlay (frame_index) command_buffer_index: s64;
+    command_buffer_index: s64;
 
     descriptor_heap_properties: VkPhysicalDeviceDescriptorHeapPropertiesEXT;
 
@@ -75,7 +91,6 @@ Texture :: struct {
     format: VkFormat;
     extent: VkExtent3D;
     gpu: Ptr;
-    image_index: u32; // This is for swapchain image exclusively
 }
 
 Pipeline :: struct {
@@ -158,11 +173,15 @@ init :: (window: *SDL_Window = null) {
         for * frame: frames {
             result = check_vk(vkCreateSemaphore(device, *semaphore_create_info, vka, *frame.acquire_semaphore));
             assert_vk_result(result);
-            result = check_vk(vkCreateSemaphore(device, *semaphore_create_info, vka, *frame.present_semaphore));
-            assert_vk_result(result);
 
             result = check_vk(vkCreateFence(device, *fence_create_info, vka, *frame.render_fence));
-            // frame.timeline = create_semaphore(1);
+            assert_vk_result(result);
+        }
+
+        present_semaphores = Basic.NewArray(swapchain.images.count, VkSemaphore);
+        for * present_semaphore: present_semaphores {
+            result = check_vk(vkCreateSemaphore(device, *semaphore_create_info, vka, present_semaphore));
+            assert_vk_result(result);
         }
 
         command_buffers = Basic.NewArray(swapchain.images.count, Command_Buffer);
@@ -213,9 +232,11 @@ deinit :: () {
 
     for frames {
         vkDestroySemaphore(device, it.acquire_semaphore, vka);
-        vkDestroySemaphore(device, it.present_semaphore, vka);
         vkDestroyFence(device, it.render_fence, vka);
-        destroy_semaphore(it.timeline);
+    }
+
+    for present_semaphores {
+        vkDestroySemaphore(device, it, vka);
     }
 
     for command_buffers {
@@ -351,6 +372,7 @@ create_texture :: (desc: Texture_Desc, ptr_gpu: Ptr) -> Texture {
 
     allocation := gpu_pointer_to_allocation(ptr_gpu);
     image_create_info := to_vulkan_image_create_info(desc);
+
     texture: Texture;
     texture.format = desc.format;
     texture.extent = cast,force(VkExtent3D) desc.dimensions;
@@ -361,6 +383,21 @@ create_texture :: (desc: Texture_Desc, ptr_gpu: Ptr) -> Texture {
 
     result = check_vk(vkBindImageMemory(device, texture.image, allocation.memory, ptr_gpu - allocation.gpu));
     assert_vk_result(result);
+
+    transition_info := VkHostImageLayoutTransitionInfo.{
+        image = texture.image,
+        oldLayout = .UNDEFINED,
+        newLayout = .GENERAL,
+        subresourceRange = .{
+            aspectMask   = .COLOR,
+            baseMipLevel   = 0,
+            levelCount     = VK_REMAINING_MIP_LEVELS,
+            baseArrayLayer = 0,
+            layerCount     = VK_REMAINING_ARRAY_LAYERS
+        }
+    };
+
+    vkTransitionImageLayout(device, 1, *transition_info);
 
     return texture;
 }
@@ -525,16 +562,6 @@ start_command_recording :: () -> *Command_Buffer {
     result: VkResult;
     cb := *command_buffers[command_buffer_index];
 
-    // Here we do a very weird thing, if the gpu context has swapchain
-    // support, we will wait for the timeline semaphore before
-    // resetting the command pool.
-    if sdl_window {
-        frame := *frames[frame_index];
-        // wait_semaphore(frame.timeline, 1, 100000);
-
-        // signal_semaphore(frame.timeline, 0);
-    }
-
     result = check_vk(vkResetCommandPool(device, cb.pool, 0));
     assert_vk_result(result);
 
@@ -551,6 +578,30 @@ start_command_recording :: () -> *Command_Buffer {
     };
     result = vkBeginCommandBuffer(cb.vk, *begin_info);
     assert_vk_result(result);
+
+    if sdl_window {
+        swapchain_image_barrier := VkImageMemoryBarrier2.{
+            srcStageMask     = .ALL_COMMANDS,
+            srcAccessMask    = .MEMORY_WRITE,
+            dstStageMask     = .ALL_COMMANDS,
+            dstAccessMask    = .MEMORY_WRITE | .MEMORY_READ,
+            oldLayout        = .UNDEFINED,
+            newLayout        = .GENERAL,
+            image            = swapchain.images[acquired_image_index],
+            subresourceRange = .{
+                aspectMask   = .COLOR,
+                baseMipLevel   = 0,
+                levelCount     = VK_REMAINING_MIP_LEVELS,
+                baseArrayLayer = 0,
+                layerCount     = VK_REMAINING_ARRAY_LAYERS
+            }
+        };
+        dependency_info := VkDependencyInfo.{
+            imageMemoryBarrierCount = 1,
+            pImageMemoryBarriers    = *swapchain_image_barrier,
+        };
+        vkCmdPipelineBarrier2(cb.vk, *dependency_info);
+    }
     return cb;
 }
 
@@ -608,6 +659,30 @@ submit_and_present :: (queue: Queue, swapchain_texture: Texture, command_buffer:
 
     frame := frames[frame_index];
 
+    present_image_barrier := VkImageMemoryBarrier2.{
+        srcStageMask     = .ALL_COMMANDS,
+        srcAccessMask    = .MEMORY_WRITE,
+        dstStageMask     = .ALL_COMMANDS,
+        dstAccessMask    = .MEMORY_WRITE | .MEMORY_READ,
+        oldLayout        = .GENERAL,
+        newLayout        = .PRESENT_SRC_KHR,
+        image            = swapchain_texture.image,
+        subresourceRange = .{
+            aspectMask   = .COLOR,
+            baseMipLevel   = 0,
+            levelCount     = VK_REMAINING_MIP_LEVELS,
+            baseArrayLayer = 0,
+            layerCount     = VK_REMAINING_ARRAY_LAYERS
+        }
+
+    };
+    present_barrier_info := VkDependencyInfo.{
+        imageMemoryBarrierCount = 1,
+        pImageMemoryBarriers    = *present_image_barrier
+    };
+
+    vkCmdPipelineBarrier2(command_buffer.vk, *present_barrier_info);
+
     command_buffer_submit_info: VkCommandBufferSubmitInfo;
 
     vkEndCommandBuffer(command_buffer.vk);
@@ -651,12 +726,11 @@ submit_and_present :: (queue: Queue, swapchain_texture: Texture, command_buffer:
     }
 
     signal_present_info := VkSemaphoreSubmitInfo.{
-        semaphore = frame.present_semaphore,
+        semaphore = present_semaphores[acquired_image_index],
         value = 1,
         stageMask = .ALL_GRAPHICS,
     };
     Basic.array_add(*signal_infos, signal_present_info);
-
 
     submit_info.signalSemaphoreInfoCount = xx signal_infos.count;
     submit_info.pSignalSemaphoreInfos = signal_infos.data;
@@ -667,10 +741,10 @@ submit_and_present :: (queue: Queue, swapchain_texture: Texture, command_buffer:
 
     present_info := VkPresentInfoKHR.{
         waitSemaphoreCount = 1,
-        pWaitSemaphores = *frame.present_semaphore,
+        pWaitSemaphores = *present_semaphores[acquired_image_index],
         swapchainCount = 1,
         pSwapchains = *swapchain.vk,
-        pImageIndices = *swapchain_texture.image_index,
+        pImageIndices = *acquired_image_index,
     };
 
     result = vkQueuePresentKHR(queue.vk, *present_info);
@@ -686,7 +760,8 @@ submit_and_present :: (queue: Queue, swapchain_texture: Texture, command_buffer:
         return;
     }
 
-    frame_index = (frame_index + 1) % xx swapchain.images.count;
+    frame_index = (frame_index + 1) % xx frames.count;
+    command_buffer_index = (command_buffer_index + 1) % xx command_buffers.count;
 }
 
 memcpy :: (cb: *Command_Buffer, dst: Ptr, src: Ptr, size: u64) {
@@ -923,22 +998,25 @@ acquire_swapchain_texture :: () -> success:bool, Texture {
     acquire_info := VkAcquireNextImageInfoKHR.{
         swapchain = swapchain.vk,
         timeout = 10000,
-        semaphore = frames[frame_index].acquire_semaphore,
+        semaphore = frame.acquire_semaphore,
         fence = null,
         deviceMask = 1, // I still do not understand what deviceMask is
     };
 
     result: VkResult;
-    image_index: u32;
-    result = vkAcquireNextImage2KHR(device, *acquire_info, *image_index);
-    if result != .SUCCESS || result != .SUBOPTIMAL_KHR {
+    result = vkAcquireNextImage2KHR(device, *acquire_info, *acquired_image_index);
+    if result != .SUCCESS && result != .SUBOPTIMAL_KHR {
         return false, .{};
     }
 
-    current_image := swapchain.images[image_index];
+    current_image := swapchain.images[acquired_image_index];
     texture: Texture;
     texture.image = current_image;
-    texture.image_index = image_index;
+    texture.extent = .{
+        width = swapchain.extent.width,
+        height = swapchain.extent.height,
+        depth = 1,
+    };
 
     return true, texture;
 }
@@ -959,7 +1037,7 @@ end_render_pass :: (cb: *Command_Buffer) {
 resize_callback :: (window_width: s32, window_height: s32) {
     using context.gpu_context;
     // Recreate swapchain here
-
+    vkDeviceWaitIdle(device);
     vkDestroySwapchainKHR(device, swapchain.vk, vka);
     Basic.array_free(swapchain.images);
 
@@ -1043,12 +1121,9 @@ Swapchain :: struct {
 
 Frame :: struct {
     acquire_semaphore: VkSemaphore;
-    present_semaphore: VkSemaphore;
 
     render_fence: VkFence;
 
-    // Since this is a timeline semaphore, just use my abstraction
-    timeline: Semaphore;
 }
 
 VALIDATION_LAYERS :: (*u8).["VK_LAYER_KHRONOS_validation"];
@@ -1350,6 +1425,7 @@ make_device :: (device_extensions: [] *u8) -> VkResult, VkDevice {
     chain = *features_shader_object;
     features14 := VkPhysicalDeviceVulkan14Features.{
         pNext = chain,
+        hostImageCopy = VK_TRUE,
         maintenance5 = VK_TRUE,
     };
     chain = *features14;
@@ -1479,7 +1555,7 @@ to_vulkan_image_create_info :: (desc: Texture_Desc) -> VkImageCreateInfo {
         arrayLayers = desc.layer_count,
         samples = to_vulkan_sample_count(desc.sample_count),
         tiling = .OPTIMAL,
-        usage = to_vulkan_image_usage(desc.usage),
+        usage = to_vulkan_image_usage(desc.usage) | .HOST_TRANSFER,
         sharingMode = .EXCLUSIVE,
         initialLayout = .UNDEFINED,
     };
