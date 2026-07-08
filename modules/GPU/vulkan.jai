@@ -1052,6 +1052,7 @@ resize_callback :: (window_width: s32, window_height: s32) {
     result: VkResult;
     result = check_vk(vkCreateSwapchainKHR(device, *swapchain.create_info, vka, *swapchain.vk));
     assert_vk_result(result);
+    swapchain.extent = swapchain_extent;
 
     result, swapchain.images = vkGetSwapchainImagesKHR(device, swapchain.vk);
     assert_vk_result(result);

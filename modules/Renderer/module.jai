@@ -57,6 +57,9 @@ init_renderer :: (sdl_window: *SDL_Window) {
 deinit_renderer :: () {
     GPU.destroy_pipeline(clear_pipeline);
     GPU.destroy_pipeline(solid_rectangle_pipeline);
+    for * frame_arenas {
+        GPU.fini(it);
+    }
     GPU.fini(*all_params_arena);
     GPU.destroy_texture(draw_texture);
     GPU.free(draw_heap.data);
@@ -87,6 +90,11 @@ resize_callback :: () {
     draw_ptr := GPU.get(*draw_arena, xx draw_size_align.size, xx draw_size_align.align);
     draw_ptr_gpu := GPU.host_to_device_pointer(draw_ptr);
     draw_texture = GPU.create_texture(draw_texture_desc, draw_ptr_gpu);
+    draw_texture_view_desc: GPU.View_Desc = .{
+        format = .B8G8R8A8_UNORM,
+    };
+    draw_texture_descriptor = GPU.texture_view_descriptor(draw_texture, draw_texture_view_desc);
+    draw_heap[0] = draw_texture_descriptor;
 
     // Create a default descriptor heap
 }
