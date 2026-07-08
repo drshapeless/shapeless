@@ -755,12 +755,14 @@ resize_callback :: (width: float64, height: float64) {
     CAMetalLayer.setDrawableSize_(layer, .{width, height});
 }
 
-command_buffer_count :: () -> s64 {
+// Yes, although this is call frame count, what we care about it the
+// command buffer count.
+frame_count :: () -> s64 {
     using context.gpu_context;
     return command_buffers.count;
 }
 
-current_command_buffer_index :: () -> s64 {
+frame_index :: () -> s64 {
     using context.gpu_context;
     return command_buffer_index;
 }
