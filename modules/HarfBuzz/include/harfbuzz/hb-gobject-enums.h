@@ -73,6 +73,9 @@ HB_EXTERN GType
 hb_gobject_direction_get_type (void) G_GNUC_CONST;
 #define HB_GOBJECT_TYPE_DIRECTION (hb_gobject_direction_get_type ())
 HB_EXTERN GType
+hb_gobject_draw_line_cap_get_type (void) G_GNUC_CONST;
+#define HB_GOBJECT_TYPE_DRAW_LINE_CAP (hb_gobject_draw_line_cap_get_type ())
+HB_EXTERN GType
 hb_gobject_ot_color_palette_flags_get_type (void) G_GNUC_CONST;
 #define HB_GOBJECT_TYPE_OT_COLOR_PALETTE_FLAGS (hb_gobject_ot_color_palette_flags_get_type ())
 HB_EXTERN GType

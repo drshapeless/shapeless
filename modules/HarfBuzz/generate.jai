@@ -21,8 +21,8 @@ do_copy_libraries :: true;
 }
 
 update_headers :: () {
-    delete_directory("include/HarfBuzz");
-    make_directory_if_it_does_not_exist("include/HarfBuzz");
+    delete_directory("include/harfbuzz");
+    make_directory_if_it_does_not_exist("include/harfbuzz");
 
     prefix: string;
     #if OS == .MACOS {
@@ -31,7 +31,7 @@ update_headers :: () {
         prefix = "/usr/include";
     }
 
-    copy_directory(tprint("%/HarfBuzz", prefix), "include/HarfBuzz");
+    copy_directory(tprint("%/harfbuzz", prefix), "include/harfbuzz");
 }
 
 copy_dynamic_libraries :: () {
