@@ -38,7 +38,7 @@ GPU_Context :: struct {
     main_queue:           VkQueue;
 
     cpu_pointer_table: Table(*void, Allocation);
-    gpu_pointer_table: Table(u64, Allocation);
+    gpu_pointer_table: Table(Ptr, Allocation);
 
     slang_global_session: *slang.IGlobalSession;
 
@@ -61,7 +61,7 @@ GPU_Context :: struct {
 
 Allocation :: struct {
     cpu:    *void;
-    gpu:    u64;
+    gpu:    Ptr;
     size:   u64;
 
     // The following fields are implementation specific
@@ -74,7 +74,7 @@ Texture :: struct {
     image: VkImage;
     format: VkFormat;
     extent: VkExtent3D;
-    gpu: u64;
+    gpu: Ptr;
     image_index: u32; // This is for swapchain image exclusively
 }
 
@@ -346,7 +346,7 @@ texture_size_align :: (desc: Texture_Desc) -> Texture_Size_Align {
     return size_align;
 }
 
-create_texture :: (desc: Texture_Desc, ptr_gpu: u64) -> Texture {
+create_texture :: (desc: Texture_Desc, ptr_gpu: Ptr) -> Texture {
     using context.gpu_context;
 
     allocation := gpu_pointer_to_allocation(ptr_gpu);
@@ -689,7 +689,7 @@ submit_and_present :: (queue: Queue, swapchain_texture: Texture, command_buffer:
     frame_index = (frame_index + 1) % xx swapchain.images.count;
 }
 
-memcpy :: (cb: *Command_Buffer, dst: u64, src: u64, size: u64) {
+memcpy :: (cb: *Command_Buffer, dst: Ptr, src: Ptr, size: u64) {
     using context.gpu_context;
 
     dst_allocation := gpu_pointer_to_allocation(dst);
@@ -711,7 +711,7 @@ memcpy :: (cb: *Command_Buffer, dst: u64, src: u64, size: u64) {
     vkCmdCopyBuffer2(cb.vk, *copy_info);
 }
 
-copy_to_texture :: (cb: *Command_Buffer, dst: Texture, src: u64) {
+copy_to_texture :: (cb: *Command_Buffer, dst: Texture, src: Ptr) {
     src_allocation := gpu_pointer_to_allocation(src);
 
     region := VkBufferImageCopy2.{
@@ -739,7 +739,7 @@ copy_to_texture :: (cb: *Command_Buffer, dst: Texture, src: u64) {
     vkCmdCopyBufferToImage2(cb.vk, *info);
 }
 
-copy_from_texture :: (cb: *Command_Buffer, dst: u64, src: Texture) {
+copy_from_texture :: (cb: *Command_Buffer, dst: Ptr, src: Texture) {
     dst_allocation := gpu_pointer_to_allocation(dst);
 
     region := VkBufferImageCopy2.{
@@ -896,7 +896,7 @@ set_pipeline :: (cb: *Command_Buffer, pipeline: Pipeline) {
 }
 
 // Threads is ignored in Vulkan, they can only be set in shader.
-dispatch :: (cb: *Command_Buffer, data_gpu: u64, groups: u32x3, threads: u32x3) {
+dispatch :: (cb: *Command_Buffer, data_gpu: Ptr, groups: u32x3, threads: u32x3) {
     // We no longer use push constants.
     range := VkHostAddressRangeConstEXT.{
         address = *data_gpu,
@@ -910,7 +910,7 @@ dispatch :: (cb: *Command_Buffer, data_gpu: u64, groups: u32x3, threads: u32x3) 
     vkCmdDispatch(cb, groups.x, groups.y, groups.z);
 }
 
-dispatch :: (cb: *Command_Buffer, data_gpu: u64, count: u32) {
+dispatch :: (cb: *Command_Buffer, data_gpu: Ptr, count: u32) {
     dispatch(cb, data_gpu, .{count, 1, 1}, .{256, 1, 1});
 }
 

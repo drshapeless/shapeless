@@ -33,7 +33,7 @@ GPU_Context :: struct {
     // Useful for checking size and alignment.
     temp_texture_descriptor: *MTLTextureDescriptor;
     cpu_pointer_table:       Table(*void, Allocation);
-    gpu_pointer_table:       Table(u64, Allocation);
+    gpu_pointer_table:       Table(Ptr, Allocation);
 
     argument_table_descriptor: *MTL4ArgumentTableDescriptor;
     argument_table:            *MTL4ArgumentTable;
@@ -56,7 +56,7 @@ GPU_Context :: struct {
 
 Allocation :: struct {
     cpu:    *void;
-    gpu:    u64;
+    gpu:    Ptr;
     size:   u64;
     buffer: *MTLBuffer;
 }
@@ -65,7 +65,7 @@ Texture :: struct {
     mtl: *MTLTexture;
     drawable: *MTLDrawable;
     cpu: *void;
-    gpu: u64;
+    gpu: Ptr;
     resource_id: MTLResourceID;
     dimensions: u32x3;
 };
@@ -240,7 +240,7 @@ texture_size_align :: (desc: Texture_Desc) -> Texture_Size_Align {
     return .{size = metal_size_align.size, align = metal_size_align.align};
 }
 
-create_texture :: (desc: Texture_Desc, ptr_gpu: u64) -> Texture {
+create_texture :: (desc: Texture_Desc, ptr_gpu: Ptr) -> Texture {
     using context.gpu_context;
     metal_desc := to_metal_texture_descriptor(desc);
     defer release(metal_desc);
@@ -601,7 +601,7 @@ signal_semaphore :: (sema: Semaphore, value: u64) {
     MTLSharedEvent.setSignaledValue_(sema.shared_event, value);
 }
 
-memcpy :: (cb: *Command_Buffer, dest: u64, src: u64, size: s64) {
+memcpy :: (cb: *Command_Buffer, dest: Ptr, src: Ptr, size: s64) {
     using context.gpu_context;
 
     create_compute_encoder_and_maybe_end_render_encoder(cb);
@@ -615,7 +615,7 @@ memcpy :: (cb: *Command_Buffer, dest: u64, src: u64, size: s64) {
 // The original API is
 // void gpuCopyToTexture(GpuCommandBuffer cb, void* destGpu, void* srcGpu, GpuTexture texture);
 // But I scratch my head to find the value of the bytes_per_row and source size, maybe those thing can be calculated from the texture...
-copy_to_texture :: (cb: *Command_Buffer, dest: Texture, src: u64) {
+copy_to_texture :: (cb: *Command_Buffer, dest: Texture, src: Ptr) {
     maybe_create_compute_encoder(cb);
     src_allocation := gpu_pointer_to_allocation(src);
 
@@ -629,7 +629,7 @@ copy_to_texture :: (cb: *Command_Buffer, dest: Texture, src: u64) {
     MTL4ComputeCommandEncoder.copyFromBuffer_sourceOffset_sourceBytesPerRow_sourceBytesPerImage_sourceSize_toTexture_destinationSlice_destinationLevel_destinationOrigin_(cb.compute_encoder, src_allocation.buffer, src - src_allocation.gpu, bytes_per_row, 0, src_size, dest.mtl, 0, 1, .{0, 0, 0});
 }
 
-copy_from_texture :: (cb: *Command_Buffer, dest: u64, src: Texture) {
+copy_from_texture :: (cb: *Command_Buffer, dest: Ptr, src: Texture) {
     maybe_create_compute_encoder(cb);
 
     src_size := MTLSize.{
@@ -676,7 +676,7 @@ set_pipeline :: (cb: *Command_Buffer, pipeline: Pipeline) {
     }
 }
 
-dispatch :: (cb: *Command_Buffer, data_gpu: u64, groups: u32x3, threads: u32x3) {
+dispatch :: (cb: *Command_Buffer, data_gpu: Ptr, groups: u32x3, threads: u32x3) {
     using context.gpu_context;
 
     ptr_cpu, ptr_gpu := get_next_pointer_from_argument_ring_buffer();
@@ -702,7 +702,7 @@ dispatch :: (cb: *Command_Buffer, data_gpu: u64, groups: u32x3, threads: u32x3) 
 
 // This is a handy function for dispatching 1D array of 256 threads
 // per group
-dispatch :: (cb: *Command_Buffer, data_gpu: u64, count: u32) {
+dispatch :: (cb: *Command_Buffer, data_gpu: Ptr, count: u32) {
     // 256 is hardcoded.
     dispatch(cb, data_gpu, .{count, 1, 1}, .{256, 1, 1});
 }
@@ -1240,11 +1240,11 @@ metal_texture_size :: (metal_texture: *MTLTexture) -> MTLSize {
     };
 }
 
-get_next_pointer_from_argument_ring_buffer :: () -> cpu:*void, gpu:u64 {
+get_next_pointer_from_argument_ring_buffer :: () -> cpu:*void, gpu:Ptr {
     using context.gpu_context;
 
     cpu: *void = argument_ring_buffer.cpu;
-    gpu: u64 = argument_ring_buffer.gpu;
+    gpu: Ptr = argument_ring_buffer.gpu;
     if current_argument_ring_buffer_position < argument_ring_buffer.size {
         cpu += current_argument_ring_buffer_position;
         gpu += current_argument_ring_buffer_position;

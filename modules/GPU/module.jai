@@ -412,7 +412,9 @@ push_allocator :: (proc: Allocator_Proc, data: *void) #expand #no_debug {
     `defer context.gpu_allocator = old_allocator;
 }
 
-host_to_device_pointer :: (ptr: *void) -> u64 {
+Ptr :: u64;
+
+host_to_device_pointer :: (ptr: *void) -> Ptr {
     using context.gpu_context;
 
     allocation: Allocation;
@@ -446,7 +448,7 @@ cpu_pointer_to_allocation :: (ptr: *void) -> Allocation {
     return allocation;
 }
 
-gpu_pointer_to_allocation :: (ptr: u64) -> Allocation {
+gpu_pointer_to_allocation :: (ptr: Ptr) -> Allocation {
     using context.gpu_context;
 
     allocation: Allocation;
