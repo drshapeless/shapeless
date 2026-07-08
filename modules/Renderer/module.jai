@@ -153,6 +153,8 @@ draw_rectangles :: (cb: *GPU.Command_Buffer, rects: .. Color_Rectangle) {
     GPU.dispatch(cb, solid_rectangle_params_base_gpu + cast(u64) (size_of(Solid_Rectangle_Data) * i), group_size, threads_size);
 }
 
+#load "font.jai";
+
 #scope_file
 GPU :: #import "GPU";
 #import "Basic";
