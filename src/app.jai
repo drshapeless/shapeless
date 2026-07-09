@@ -72,7 +72,11 @@ app_iter :: (appstate: *void) -> SDL_AppResult {
     ok, swapchain_texture := GPU.acquire_swapchain_texture();
     if !ok return .CONTINUE;
 
+    i := GPU.frame_index();
+    GPU.reset(*frame_arenas[i]);
+
     cb := GPU.start_command_recording();
+
     GPU.set_active_texture_heap(cb, draw_heap);
     GPU.set_pipeline(cb, clear_pipeline);
     clear_screen(cb, .{0.2, 0.3, 0.4, 1.0});

@@ -149,10 +149,14 @@ View_Desc :: struct {
 // Metal.
 Texture_Descriptor :: [4]u64;
 
+// Topology is copied from VkPrimitiveTopology.
 Topology :: enum {
-    TRIANGLE_LIST;
-    TRIANGLE_STRIP;
-    TRIANGLE_FAN;
+    POINT_LIST     :: 0;
+    LINE_LIST      :: 1;
+    LINE_STRIP     :: 2;
+    TRIANGLE_LIST  :: 3;
+    TRIANGLE_STRIP :: 4;
+    TRIANGLE_FAN   :: 5;
 }
 
 Cull :: enum {

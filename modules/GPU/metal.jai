@@ -27,7 +27,7 @@ GPU_Context :: struct {
 
     command_buffer_index:= 0;
 
-    spirv_cross_context:    spvc_context;
+    // spirv_cross_context:    spvc_context;
     slang_global_session: *slang.IGlobalSession;
 
     // Useful for checking size and alignment.
@@ -37,6 +37,9 @@ GPU_Context :: struct {
 
     argument_table_descriptor: *MTL4ArgumentTableDescriptor;
     argument_table:            *MTL4ArgumentTable;
+
+    #overlay (argument_table) vertex_argument_table: *MTL4ArgumentTable;
+    fragment_argument_table: *MTL4ArgumentTable;
 
     // The use this ring buffer as the backing buffer of passing a
     // pointer to shader. Before Metal 4, the compute encoder used to
@@ -138,10 +141,11 @@ init :: (window: *SDL_Window = null) {
     argument_table_descriptor = objc_new(MTL4ArgumentTableDescriptor);
     MTL4ArgumentTableDescriptor.setMaxBufferBindCount_(argument_table_descriptor, 1);
     argument_table = MTLDevice.newArgumentTableWithDescriptor_error_(device, argument_table_descriptor, *error);
+    fragment_argument_table = MTLDevice.newArgumentTableWithDescriptor_error_(device, argument_table_descriptor, *error);
     assert_metal(error);
 
-    spv_result := spvc_context_create(*spirv_cross_context);
-    assert_spvc(spv_result);
+    // spv_result := spvc_context_create(*spirv_cross_context);
+    // assert_spvc(spv_result);
 
     slang_result := slang.slang_createGlobalSession(slang.SLANG_API_VERSION, *slang_global_session);
     Basic.assert(!slang.SLANG_FAILED(slang_result));
@@ -177,9 +181,12 @@ deinit :: () {
         slang.ISlangUnknown_release(xx slang_global_session);
     }
 
-    if spirv_cross_context {
-        spvc_context_destroy(spirv_cross_context);
-    }
+    // if spirv_cross_context {
+    //     spvc_context_destroy(spirv_cross_context);
+    // }
+
+    release(argument_table);
+    release(fragment_argument_table);
     metal_deallocate(argument_ring_buffer);
     SDL_Metal_DestroyView(view);
     release(compiler);
@@ -273,24 +280,6 @@ texture_handle :: inline (texture: Texture, index: u64) -> u64 {
     return texture.resource_id._impl;
 }
 
-// texture_view_descriptor :: (texture: Texture, desc: View_Desc) -> Texture_Descriptor {
-//     // This is so weird, view desc does not state the type
-//     type := MTLTexture.textureType(texture);
-//     view := MTLTexture.newTextureViewWithPixelFormat_textureType_levels_slices_(texture, to_metal_format(desc.format), type, .{desc.base_mip, desc.mip_count}, .{desc.base_layer, desc.layer_count});
-
-//     gpu_handle := MTLTexture.gpuResourceID(view);
-//     descriptor: Texture_Descriptor;
-//     memcpy(*descriptor, *gpu_handle, size_of(gpu_handle));
-
-//     return descriptor;
-// }
-
-// // TODO: WTF is this, I have no idea why we need to have a rw version,
-// // now it just call the same thing.
-// rw_texture_view_descriptor :: (texture: Texture, desc: View_Desc) -> Texture_Descriptor {
-//     return texture_view_descriptor(texture, desc);
-// }
-
 load_msl :: (msl: string, entry_points: []string) -> []IR {
     using context.gpu_context;
     compile_options: *MTLCompileOptions = objc_new(MTLCompileOptions);
@@ -321,14 +310,14 @@ load_msl :: (msl: string, entry_points: []string) -> []IR {
 // I do not recommend anyone to use spirv in Metal shader, not
 // everything can be translated to metal. If you have slang shader
 // code, use that instead.
-load_spirv :: (spirv: string, entry_points: []string) -> []IR {
-    using context.gpu_context;
+// load_spirv :: (spirv: string, entry_points: []string) -> []IR {
+//     using context.gpu_context;
 
-    shader_string := spirv_to_metal(spirv, spirv_cross_context);
-    defer spvc_context_release_allocations(spirv_cross_context);
+//     shader_string := spirv_to_metal(spirv, spirv_cross_context);
+//     defer spvc_context_release_allocations(spirv_cross_context);
 
-    return load_msl(shader_string, entry_points);
-}
+//     return load_msl(shader_string, entry_points);
+// }
 
 load_slang :: (shader: string, entry_points: []string) -> []IR {
     metal_code := slang_to_metal(shader, entry_points, context.gpu_context.slang_global_session);
@@ -361,8 +350,13 @@ create_graphics_pipeline :: (vertex_ir: IR, fragment_ir: IR, desc: Raster_Desc) 
     render_pipeline_desc := objc_new(MTL4RenderPipelineDescriptor);
     defer release(render_pipeline_desc);
 
-    MTL4RenderPipelineDescriptor.setVertexFunctionDescriptor_(render_pipeline_desc, vertex_ir.library_function_descriptor);
-    MTL4RenderPipelineDescriptor.setFragmentFunctionDescriptor_(render_pipeline_desc, fragment_ir.library_function_descriptor);
+    Basic.log("render pipeline: %", render_pipeline_desc);
+
+    Basic.assert(vertex_ir.library_function_descriptor != null, "The vertex ir function is null");
+    Basic.log("vertex ir: %", vertex_ir.library_function_descriptor);
+
+    MTL4RenderPipelineDescriptor.setVertexFunctionDescriptor_(render_pipeline_desc, xx vertex_ir.library_function_descriptor);
+    MTL4RenderPipelineDescriptor.setFragmentFunctionDescriptor_(render_pipeline_desc, xx fragment_ir.library_function_descriptor);
 
     // More settings here
     MTL4RenderPipelineDescriptor.setRasterSampleCount_(render_pipeline_desc, xx desc.sample_count);
@@ -381,73 +375,10 @@ create_graphics_pipeline :: (vertex_ir: IR, fragment_ir: IR, desc: Raster_Desc) 
         color_attachments.setObject_atIndexedSubscript_(color_attachments, attachment, xx it_index);
     }
 
-    pipeline_state := MTL4Compiler.newRenderPipelineStateWithDescriptor_compilerTaskOptions_error_(compiler, render_pipeline_desc, null, *error);
+    pipeline_state := MTL4Compiler.newRenderPipelineStateWithDescriptor_compilerTaskOptions_error_(compiler, xx render_pipeline_desc, null, *error);
     assert_metal(error);
     return .{render = pipeline_state, is_compute = false};
 }
-
-// create_graphics_pipeline_with_filename :: (shader_path: string, desc: Raster_Desc, vertex_function_name: string = "vertex_main", fragment_function_main: string = "fragment_main") -> Pipeline {
-//     using context.gpu_context;
-//     shader_string := read_entire_file(shader_path);
-//     defer Basic.free(shader_string);
-
-//     error: *NSError;
-//     library_desc := objc_new(MTL4LibraryDescriptor);
-//     defer release(library_desc);
-//     MTL4LibraryDescriptor.setSource_(library_desc, NSString.getTempString(shader_string));
-
-//     library := MTL4Compiler.newLibraryWithDescriptor_error_(compiler, *error);
-//     assert(error == null, "Error creating library: %", to_string(NSError.localizedDescription(error)));
-
-//     vert_func_desc := objc_new(MTL4LibraryFunctionDescriptor);
-//     defer release(vert_func_desc);
-//     frag_func_desc := objc_new(MTL4LibraryFunctionDescriptor);
-//     defer release(frag_func_desc);
-
-//     MTL4LibraryFunctionDescriptor.setLibrary_(vert_func_desc, library);
-//     MTL4LibraryFunctionDescriptor.setName_(vert_func_desc, NSString.getTempString(vertex_function_name));
-
-//     MTL4LibraryFunctionDescriptor.setLibrary_(frag_func_desc, library);
-//     MTL4LibraryFunctionDescriptor.setName_(frag_func_desc, NSString.getTempString(fragment_function_name));
-
-//     render_pipeline_desc := objc_new(MTL4RenderPipelineDescriptor);
-//     defer release(render_pipeline_desc);
-
-//     MTL4RenderPipelineDescriptor.setVertexFunctionDescriptor_(render_pipeline_desc, vert_func_desc);
-//     MTL4RenderPipelineDescriptor.setFragmentFunctionDescriptor_(render_pipeline_desc, frag_func_desc);
-
-//     MTL4RenderPipelineDescriptor.setRasterSampleCount_(render_pipeline_desc, xx desc.sample_count);
-//     MTL4RenderPipelineDescriptor.setAlphaToCoverageState_(render_pipeline_desc, ifx desc.alpha_to_coverage then .Enabled else .Disabled);
-
-
-//     color_attachments := MTL4RenderPipelineDescriptor.colorAttachments(render_pipeline_desc);
-//     for target: desc.color_targets {
-//         attachment := objc_new(MTL4RenderPipelineColorAttachmentDescriptor);
-//         MTL4RenderPipelineColorAttachmentDescriptor.setPixelFormat_(attachment, to_metal_format(target.format));
-//         // There are two write mask, one in color target, one in
-//         // blendstate, the current logic is that if the blendstate is
-//         // present, the color mask for all targets would be the mask
-//         // specified in blend desc
-
-//         MTL4RenderPipelineColorAttachmentDescriptor.setWriteMask_(attachment, to_metal_write_mask(target.write_mask));
-//         if desc.blendstate {
-//             MTL4RenderPipelineColorAttachmentDescriptor.setSourceRGBBlendFactor_(attachment, to_metal_blend_factor(desc.blendstate.src_color_factor));
-//             MTL4RenderPipelineColorAttachmentDescriptor.setSourceAlphaBlendFactor_(attachment, to_metal_blend_factor(desc.blendstate.src_alpha_factor));
-//             MTL4RenderPipelineColorAttachmentDescriptor.setDestinationRGBBlendFactor_(attachment, to_metal_blend_factor(desc.blendstate.dst_color_factor));
-//             MTL4RenderPipelineColorAttachmentDescriptor.setDestinationAlphaBlendFactor_(attachment, to_metal_blend_factor(desc.blendstate.dst_alpha_factor));
-//             MTL4RenderPipelineColorAttachmentDescriptor.setRgbBlendOperation_(attachment, to_metal_blend_operation(desc.blendstate.color_op));
-//             MTL4RenderPipelineColorAttachmentDescriptor.setAlphaBlendOperation_(attachment, to_metal_blend_operation(desc.blendstate.alpha_op));
-//         }
-
-//         MTL4RenderPipelineColorAttachmentDescriptorArray.setObject_atIndexedSubscript_(color_attachments, attachment, xx it_index);
-//     }
-
-
-//     pipeline_state := MTL4Compiler.newRenderPipelineStateWithDescriptor_compilerTaskOptions_error_(compiler, render_pipeline_desc, null, *error);
-//     assert(error == null, "Error creating render PSO: %", to_string(NSError.localizedDescription(error)));
-
-//     return .{render = pipeline_state};
-// }
 
 destroy_pipeline :: (pipeline: Pipeline) {
     if pipeline.is_compute {
@@ -457,45 +388,45 @@ destroy_pipeline :: (pipeline: Pipeline) {
     }
 }
 
-// State objects
-// create_depth_stencil_state :: (desc: Depth_Stencil_Desc) -> Depth_Stencil_State {
-//     using context.gpu_context;
+//// State objects
+create_depth_stencil_state :: (desc: Depth_Stencil_Desc) -> Depth_Stencil_State {
+    using context.gpu_context;
 
-//     depth_stencil_desc := objc_new(MTLDepthStencilDescriptor);
-//     defer release(depth_stencil_desc);
+    depth_stencil_desc := objc_new(MTLDepthStencilDescriptor);
+    defer release(depth_stencil_desc);
 
-//     if desc.depth_mode & .READ {
-//         MTLDepthStencilDescriptor.setDepthCompareFunction_(depth_stencil_desc, to_metal_compare_function(desc.depth_test));
-//     }
+    if desc.depth_mode & .READ {
+        MTLDepthStencilDescriptor.setDepthCompareFunction_(depth_stencil_desc, to_metal_compare_function(desc.depth_test));
+    }
 
-//     MTLDepthStencilDescriptor.setDepthWriteEnabled_(depth_stencil_desc, ifx desc.depth_mode & .WRITE then YES else NO);
+    MTLDepthStencilDescriptor.setDepthWriteEnabled_(depth_stencil_desc, ifx desc.depth_mode & .WRITE then YES else NO);
 
-//     front_stencil := objc_new(MTLStencilDescriptor);
-//     defer release(front_stencil);
-//     MTLStencilDescriptor.setStencilCompareFunction_(front_stencil, to_metal_compare_function(desc.stencil_front.test));
-//     MTLStencilDescriptor.setStencilFailureOperation_(front_stencil, to_metal_stencil_operation(desc.stencil_front.fail_op));
-//     MTLStencilDescriptor.setDepthStencilPassOperation_(front_stencil, nto_metal_stencil_operation(desc.stencil_front.pass_op));
-//     MTLStencilDescriptor.setDepthFailureOperation_(front_stencil, to_metal_stencil_operation(desc.stencil_front.depth_fail_op));
+    front_stencil := objc_new(MTLStencilDescriptor);
+    defer release(front_stencil);
+    MTLStencilDescriptor.setStencilCompareFunction_(front_stencil, to_metal_compare_function(desc.stencil_front.test));
+    MTLStencilDescriptor.setStencilFailureOperation_(front_stencil, to_metal_stencil_operation(desc.stencil_front.fail_op));
+    MTLStencilDescriptor.setDepthStencilPassOperation_(front_stencil, nto_metal_stencil_operation(desc.stencil_front.pass_op));
+    MTLStencilDescriptor.setDepthFailureOperation_(front_stencil, to_metal_stencil_operation(desc.stencil_front.depth_fail_op));
 
-//     MTLDepthStencilDescriptor.setFrontFaceStencil_(depth_stencil_desc, front_stencil);
+    MTLDepthStencilDescriptor.setFrontFaceStencil_(depth_stencil_desc, front_stencil);
 
-//     back_stencil := objc_new(MTLStencilDescriptor);
-//     defer release(back_stencil);
-//     MTLStencilDescriptor.setStencilCompareFunction_(back_stencil, to_metal_compare_function(desc.stencil_back.test));
-//     MTLStencilDescriptor.setStencilFailureOperation_(back_stencil, to_metal_stencil_operation(desc.stencil_back.fail_op));
-//     MTLStencilDescriptor.setDepthStencilPassOperation_(back_stencil, nto_metal_stencil_operation(desc.stencil_back.pass_op));
-//     MTLStencilDescriptor.setDepthFailureOperation_(back_stencil, to_metal_stencil_operation(desc.stencil_back.depth_fail_op));
+    back_stencil := objc_new(MTLStencilDescriptor);
+    defer release(back_stencil);
+    MTLStencilDescriptor.setStencilCompareFunction_(back_stencil, to_metal_compare_function(desc.stencil_back.test));
+    MTLStencilDescriptor.setStencilFailureOperation_(back_stencil, to_metal_stencil_operation(desc.stencil_back.fail_op));
+    MTLStencilDescriptor.setDepthStencilPassOperation_(back_stencil, nto_metal_stencil_operation(desc.stencil_back.pass_op));
+    MTLStencilDescriptor.setDepthFailureOperation_(back_stencil, to_metal_stencil_operation(desc.stencil_back.depth_fail_op));
 
-//     MTLDepthStencilDescriptor.setBackFaceStencil_(depth_stencil_desc, back_stencil);
+    MTLDepthStencilDescriptor.setBackFaceStencil_(depth_stencil_desc, back_stencil);
 
-//     state := MTLDevice.newDepthStencilStateWithDescriptor_(device, depth_stencil_desc);
+    state := MTLDevice.newDepthStencilStateWithDescriptor_(device, depth_stencil_desc);
 
-//     return state;
-// }
+    return state;
+}
 
-// free_depth_stencil_state :: (state: Depth_Stencil_State) {
-//     release(state);
-// }
+destroy_depth_stencil_state :: (state: Depth_Stencil_State) {
+    release(state);
+}
 
 // We are only supporting one main queue, in modern hardwares, we
 // should submit everything to the main queue.
@@ -720,6 +651,22 @@ end_render_pass :: (cb: *Command_Buffer) {
     end_render_encoder(cb);
 }
 
+draw_indexed_instanced :: (cb: *Command_Buffer, vertex_data_gpu: Ptr, fragment_data_gpu: Ptr, indices_gpu: Ptr, index_count: u32, instance_count: u32, topology: Topology) {
+    using context.gpu_context;
+
+    vertex_cpu, vertex_gpu := get_next_pointer_from_argument_ring_buffer();
+    vertex_cpu.(*u64).* = vertex_data_gpu;
+
+    MTL4ArgumentTable.setAddress_atIndex_(vertex_argument_table, vertex_gpu, 0);
+    MTL4RenderCommandEncoder.setArgumentTable_atStages_(cb.render_encoder, vertex_argument_table, .Vertex);
+
+    fragment_cpu, fragment_gpu := get_next_pointer_from_argument_ring_buffer();
+    fragment_cpu.(*u64).* = fragment_data_gpu;
+    MTL4ArgumentTable.setAddress_atIndex_(fragment_argument_table, fragment_gpu, 0);
+    MTL4RenderCommandEncoder.setArgumentTable_atStages_(cb.render_encoder, fragment_argument_table, .Fragment);
+    MTL4RenderCommandEncoder.drawIndexedPrimitives_indexCount_indexType_indexBuffer_indexBufferLength_instanceCount_(cb.render_encoder, to_metal_primitive_type(topology), index_count, .UInt32, indices_gpu, size_of(u32).(u32) * index_count, instance_count);
+}
+
 acquire_swapchain_texture :: () -> bool, Texture {
     using context.gpu_context;
 
@@ -732,6 +679,7 @@ acquire_swapchain_texture :: () -> bool, Texture {
     texture: Texture;
     texture.mtl = drawable.texture(drawable);
     texture.drawable = xx drawable;
+    texture.resource_id = MTLTexture.gpuResourceID(texture.mtl);
 
     return true, texture;
 }
@@ -1029,10 +977,10 @@ set_metal_render_pass_descriptor :: (descriptor: *MTL4RenderPassDescriptor, desc
     }
 }
 
-assert_spvc :: (result: spvc_result) #expand {
-    using context.gpu_context;
-    `Basic.assert(result == .SUCCESS, "spvc result %, reason %", result, to_string(spvc_context_get_last_error_string(spirv_cross_context)));
-}
+// assert_spvc :: (result: spvc_result) #expand {
+//     using context.gpu_context;
+//     `Basic.assert(result == .SUCCESS, "spvc result %, reason %", result, to_string(spvc_context_get_last_error_string(spirv_cross_context)));
+// }
 
 assert_metal :: (error: *NSError) #expand {
     `Basic.assert(error == null, "%", to_string(NSError.localizedDescription(error)));
@@ -1234,6 +1182,47 @@ to_metal_stages :: (stage: Stage) -> MTLStages {
     return s;
 }
 
+to_metal_topology_class :: (topology: Topology) -> MTLPrimitiveTopologyClass {
+    m: MTLPrimitiveTopologyClass;
+    if #complete topology == {
+    case .POINT_LIST;
+        m = .Point;
+    case .LINE_LIST;
+        m = .Line;
+    case .LINE_STRIP;
+        m = .Line;
+    case .TRIANGLE_LIST;
+        m = .Triangle;
+    case .TRIANGLE_STRIP;
+        m = .Triangle;
+    case .TRIANGLE_FAN;
+        m = .Triangle;
+    }
+
+    return m;
+}
+
+to_metal_primitive_type :: (topology: Topology) -> MTLPrimitiveType {
+    m: MTLPrimitiveType;
+    if #complete topology == {
+    case .POINT_LIST;
+        m = .Point;
+    case .LINE_LIST;
+        m = .Line;
+    case .LINE_STRIP;
+        m = .LineStrip;
+    case .TRIANGLE_LIST;
+        m = .Triangle;
+    case .TRIANGLE_STRIP;
+        m = .TriangleStrip;
+    case .TRIANGLE_FAN;
+        Basic.log("There is no triangle fan in Metal you know?");
+        m = .TriangleStrip;
+    }
+
+    return m;
+}
+
 metal_texture_size :: (metal_texture: *MTLTexture) -> MTLSize {
     return .{
         width = MTLTexture.width(metal_texture),
@@ -1265,7 +1254,6 @@ Basic :: #import "Basic";
 #import "Objective_C";
 File :: #import "File";
 String :: #import "String";
-#import "spirv_cross";
 #import "Hash_Table";
 Vulkan :: #import "Vulkan";
 #load "format.jai";

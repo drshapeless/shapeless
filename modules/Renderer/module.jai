@@ -32,6 +32,15 @@ init_renderer :: (sdl_window: *SDL_Window) {
     clear_pipeline = create_compute_pipeline_from_file("shaders/clear_texture.slang");
     solid_rectangle_pipeline = create_compute_pipeline_from_file("shaders/solid_rectangle.slang");
 
+    color_targets: [1]GPU.Color_Target;
+    color_targets[0].format = .B8G8R8A8_UNORM;
+
+    simple_raster_desc: GPU.Raster_Desc = .{
+        color_targets = color_targets,
+    };
+
+    // simple_pipeline = create_graphics_pipeline_from_file("shaders/simple.slang", simple_raster_desc);
+
     {
         GPU.push_allocator(GPU.arena_allocator_proc, *all_params_arena);
 
@@ -60,6 +69,7 @@ deinit_renderer :: () {
     for * frame_arenas {
         GPU.fini(it);
     }
+    array_free(frame_arenas);
     GPU.fini(*all_params_arena);
     GPU.destroy_texture(draw_texture);
     GPU.free(draw_heap.data);
@@ -95,15 +105,16 @@ resize_callback :: () {
     };
     draw_texture_descriptor = GPU.texture_view_descriptor(draw_texture, draw_texture_view_desc);
     draw_heap[0] = draw_texture_descriptor;
-
-    // Create a default descriptor heap
 }
 
 draw_heap: [] GPU.Texture_Descriptor;
 
-draw_texture: GPU.Texture;
-clear_pipeline: GPU.Pipeline;
+draw_texture:             GPU.Texture;
+frame_arenas: [] GPU.Arena;
+
+clear_pipeline:           GPU.Pipeline;
 solid_rectangle_pipeline: GPU.Pipeline;
+simple_pipeline:          GPU.Pipeline;
 
 Clear_Data :: struct {
     clear_color: Color;
@@ -113,6 +124,11 @@ Clear_Data :: struct {
 Solid_Rectangle_Data :: struct {
     rects: GPU.Array;
     texture_index: u64;
+}
+
+Simple_Data :: struct {
+    positions: GPU.Ptr;
+    color:     Color;
 }
 
 s32x2 :: struct {
@@ -162,6 +178,23 @@ draw_rectangles :: (cb: *GPU.Command_Buffer, rects: .. Color_Rectangle) {
     GPU.dispatch(cb, solid_rectangle_params_base_gpu + cast(u64) (size_of(Solid_Rectangle_Data) * i), group_size, threads_size);
 }
 
+draw_simple :: (cb: *GPU.Command_Buffer, vertices: [] Vector2, indices: [] u32, color: Color) {
+    i := GPU.frame_index();
+    GPU.push_allocator(GPU.arena_allocator_proc, *frame_arenas[i]);
+
+    gpu_vertices := GPU.array_copy(vertices);
+    v_ptr := GPU.host_to_device_pointer(gpu_vertices.data);
+
+    gpu_indices := GPU.array_copy(indices);
+    i_ptr := GPU.host_to_device_pointer(gpu_indices.data);
+
+    gpu_color := GPU.New(Color);
+    gpu_color.* = color;
+    c_ptr := GPU.host_to_device_pointer(gpu_color);
+
+    GPU.draw_indexed_instanced(cb, v_ptr, c_ptr, i_ptr, xx indices.count, 1, .TRIANGLE_LIST);
+}
+
 #load "font.jai";
 
 #scope_file
@@ -169,6 +202,7 @@ GPU :: #import "GPU";
 #import "Basic";
 #import "File";
 #import "SDL3";
+#import "Math";
 
 window: *SDL_Window;
 
@@ -183,9 +217,10 @@ clear_params_base_gpu: u64;
 solid_rectangle_params: [] Solid_Rectangle_Data;
 solid_rectangle_params_base_gpu: u64;
 
-all_params_arena: GPU.Arena;
+simple_params: [] Simple_Data;
+simple_params_base_gpu: u64;
 
-frame_arenas: [] GPU.Arena;
+all_params_arena: GPU.Arena;
 
 create_compute_pipeline_from_file :: (shader_path: string) -> GPU.Pipeline {
     shader := read_entire_file(shader_path);
@@ -193,6 +228,16 @@ create_compute_pipeline_from_file :: (shader_path: string) -> GPU.Pipeline {
     defer GPU.destroy_ir(ir);
     log("Successfully compile %", shader_path);
     return GPU.create_compute_pipeline(ir);
+}
+
+create_graphics_pipeline_from_file :: (shader_path: string, desc: GPU.Raster_Desc) -> GPU.Pipeline {
+    shader := read_entire_file(shader_path);
+    irs := GPU.load_graphics_ir(shader);
+    for irs {
+        GPU.destroy_ir(it);
+    }
+    log("Successfully compile %", shader_path);
+    return GPU.create_graphics_pipeline(irs[0], irs[1], desc);
 }
 
 Color :: GPU.Color;
