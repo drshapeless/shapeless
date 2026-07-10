@@ -526,6 +526,18 @@ vkGetPhysicalDeviceOpticalFlowImageFormatsNV :: (physicalDevice: VkPhysicalDevic
     return result, data;
 }
 
+vkGetDeviceFaultReportsKHR :: (device: VkDevice, timeout: u64) -> VkResult, [] VkDeviceFaultInfoKHR {
+    count: u32;
+    data: [] VkDeviceFaultInfoKHR;
+    result: VkResult;
+    result = vkGetDeviceFaultReportsKHR(device, timeout, *count, data.data);
+    if result return result, .[];
+    if count == 0 return .SUCCESS, .[];
+    data = NewArray(count, VkDeviceFaultInfoKHR, initialized = false);
+    result = vkGetDeviceFaultReportsKHR(device, timeout, *count, data.data);
+    return result, data;
+}
+
 vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR :: (physicalDevice: VkPhysicalDevice) -> VkResult, [] VkCooperativeMatrixPropertiesKHR {
     count: u32;
     data: [] VkCooperativeMatrixPropertiesKHR;
@@ -562,6 +574,18 @@ vkGetPhysicalDeviceCooperativeVectorPropertiesNV :: (physicalDevice: VkPhysicalD
     return result, data;
 }
 
+vkEnumeratePhysicalDeviceShaderInstrumentationMetricsARM :: (physicalDevice: VkPhysicalDevice) -> VkResult, [] VkShaderInstrumentationMetricDescriptionARM {
+    count: u32;
+    data: [] VkShaderInstrumentationMetricDescriptionARM;
+    result: VkResult;
+    result = vkEnumeratePhysicalDeviceShaderInstrumentationMetricsARM(physicalDevice, *count, data.data);
+    if result return result, .[];
+    if count == 0 return .SUCCESS, .[];
+    data = NewArray(count, VkShaderInstrumentationMetricDescriptionARM, initialized = false);
+    result = vkEnumeratePhysicalDeviceShaderInstrumentationMetricsARM(physicalDevice, *count, data.data);
+    return result, data;
+}
+
 vkGetDataGraphPipelineSessionBindPointRequirementsARM :: (device: VkDevice, pInfo: *VkDataGraphPipelineSessionBindPointRequirementsInfoARM) -> VkResult, [] VkDataGraphPipelineSessionBindPointRequirementARM {
     count: u32;
     data: [] VkDataGraphPipelineSessionBindPointRequirementARM;
@@ -595,6 +619,18 @@ vkGetPhysicalDeviceQueueFamilyDataGraphPropertiesARM :: (physicalDevice: VkPhysi
     if count == 0 return .SUCCESS, .[];
     data = NewArray(count, VkQueueFamilyDataGraphPropertiesARM, initialized = false);
     result = vkGetPhysicalDeviceQueueFamilyDataGraphPropertiesARM(physicalDevice, queueFamilyIndex, *count, data.data);
+    return result, data;
+}
+
+vkGetPhysicalDeviceQueueFamilyDataGraphOpticalFlowImageFormatsARM :: (physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, pQueueFamilyDataGraphProperties: *VkQueueFamilyDataGraphPropertiesARM, pOpticalFlowImageFormatInfo: *VkDataGraphOpticalFlowImageFormatInfoARM) -> VkResult, [] VkDataGraphOpticalFlowImageFormatPropertiesARM {
+    count: u32;
+    data: [] VkDataGraphOpticalFlowImageFormatPropertiesARM;
+    result: VkResult;
+    result = vkGetPhysicalDeviceQueueFamilyDataGraphOpticalFlowImageFormatsARM(physicalDevice, queueFamilyIndex, pQueueFamilyDataGraphProperties, pOpticalFlowImageFormatInfo, *count, data.data);
+    if result return result, .[];
+    if count == 0 return .SUCCESS, .[];
+    data = NewArray(count, VkDataGraphOpticalFlowImageFormatPropertiesARM, initialized = false);
+    result = vkGetPhysicalDeviceQueueFamilyDataGraphOpticalFlowImageFormatsARM(physicalDevice, queueFamilyIndex, pQueueFamilyDataGraphProperties, pOpticalFlowImageFormatInfo, *count, data.data);
     return result, data;
 }
 

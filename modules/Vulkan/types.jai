@@ -33,6 +33,7 @@ VkDisplayModeCreateFlagsKHR :: VkFlags;
 VkDisplaySurfaceCreateFlagsKHR :: VkFlags;
 VkAndroidSurfaceCreateFlagsKHR :: VkFlags;
 VkViSurfaceCreateFlagsNN :: VkFlags;
+VkUbmSurfaceCreateFlagsSEC :: VkFlags;
 VkWin32SurfaceCreateFlagsKHR :: VkFlags;
 VkXlibSurfaceCreateFlagsKHR :: VkFlags;
 VkXcbSurfaceCreateFlagsKHR :: VkFlags;
@@ -78,6 +79,7 @@ VkPresentScalingFlagsEXT :: VkPresentScalingFlagsKHR;
 VkPresentGravityFlagsEXT :: VkPresentGravityFlagsKHR;
 VkSurfaceCreateFlagsOHOS :: VkFlags;
 VkPerformanceCounterDescriptionFlagsARM :: VkFlags;
+VkShaderInstrumentationValuesFlagsARM :: VkFlags;
 VkVideoBeginCodingFlagsKHR :: VkFlags;
 VkVideoEndCodingFlagsKHR :: VkFlags;
 VkVideoDecodeFlagsKHR :: VkFlags;
@@ -131,6 +133,7 @@ VkShaderEXT :: *VkShaderEXT_T;
 VkTensorARM :: *VkTensorARM_T;
 VkTensorViewARM :: *VkTensorViewARM_T;
 VkDataGraphPipelineSessionARM :: *VkDataGraphPipelineSessionARM_T;
+VkShaderInstrumentationARM :: *VkShaderInstrumentationARM_T;
 VkDisplayKHR :: *VkDisplayKHR_T;
 VkDisplayModeKHR :: *VkDisplayModeKHR_T;
 VkSurfaceKHR :: *VkSurfaceKHR_T;
@@ -169,6 +172,7 @@ VkFormatFeatureFlagBits2KHR :: VkFormatFeatureFlagBits2;
 VkRenderingFlagBitsKHR :: VkRenderingFlagBits;
 VkPipelineRobustnessBufferBehaviorEXT :: VkPipelineRobustnessBufferBehavior;
 VkPipelineRobustnessImageBehaviorEXT :: VkPipelineRobustnessImageBehavior;
+VkDeviceFaultVendorBinaryHeaderVersionEXT :: VkDeviceFaultVendorBinaryHeaderVersionKHR;
 VkMemoryDecompressionMethodFlagBitsNV :: VkMemoryDecompressionMethodFlagBitsEXT;
 VkPipelineCreateFlagBits2KHR :: VkPipelineCreateFlagBits2;
 VkBufferUsageFlagBits2KHR :: VkBufferUsageFlagBits2;
@@ -191,6 +195,7 @@ VkChromaLocationKHR :: VkChromaLocation;
 VkSamplerReductionModeEXT :: VkSamplerReductionMode;
 VkShaderFloatControlsIndependenceKHR :: VkShaderFloatControlsIndependence;
 VkSubmitFlagBitsKHR :: VkSubmitFlagBits;
+VkDeviceFaultAddressTypeEXT :: VkDeviceFaultAddressTypeKHR;
 VkPresentScalingFlagBitsEXT :: VkPresentScalingFlagBitsKHR;
 VkPresentGravityFlagBitsEXT :: VkPresentGravityFlagBitsKHR;
 VkMemoryUnmapFlagBitsKHR :: VkMemoryUnmapFlagBits;
@@ -245,6 +250,7 @@ VkShaderEXT_T :: struct {}
 VkTensorARM_T :: struct {}
 VkTensorViewARM_T :: struct {}
 VkDataGraphPipelineSessionARM_T :: struct {}
+VkShaderInstrumentationARM_T :: struct {}
 VkDisplayKHR_T :: struct {}
 VkDisplayModeKHR_T :: struct {}
 VkSurfaceKHR_T :: struct {}

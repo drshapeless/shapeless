@@ -103,6 +103,7 @@ PFN_vkBeginCommandBuffer :: #type (commandBuffer: VkCommandBuffer, pBeginInfo: *
 PFN_vkEndCommandBuffer :: #type (commandBuffer: VkCommandBuffer) -> VkResult #c_call;
 PFN_vkResetCommandBuffer :: #type (commandBuffer: VkCommandBuffer, flags: VkCommandBufferResetFlags) -> VkResult #c_call;
 PFN_vkCmdBindPipeline :: #type (commandBuffer: VkCommandBuffer, pipelineBindPoint: VkPipelineBindPoint, pipeline: VkPipeline) -> void #c_call;
+PFN_vkCmdSetPrimitiveRestartIndexEXT :: #type (commandBuffer: VkCommandBuffer, primitiveRestartIndex: u32) -> void #c_call;
 PFN_vkCmdSetAttachmentFeedbackLoopEnableEXT :: #type (commandBuffer: VkCommandBuffer, aspectMask: VkImageAspectFlags) -> void #c_call;
 PFN_vkCmdSetViewport :: #type (commandBuffer: VkCommandBuffer, firstViewport: u32, viewportCount: u32, pViewports: *VkViewport) -> void #c_call;
 PFN_vkCmdSetScissor :: #type (commandBuffer: VkCommandBuffer, firstScissor: u32, scissorCount: u32, pScissors: *VkRect2D) -> void #c_call;
@@ -183,6 +184,8 @@ PFN_vkQueuePresentKHR :: #type (queue: VkQueue, pPresentInfo: *VkPresentInfoKHR)
 PFN_vkCreateViSurfaceNN :: #type (instance: VkInstance, pCreateInfo: *VkViSurfaceCreateInfoNN, pAllocator: *VkAllocationCallbacks, pSurface: *VkSurfaceKHR) -> VkResult #c_call;
 PFN_vkCreateWaylandSurfaceKHR :: #type (instance: VkInstance, pCreateInfo: *VkWaylandSurfaceCreateInfoKHR, pAllocator: *VkAllocationCallbacks, pSurface: *VkSurfaceKHR) -> VkResult #c_call;
 PFN_vkGetPhysicalDeviceWaylandPresentationSupportKHR :: #type (physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, display: *wl_display) -> VkBool32 #c_call;
+PFN_vkCreateUbmSurfaceSEC :: #type (instance: VkInstance, pCreateInfo: *VkUbmSurfaceCreateInfoSEC, pAllocator: *VkAllocationCallbacks, pSurface: *VkSurfaceKHR) -> VkResult #c_call;
+PFN_vkGetPhysicalDeviceUbmPresentationSupportSEC :: #type (physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, device: *ubm_device) -> VkBool32 #c_call;
 PFN_vkCreateWin32SurfaceKHR :: #type (instance: VkInstance, pCreateInfo: *VkWin32SurfaceCreateInfoKHR, pAllocator: *VkAllocationCallbacks, pSurface: *VkSurfaceKHR) -> VkResult #c_call;
 PFN_vkGetPhysicalDeviceWin32PresentationSupportKHR :: #type (physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32) -> VkBool32 #c_call;
 PFN_vkCreateXlibSurfaceKHR :: #type (instance: VkInstance, pCreateInfo: *VkXlibSurfaceCreateInfoKHR, pAllocator: *VkAllocationCallbacks, pSurface: *VkSurfaceKHR) -> VkResult #c_call;
@@ -418,7 +421,7 @@ PFN_vkCreateAccelerationStructureNV :: #type (device: VkDevice, pCreateInfo: *Vk
 PFN_vkCmdBindInvocationMaskHUAWEI :: #type (commandBuffer: VkCommandBuffer, imageView: VkImageView, imageLayout: VkImageLayout) -> void #c_call;
 PFN_vkDestroyAccelerationStructureKHR :: #type (device: VkDevice, accelerationStructure: VkAccelerationStructureKHR, pAllocator: *VkAllocationCallbacks) -> void #c_call;
 PFN_vkDestroyAccelerationStructureNV :: #type (device: VkDevice, accelerationStructure: VkAccelerationStructureNV, pAllocator: *VkAllocationCallbacks) -> void #c_call;
-PFN_vkGetAccelerationStructureMemoryRequirementsNV :: #type (device: VkDevice, pInfo: *VkAccelerationStructureMemoryRequirementsInfoNV, pMemoryRequirements: *VkMemoryRequirements2KHR) -> void #c_call;
+PFN_vkGetAccelerationStructureMemoryRequirementsNV :: #type (device: VkDevice, pInfo: *VkAccelerationStructureMemoryRequirementsInfoNV, pMemoryRequirements: *VkMemoryRequirements2) -> void #c_call;
 PFN_vkBindAccelerationStructureMemoryNV :: #type (device: VkDevice, bindInfoCount: u32, pBindInfos: *VkBindAccelerationStructureMemoryInfoNV) -> VkResult #c_call;
 PFN_vkCmdCopyAccelerationStructureNV :: #type (commandBuffer: VkCommandBuffer, dst: VkAccelerationStructureNV, src: VkAccelerationStructureNV, mode: VkCopyAccelerationStructureModeKHR) -> void #c_call;
 PFN_vkCmdCopyAccelerationStructureKHR :: #type (commandBuffer: VkCommandBuffer, pInfo: *VkCopyAccelerationStructureInfoKHR) -> void #c_call;
@@ -697,7 +700,7 @@ PFN_vkGetShaderModuleCreateInfoIdentifierEXT :: #type (device: VkDevice, pCreate
 PFN_vkGetImageSubresourceLayout2 :: #type (device: VkDevice, image: VkImage, pSubresource: *VkImageSubresource2, pLayout: *VkSubresourceLayout2) -> void #c_call;
 PFN_vkGetImageSubresourceLayout2KHR :: PFN_vkGetImageSubresourceLayout2;
 PFN_vkGetImageSubresourceLayout2EXT :: PFN_vkGetImageSubresourceLayout2;
-PFN_vkGetPipelinePropertiesEXT :: #type (device: VkDevice, pPipelineInfo: *VkPipelineInfoEXT, pPipelineProperties: *VkBaseOutStructure) -> VkResult #c_call;
+PFN_vkGetPipelinePropertiesEXT :: #type (device: VkDevice, pPipelineInfo: *VkPipelineInfoKHR, pPipelineProperties: *VkBaseOutStructure) -> VkResult #c_call;
 PFN_vkExportMetalObjectsEXT :: #type (device: VkDevice, pMetalObjectsInfo: *VkExportMetalObjectsInfoEXT) -> void #c_call;
 PFN_vkCmdBindTileMemoryQCOM :: #type (commandBuffer: VkCommandBuffer, pTileMemoryBindInfo: *VkTileMemoryBindInfoQCOM) -> void #c_call;
 PFN_vkGetFramebufferTilePropertiesQCOM :: #type (device: VkDevice, framebuffer: VkFramebuffer, pPropertiesCount: *u32, pProperties: *VkTilePropertiesQCOM) -> VkResult #c_call;
@@ -708,6 +711,8 @@ PFN_vkDestroyOpticalFlowSessionNV :: #type (device: VkDevice, session: VkOptical
 PFN_vkBindOpticalFlowSessionImageNV :: #type (device: VkDevice, session: VkOpticalFlowSessionNV, bindingPoint: VkOpticalFlowSessionBindingPointNV, view: VkImageView, layout: VkImageLayout) -> VkResult #c_call;
 PFN_vkCmdOpticalFlowExecuteNV :: #type (commandBuffer: VkCommandBuffer, session: VkOpticalFlowSessionNV, pExecuteInfo: *VkOpticalFlowExecuteInfoNV) -> void #c_call;
 PFN_vkGetDeviceFaultInfoEXT :: #type (device: VkDevice, pFaultCounts: *VkDeviceFaultCountsEXT, pFaultInfo: *VkDeviceFaultInfoEXT) -> VkResult #c_call;
+PFN_vkGetDeviceFaultReportsKHR :: #type (device: VkDevice, timeout: u64, pFaultCounts: *u32, pFaultInfo: *VkDeviceFaultInfoKHR) -> VkResult #c_call;
+PFN_vkGetDeviceFaultDebugInfoKHR :: #type (device: VkDevice, pDebugInfo: *VkDeviceFaultDebugInfoKHR) -> VkResult #c_call;
 PFN_vkCmdSetDepthBias2EXT :: #type (commandBuffer: VkCommandBuffer, pDepthBiasInfo: *VkDepthBiasInfoEXT) -> void #c_call;
 PFN_vkReleaseSwapchainImagesKHR :: #type (device: VkDevice, pReleaseInfo: *VkReleaseSwapchainImagesInfoKHR) -> VkResult #c_call;
 PFN_vkReleaseSwapchainImagesEXT :: PFN_vkReleaseSwapchainImagesKHR;
@@ -766,6 +771,13 @@ PFN_vkCmdEndPerTileExecutionQCOM :: #type (commandBuffer: VkCommandBuffer, pPerT
 PFN_vkCreateExternalComputeQueueNV :: #type (device: VkDevice, pCreateInfo: *VkExternalComputeQueueCreateInfoNV, pAllocator: *VkAllocationCallbacks, pExternalQueue: *VkExternalComputeQueueNV) -> VkResult #c_call;
 PFN_vkDestroyExternalComputeQueueNV :: #type (device: VkDevice, externalQueue: VkExternalComputeQueueNV, pAllocator: *VkAllocationCallbacks) -> void #c_call;
 PFN_vkGetExternalComputeQueueDataNV :: #type (externalQueue: VkExternalComputeQueueNV, params: *VkExternalComputeQueueDataParamsNV, pData: *void) -> void #c_call;
+PFN_vkEnumeratePhysicalDeviceShaderInstrumentationMetricsARM :: #type (physicalDevice: VkPhysicalDevice, pDescriptionCount: *u32, pDescriptions: *VkShaderInstrumentationMetricDescriptionARM) -> VkResult #c_call;
+PFN_vkCreateShaderInstrumentationARM :: #type (device: VkDevice, pCreateInfo: *VkShaderInstrumentationCreateInfoARM, pAllocator: *VkAllocationCallbacks, pInstrumentation: *VkShaderInstrumentationARM) -> VkResult #c_call;
+PFN_vkDestroyShaderInstrumentationARM :: #type (device: VkDevice, instrumentation: VkShaderInstrumentationARM, pAllocator: *VkAllocationCallbacks) -> void #c_call;
+PFN_vkCmdBeginShaderInstrumentationARM :: #type (commandBuffer: VkCommandBuffer, instrumentation: VkShaderInstrumentationARM) -> void #c_call;
+PFN_vkCmdEndShaderInstrumentationARM :: #type (commandBuffer: VkCommandBuffer) -> void #c_call;
+PFN_vkGetShaderInstrumentationValuesARM :: #type (device: VkDevice, instrumentation: VkShaderInstrumentationARM, pMetricBlockCount: *u32, pMetricValues: *void, flags: VkShaderInstrumentationValuesFlagsARM) -> VkResult #c_call;
+PFN_vkClearShaderInstrumentationMetricsARM :: #type (device: VkDevice, instrumentation: VkShaderInstrumentationARM) -> void #c_call;
 PFN_vkCreateTensorARM :: #type (device: VkDevice, pCreateInfo: *VkTensorCreateInfoARM, pAllocator: *VkAllocationCallbacks, pTensor: *VkTensorARM) -> VkResult #c_call;
 PFN_vkDestroyTensorARM :: #type (device: VkDevice, tensor: VkTensorARM, pAllocator: *VkAllocationCallbacks) -> void #c_call;
 PFN_vkCreateTensorViewARM :: #type (device: VkDevice, pCreateInfo: *VkTensorViewCreateInfoARM, pAllocator: *VkAllocationCallbacks, pView: *VkTensorViewARM) -> VkResult #c_call;
@@ -793,6 +805,7 @@ PFN_vkGetMemoryNativeBufferOHOS :: #type (device: VkDevice, pInfo: *VkMemoryGetN
 PFN_vkGetSwapchainGrallocUsageOHOS :: #type (device: VkDevice, format: VkFormat, imageUsage: VkImageUsageFlags, grallocUsage: *u64) -> VkResult #c_call;
 PFN_vkAcquireImageOHOS :: #type (device: VkDevice, image: VkImage, nativeFenceFd: s32, semaphore: VkSemaphore, fence: VkFence) -> VkResult #c_call;
 PFN_vkQueueSignalReleaseImageOHOS :: #type (queue: VkQueue, waitSemaphoreCount: u32, pWaitSemaphores: *VkSemaphore, image: VkImage, pNativeFenceFd: *s32) -> VkResult #c_call;
+PFN_vkQueueSetPerfHintQCOM :: #type (queue: VkQueue, pPerfHintInfo: *VkPerfHintInfoQCOM) -> VkResult #c_call;
 PFN_vkEnumeratePhysicalDeviceQueueFamilyPerformanceCountersByRegionARM :: #type (physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, pCounterCount: *u32, pCounters: *VkPerformanceCounterARM, pCounterDescriptions: *VkPerformanceCounterDescriptionARM) -> VkResult #c_call;
 PFN_vkCmdSetComputeOccupancyPriorityNV :: #type (commandBuffer: VkCommandBuffer, pParameters: *VkComputeOccupancyPriorityParametersNV) -> void #c_call;
 PFN_vkWriteSamplerDescriptorsEXT :: #type (device: VkDevice, samplerCount: u32, pSamplers: *VkSamplerCreateInfo, pDescriptors: *VkHostAddressRangeEXT) -> VkResult #c_call;
@@ -805,6 +818,31 @@ PFN_vkUnregisterCustomBorderColorEXT :: #type (device: VkDevice, index: u32) -> 
 PFN_vkGetImageOpaqueCaptureDataEXT :: #type (device: VkDevice, imageCount: u32, pImages: *VkImage, pDatas: *VkHostAddressRangeEXT) -> VkResult #c_call;
 PFN_vkGetPhysicalDeviceDescriptorSizeEXT :: #type (physicalDevice: VkPhysicalDevice, descriptorType: VkDescriptorType) -> VkDeviceSize #c_call;
 PFN_vkGetTensorOpaqueCaptureDataARM :: #type (device: VkDevice, tensorCount: u32, pTensors: *VkTensorARM, pDatas: *VkHostAddressRangeEXT) -> VkResult #c_call;
+PFN_vkCmdCopyMemoryKHR :: #type (commandBuffer: VkCommandBuffer, pCopyMemoryInfo: *VkCopyDeviceMemoryInfoKHR) -> void #c_call;
+PFN_vkCmdCopyMemoryToImageKHR :: #type (commandBuffer: VkCommandBuffer, pCopyMemoryInfo: *VkCopyDeviceMemoryImageInfoKHR) -> void #c_call;
+PFN_vkCmdCopyImageToMemoryKHR :: #type (commandBuffer: VkCommandBuffer, pCopyMemoryInfo: *VkCopyDeviceMemoryImageInfoKHR) -> void #c_call;
+PFN_vkCmdUpdateMemoryKHR :: #type (commandBuffer: VkCommandBuffer, pDstRange: *VkDeviceAddressRangeKHR, dstFlags: VkAddressCommandFlagsKHR, dataSize: VkDeviceSize, pData: *void) -> void #c_call;
+PFN_vkCmdFillMemoryKHR :: #type (commandBuffer: VkCommandBuffer, pDstRange: *VkDeviceAddressRangeKHR, dstFlags: VkAddressCommandFlagsKHR, data: u32) -> void #c_call;
+PFN_vkCmdCopyQueryPoolResultsToMemoryKHR :: #type (commandBuffer: VkCommandBuffer, queryPool: VkQueryPool, firstQuery: u32, queryCount: u32, pDstRange: *VkStridedDeviceAddressRangeKHR, dstFlags: VkAddressCommandFlagsKHR, queryResultFlags: VkQueryResultFlags) -> void #c_call;
+PFN_vkCmdBeginConditionalRendering2EXT :: #type (commandBuffer: VkCommandBuffer, pConditionalRenderingBegin: *VkConditionalRenderingBeginInfo2EXT) -> void #c_call;
+PFN_vkCmdBindTransformFeedbackBuffers2EXT :: #type (commandBuffer: VkCommandBuffer, firstBinding: u32, bindingCount: u32, pBindingInfos: *VkBindTransformFeedbackBuffer2InfoEXT) -> void #c_call;
+PFN_vkCmdBeginTransformFeedback2EXT :: #type (commandBuffer: VkCommandBuffer, firstCounterRange: u32, counterRangeCount: u32, pCounterInfos: *VkBindTransformFeedbackBuffer2InfoEXT) -> void #c_call;
+PFN_vkCmdEndTransformFeedback2EXT :: #type (commandBuffer: VkCommandBuffer, firstCounterRange: u32, counterRangeCount: u32, pCounterInfos: *VkBindTransformFeedbackBuffer2InfoEXT) -> void #c_call;
+PFN_vkCmdDrawIndirectByteCount2EXT :: #type (commandBuffer: VkCommandBuffer, instanceCount: u32, firstInstance: u32, pCounterInfo: *VkBindTransformFeedbackBuffer2InfoEXT, counterOffset: u32, vertexStride: u32) -> void #c_call;
+PFN_vkCmdWriteMarkerToMemoryAMD :: #type (commandBuffer: VkCommandBuffer, pInfo: *VkMemoryMarkerInfoAMD) -> void #c_call;
+PFN_vkCmdBindIndexBuffer3KHR :: #type (commandBuffer: VkCommandBuffer, pInfo: *VkBindIndexBuffer3InfoKHR) -> void #c_call;
+PFN_vkCmdBindVertexBuffers3KHR :: #type (commandBuffer: VkCommandBuffer, firstBinding: u32, bindingCount: u32, pBindingInfos: *VkBindVertexBuffer3InfoKHR) -> void #c_call;
+PFN_vkCmdDrawIndirect2KHR :: #type (commandBuffer: VkCommandBuffer, pInfo: *VkDrawIndirect2InfoKHR) -> void #c_call;
+PFN_vkCmdDrawIndexedIndirect2KHR :: #type (commandBuffer: VkCommandBuffer, pInfo: *VkDrawIndirect2InfoKHR) -> void #c_call;
+PFN_vkCmdDrawIndirectCount2KHR :: #type (commandBuffer: VkCommandBuffer, pInfo: *VkDrawIndirectCount2InfoKHR) -> void #c_call;
+PFN_vkCmdDrawIndexedIndirectCount2KHR :: #type (commandBuffer: VkCommandBuffer, pInfo: *VkDrawIndirectCount2InfoKHR) -> void #c_call;
+PFN_vkCmdDrawMeshTasksIndirect2EXT :: #type (commandBuffer: VkCommandBuffer, pInfo: *VkDrawIndirect2InfoKHR) -> void #c_call;
+PFN_vkCmdDrawMeshTasksIndirectCount2EXT :: #type (commandBuffer: VkCommandBuffer, pInfo: *VkDrawIndirectCount2InfoKHR) -> void #c_call;
+PFN_vkCmdDispatchIndirect2KHR :: #type (commandBuffer: VkCommandBuffer, pInfo: *VkDispatchIndirect2InfoKHR) -> void #c_call;
+PFN_vkCreateAccelerationStructure2KHR :: #type (device: VkDevice, pCreateInfo: *VkAccelerationStructureCreateInfo2KHR, pAllocator: *VkAllocationCallbacks, pAccelerationStructure: *VkAccelerationStructureKHR) -> VkResult #c_call;
+PFN_vkGetPhysicalDeviceQueueFamilyDataGraphEngineOperationPropertiesARM :: #type (physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, pQueueFamilyDataGraphProperties: *VkQueueFamilyDataGraphPropertiesARM, pProperties: *VkBaseOutStructure) -> VkResult #c_call;
+PFN_vkCmdSetDispatchParametersARM :: #type (commandBuffer: VkCommandBuffer, pDispatchParameters: *VkDispatchParametersARM) -> void #c_call;
+PFN_vkGetPhysicalDeviceQueueFamilyDataGraphOpticalFlowImageFormatsARM :: #type (physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, pQueueFamilyDataGraphProperties: *VkQueueFamilyDataGraphPropertiesARM, pOpticalFlowImageFormatInfo: *VkDataGraphOpticalFlowImageFormatInfoARM, pFormatCount: *u32, pImageFormatProperties: *VkDataGraphOpticalFlowImageFormatPropertiesARM) -> VkResult #c_call;
 #scope_file
 vkCreateInstance_dynamic : PFN_vkCreateInstance;
 vkDestroyInstance_dynamic : PFN_vkDestroyInstance;
@@ -909,6 +947,7 @@ vkBeginCommandBuffer_dynamic : PFN_vkBeginCommandBuffer;
 vkEndCommandBuffer_dynamic : PFN_vkEndCommandBuffer;
 vkResetCommandBuffer_dynamic : PFN_vkResetCommandBuffer;
 vkCmdBindPipeline_dynamic : PFN_vkCmdBindPipeline;
+vkCmdSetPrimitiveRestartIndexEXT_dynamic : PFN_vkCmdSetPrimitiveRestartIndexEXT;
 vkCmdSetAttachmentFeedbackLoopEnableEXT_dynamic : PFN_vkCmdSetAttachmentFeedbackLoopEnableEXT;
 vkCmdSetViewport_dynamic : PFN_vkCmdSetViewport;
 vkCmdSetScissor_dynamic : PFN_vkCmdSetScissor;
@@ -989,6 +1028,8 @@ vkQueuePresentKHR_dynamic : PFN_vkQueuePresentKHR;
 vkCreateViSurfaceNN_dynamic : PFN_vkCreateViSurfaceNN;
 vkCreateWaylandSurfaceKHR_dynamic : PFN_vkCreateWaylandSurfaceKHR;
 vkGetPhysicalDeviceWaylandPresentationSupportKHR_dynamic : PFN_vkGetPhysicalDeviceWaylandPresentationSupportKHR;
+vkCreateUbmSurfaceSEC_dynamic : PFN_vkCreateUbmSurfaceSEC;
+vkGetPhysicalDeviceUbmPresentationSupportSEC_dynamic : PFN_vkGetPhysicalDeviceUbmPresentationSupportSEC;
 vkCreateWin32SurfaceKHR_dynamic : PFN_vkCreateWin32SurfaceKHR;
 vkGetPhysicalDeviceWin32PresentationSupportKHR_dynamic : PFN_vkGetPhysicalDeviceWin32PresentationSupportKHR;
 vkCreateXlibSurfaceKHR_dynamic : PFN_vkCreateXlibSurfaceKHR;
@@ -1421,6 +1462,8 @@ vkDestroyOpticalFlowSessionNV_dynamic : PFN_vkDestroyOpticalFlowSessionNV;
 vkBindOpticalFlowSessionImageNV_dynamic : PFN_vkBindOpticalFlowSessionImageNV;
 vkCmdOpticalFlowExecuteNV_dynamic : PFN_vkCmdOpticalFlowExecuteNV;
 vkGetDeviceFaultInfoEXT_dynamic : PFN_vkGetDeviceFaultInfoEXT;
+vkGetDeviceFaultReportsKHR_dynamic : PFN_vkGetDeviceFaultReportsKHR;
+vkGetDeviceFaultDebugInfoKHR_dynamic : PFN_vkGetDeviceFaultDebugInfoKHR;
 vkCmdSetDepthBias2EXT_dynamic : PFN_vkCmdSetDepthBias2EXT;
 vkReleaseSwapchainImagesKHR_dynamic : PFN_vkReleaseSwapchainImagesKHR;
 vkGetDeviceImageSubresourceLayout_dynamic : PFN_vkGetDeviceImageSubresourceLayout;
@@ -1469,6 +1512,13 @@ vkCmdEndPerTileExecutionQCOM_dynamic : PFN_vkCmdEndPerTileExecutionQCOM;
 vkCreateExternalComputeQueueNV_dynamic : PFN_vkCreateExternalComputeQueueNV;
 vkDestroyExternalComputeQueueNV_dynamic : PFN_vkDestroyExternalComputeQueueNV;
 vkGetExternalComputeQueueDataNV_dynamic : PFN_vkGetExternalComputeQueueDataNV;
+vkEnumeratePhysicalDeviceShaderInstrumentationMetricsARM_dynamic : PFN_vkEnumeratePhysicalDeviceShaderInstrumentationMetricsARM;
+vkCreateShaderInstrumentationARM_dynamic : PFN_vkCreateShaderInstrumentationARM;
+vkDestroyShaderInstrumentationARM_dynamic : PFN_vkDestroyShaderInstrumentationARM;
+vkCmdBeginShaderInstrumentationARM_dynamic : PFN_vkCmdBeginShaderInstrumentationARM;
+vkCmdEndShaderInstrumentationARM_dynamic : PFN_vkCmdEndShaderInstrumentationARM;
+vkGetShaderInstrumentationValuesARM_dynamic : PFN_vkGetShaderInstrumentationValuesARM;
+vkClearShaderInstrumentationMetricsARM_dynamic : PFN_vkClearShaderInstrumentationMetricsARM;
 vkCreateTensorARM_dynamic : PFN_vkCreateTensorARM;
 vkDestroyTensorARM_dynamic : PFN_vkDestroyTensorARM;
 vkCreateTensorViewARM_dynamic : PFN_vkCreateTensorViewARM;
@@ -1496,6 +1546,7 @@ vkGetMemoryNativeBufferOHOS_dynamic : PFN_vkGetMemoryNativeBufferOHOS;
 vkGetSwapchainGrallocUsageOHOS_dynamic : PFN_vkGetSwapchainGrallocUsageOHOS;
 vkAcquireImageOHOS_dynamic : PFN_vkAcquireImageOHOS;
 vkQueueSignalReleaseImageOHOS_dynamic : PFN_vkQueueSignalReleaseImageOHOS;
+vkQueueSetPerfHintQCOM_dynamic : PFN_vkQueueSetPerfHintQCOM;
 vkEnumeratePhysicalDeviceQueueFamilyPerformanceCountersByRegionARM_dynamic : PFN_vkEnumeratePhysicalDeviceQueueFamilyPerformanceCountersByRegionARM;
 vkCmdSetComputeOccupancyPriorityNV_dynamic : PFN_vkCmdSetComputeOccupancyPriorityNV;
 vkWriteSamplerDescriptorsEXT_dynamic : PFN_vkWriteSamplerDescriptorsEXT;
@@ -1508,6 +1559,31 @@ vkUnregisterCustomBorderColorEXT_dynamic : PFN_vkUnregisterCustomBorderColorEXT;
 vkGetImageOpaqueCaptureDataEXT_dynamic : PFN_vkGetImageOpaqueCaptureDataEXT;
 vkGetPhysicalDeviceDescriptorSizeEXT_dynamic : PFN_vkGetPhysicalDeviceDescriptorSizeEXT;
 vkGetTensorOpaqueCaptureDataARM_dynamic : PFN_vkGetTensorOpaqueCaptureDataARM;
+vkCmdCopyMemoryKHR_dynamic : PFN_vkCmdCopyMemoryKHR;
+vkCmdCopyMemoryToImageKHR_dynamic : PFN_vkCmdCopyMemoryToImageKHR;
+vkCmdCopyImageToMemoryKHR_dynamic : PFN_vkCmdCopyImageToMemoryKHR;
+vkCmdUpdateMemoryKHR_dynamic : PFN_vkCmdUpdateMemoryKHR;
+vkCmdFillMemoryKHR_dynamic : PFN_vkCmdFillMemoryKHR;
+vkCmdCopyQueryPoolResultsToMemoryKHR_dynamic : PFN_vkCmdCopyQueryPoolResultsToMemoryKHR;
+vkCmdBeginConditionalRendering2EXT_dynamic : PFN_vkCmdBeginConditionalRendering2EXT;
+vkCmdBindTransformFeedbackBuffers2EXT_dynamic : PFN_vkCmdBindTransformFeedbackBuffers2EXT;
+vkCmdBeginTransformFeedback2EXT_dynamic : PFN_vkCmdBeginTransformFeedback2EXT;
+vkCmdEndTransformFeedback2EXT_dynamic : PFN_vkCmdEndTransformFeedback2EXT;
+vkCmdDrawIndirectByteCount2EXT_dynamic : PFN_vkCmdDrawIndirectByteCount2EXT;
+vkCmdWriteMarkerToMemoryAMD_dynamic : PFN_vkCmdWriteMarkerToMemoryAMD;
+vkCmdBindIndexBuffer3KHR_dynamic : PFN_vkCmdBindIndexBuffer3KHR;
+vkCmdBindVertexBuffers3KHR_dynamic : PFN_vkCmdBindVertexBuffers3KHR;
+vkCmdDrawIndirect2KHR_dynamic : PFN_vkCmdDrawIndirect2KHR;
+vkCmdDrawIndexedIndirect2KHR_dynamic : PFN_vkCmdDrawIndexedIndirect2KHR;
+vkCmdDrawIndirectCount2KHR_dynamic : PFN_vkCmdDrawIndirectCount2KHR;
+vkCmdDrawIndexedIndirectCount2KHR_dynamic : PFN_vkCmdDrawIndexedIndirectCount2KHR;
+vkCmdDrawMeshTasksIndirect2EXT_dynamic : PFN_vkCmdDrawMeshTasksIndirect2EXT;
+vkCmdDrawMeshTasksIndirectCount2EXT_dynamic : PFN_vkCmdDrawMeshTasksIndirectCount2EXT;
+vkCmdDispatchIndirect2KHR_dynamic : PFN_vkCmdDispatchIndirect2KHR;
+vkCreateAccelerationStructure2KHR_dynamic : PFN_vkCreateAccelerationStructure2KHR;
+vkGetPhysicalDeviceQueueFamilyDataGraphEngineOperationPropertiesARM_dynamic : PFN_vkGetPhysicalDeviceQueueFamilyDataGraphEngineOperationPropertiesARM;
+vkCmdSetDispatchParametersARM_dynamic : PFN_vkCmdSetDispatchParametersARM;
+vkGetPhysicalDeviceQueueFamilyDataGraphOpticalFlowImageFormatsARM_dynamic : PFN_vkGetPhysicalDeviceQueueFamilyDataGraphOpticalFlowImageFormatsARM;
 
 make_dynamic_global_function :: (dynamic_name: string) -> string {
     return sprint("%_dynamic = xx vkGetInstanceProcAddr(null, \"%\");", dynamic_name, dynamic_name);
@@ -1566,6 +1642,8 @@ vk_load_instance_functions :: (instance: VkInstance) {
     #insert #run make_dynamic_instance_function("vkCreateViSurfaceNN");
     #insert #run make_dynamic_instance_function("vkCreateWaylandSurfaceKHR");
     #insert #run make_dynamic_instance_function("vkGetPhysicalDeviceWaylandPresentationSupportKHR");
+    #insert #run make_dynamic_instance_function("vkCreateUbmSurfaceSEC");
+    #insert #run make_dynamic_instance_function("vkGetPhysicalDeviceUbmPresentationSupportSEC");
     #insert #run make_dynamic_instance_function("vkCreateWin32SurfaceKHR");
     #insert #run make_dynamic_instance_function("vkGetPhysicalDeviceWin32PresentationSupportKHR");
     #insert #run make_dynamic_instance_function("vkCreateXlibSurfaceKHR");
@@ -1635,11 +1713,14 @@ vk_load_instance_functions :: (instance: VkInstance) {
     #insert #run make_dynamic_instance_function("vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR");
     #insert #run make_dynamic_instance_function("vkGetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV");
     #insert #run make_dynamic_instance_function("vkGetPhysicalDeviceCooperativeVectorPropertiesNV");
+    #insert #run make_dynamic_instance_function("vkEnumeratePhysicalDeviceShaderInstrumentationMetricsARM");
     #insert #run make_dynamic_instance_function("vkGetPhysicalDeviceExternalTensorPropertiesARM");
     #insert #run make_dynamic_instance_function("vkGetPhysicalDeviceQueueFamilyDataGraphPropertiesARM");
     #insert #run make_dynamic_instance_function("vkGetPhysicalDeviceQueueFamilyDataGraphProcessingEnginePropertiesARM");
     #insert #run make_dynamic_instance_function("vkEnumeratePhysicalDeviceQueueFamilyPerformanceCountersByRegionARM");
     #insert #run make_dynamic_instance_function("vkGetPhysicalDeviceDescriptorSizeEXT");
+    #insert #run make_dynamic_instance_function("vkGetPhysicalDeviceQueueFamilyDataGraphEngineOperationPropertiesARM");
+    #insert #run make_dynamic_instance_function("vkGetPhysicalDeviceQueueFamilyDataGraphOpticalFlowImageFormatsARM");
     #insert #run make_dynamic_instance_function_maybe("vkGetPhysicalDeviceFeatures2", "vkGetPhysicalDeviceFeatures2KHR");
     #insert #run make_dynamic_instance_function_maybe("vkGetPhysicalDeviceProperties2", "vkGetPhysicalDeviceProperties2KHR");
     #insert #run make_dynamic_instance_function_maybe("vkGetPhysicalDeviceFormatProperties2", "vkGetPhysicalDeviceFormatProperties2KHR");
@@ -1741,6 +1822,7 @@ vk_load_device_functions :: (device: VkDevice) {
     #insert #run make_dynamic_device_function("vkEndCommandBuffer");
     #insert #run make_dynamic_device_function("vkResetCommandBuffer");
     #insert #run make_dynamic_device_function("vkCmdBindPipeline");
+    #insert #run make_dynamic_device_function("vkCmdSetPrimitiveRestartIndexEXT");
     #insert #run make_dynamic_device_function("vkCmdSetAttachmentFeedbackLoopEnableEXT");
     #insert #run make_dynamic_device_function("vkCmdSetViewport");
     #insert #run make_dynamic_device_function("vkCmdSetScissor");
@@ -2170,6 +2252,8 @@ vk_load_device_functions :: (device: VkDevice) {
     #insert #run make_dynamic_device_function("vkBindOpticalFlowSessionImageNV");
     #insert #run make_dynamic_device_function("vkCmdOpticalFlowExecuteNV");
     #insert #run make_dynamic_device_function("vkGetDeviceFaultInfoEXT");
+    #insert #run make_dynamic_device_function("vkGetDeviceFaultReportsKHR");
+    #insert #run make_dynamic_device_function("vkGetDeviceFaultDebugInfoKHR");
     #insert #run make_dynamic_device_function("vkCmdSetDepthBias2EXT");
     #insert #run make_dynamic_device_function("vkReleaseSwapchainImagesKHR");
     #insert #run make_dynamic_device_function("vkGetDeviceImageSubresourceLayout");
@@ -2215,6 +2299,12 @@ vk_load_device_functions :: (device: VkDevice) {
     #insert #run make_dynamic_device_function("vkCreateExternalComputeQueueNV");
     #insert #run make_dynamic_device_function("vkDestroyExternalComputeQueueNV");
     #insert #run make_dynamic_device_function("vkGetExternalComputeQueueDataNV");
+    #insert #run make_dynamic_device_function("vkCreateShaderInstrumentationARM");
+    #insert #run make_dynamic_device_function("vkDestroyShaderInstrumentationARM");
+    #insert #run make_dynamic_device_function("vkCmdBeginShaderInstrumentationARM");
+    #insert #run make_dynamic_device_function("vkCmdEndShaderInstrumentationARM");
+    #insert #run make_dynamic_device_function("vkGetShaderInstrumentationValuesARM");
+    #insert #run make_dynamic_device_function("vkClearShaderInstrumentationMetricsARM");
     #insert #run make_dynamic_device_function("vkCreateTensorARM");
     #insert #run make_dynamic_device_function("vkDestroyTensorARM");
     #insert #run make_dynamic_device_function("vkCreateTensorViewARM");
@@ -2239,6 +2329,7 @@ vk_load_device_functions :: (device: VkDevice) {
     #insert #run make_dynamic_device_function("vkGetSwapchainGrallocUsageOHOS");
     #insert #run make_dynamic_device_function("vkAcquireImageOHOS");
     #insert #run make_dynamic_device_function("vkQueueSignalReleaseImageOHOS");
+    #insert #run make_dynamic_device_function("vkQueueSetPerfHintQCOM");
     #insert #run make_dynamic_device_function("vkCmdSetComputeOccupancyPriorityNV");
     #insert #run make_dynamic_device_function("vkWriteSamplerDescriptorsEXT");
     #insert #run make_dynamic_device_function("vkWriteResourceDescriptorsEXT");
@@ -2249,6 +2340,29 @@ vk_load_device_functions :: (device: VkDevice) {
     #insert #run make_dynamic_device_function("vkUnregisterCustomBorderColorEXT");
     #insert #run make_dynamic_device_function("vkGetImageOpaqueCaptureDataEXT");
     #insert #run make_dynamic_device_function("vkGetTensorOpaqueCaptureDataARM");
+    #insert #run make_dynamic_device_function("vkCmdCopyMemoryKHR");
+    #insert #run make_dynamic_device_function("vkCmdCopyMemoryToImageKHR");
+    #insert #run make_dynamic_device_function("vkCmdCopyImageToMemoryKHR");
+    #insert #run make_dynamic_device_function("vkCmdUpdateMemoryKHR");
+    #insert #run make_dynamic_device_function("vkCmdFillMemoryKHR");
+    #insert #run make_dynamic_device_function("vkCmdCopyQueryPoolResultsToMemoryKHR");
+    #insert #run make_dynamic_device_function("vkCmdBeginConditionalRendering2EXT");
+    #insert #run make_dynamic_device_function("vkCmdBindTransformFeedbackBuffers2EXT");
+    #insert #run make_dynamic_device_function("vkCmdBeginTransformFeedback2EXT");
+    #insert #run make_dynamic_device_function("vkCmdEndTransformFeedback2EXT");
+    #insert #run make_dynamic_device_function("vkCmdDrawIndirectByteCount2EXT");
+    #insert #run make_dynamic_device_function("vkCmdWriteMarkerToMemoryAMD");
+    #insert #run make_dynamic_device_function("vkCmdBindIndexBuffer3KHR");
+    #insert #run make_dynamic_device_function("vkCmdBindVertexBuffers3KHR");
+    #insert #run make_dynamic_device_function("vkCmdDrawIndirect2KHR");
+    #insert #run make_dynamic_device_function("vkCmdDrawIndexedIndirect2KHR");
+    #insert #run make_dynamic_device_function("vkCmdDrawIndirectCount2KHR");
+    #insert #run make_dynamic_device_function("vkCmdDrawIndexedIndirectCount2KHR");
+    #insert #run make_dynamic_device_function("vkCmdDrawMeshTasksIndirect2EXT");
+    #insert #run make_dynamic_device_function("vkCmdDrawMeshTasksIndirectCount2EXT");
+    #insert #run make_dynamic_device_function("vkCmdDispatchIndirect2KHR");
+    #insert #run make_dynamic_device_function("vkCreateAccelerationStructure2KHR");
+    #insert #run make_dynamic_device_function("vkCmdSetDispatchParametersARM");
     #insert #run make_dynamic_device_function_maybe("vkResetQueryPool", "vkResetQueryPoolEXT");
     #insert #run make_dynamic_device_function_maybe("vkGetRenderingAreaGranularity", "vkGetRenderingAreaGranularityKHR");
     #insert #run make_dynamic_device_function_maybe("vkCmdPushDescriptorSet", "vkCmdPushDescriptorSetKHR");
@@ -2759,6 +2873,10 @@ vkCmdBindPipeline :: (commandBuffer: VkCommandBuffer, pipelineBindPoint: VkPipel
     vkCmdBindPipeline_dynamic(commandBuffer, pipelineBindPoint, pipeline);
 }
 
+vkCmdSetPrimitiveRestartIndexEXT :: (commandBuffer: VkCommandBuffer, primitiveRestartIndex: u32) -> void #c_call {
+    vkCmdSetPrimitiveRestartIndexEXT_dynamic(commandBuffer, primitiveRestartIndex);
+}
+
 vkCmdSetAttachmentFeedbackLoopEnableEXT :: (commandBuffer: VkCommandBuffer, aspectMask: VkImageAspectFlags) -> void #c_call {
     vkCmdSetAttachmentFeedbackLoopEnableEXT_dynamic(commandBuffer, aspectMask);
 }
@@ -3077,6 +3195,14 @@ vkCreateWaylandSurfaceKHR :: (instance: VkInstance, pCreateInfo: *VkWaylandSurfa
 
 vkGetPhysicalDeviceWaylandPresentationSupportKHR :: (physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, display: *wl_display) -> VkBool32 #c_call {
     return vkGetPhysicalDeviceWaylandPresentationSupportKHR_dynamic(physicalDevice, queueFamilyIndex, display);
+}
+
+vkCreateUbmSurfaceSEC :: (instance: VkInstance, pCreateInfo: *VkUbmSurfaceCreateInfoSEC, pAllocator: *VkAllocationCallbacks, pSurface: *VkSurfaceKHR) -> VkResult #c_call {
+    return vkCreateUbmSurfaceSEC_dynamic(instance, pCreateInfo, pAllocator, pSurface);
+}
+
+vkGetPhysicalDeviceUbmPresentationSupportSEC :: (physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, device: *ubm_device) -> VkBool32 #c_call {
+    return vkGetPhysicalDeviceUbmPresentationSupportSEC_dynamic(physicalDevice, queueFamilyIndex, device);
 }
 
 vkCreateWin32SurfaceKHR :: (instance: VkInstance, pCreateInfo: *VkWin32SurfaceCreateInfoKHR, pAllocator: *VkAllocationCallbacks, pSurface: *VkSurfaceKHR) -> VkResult #c_call {
@@ -3931,7 +4057,7 @@ vkDestroyAccelerationStructureNV :: (device: VkDevice, accelerationStructure: Vk
     vkDestroyAccelerationStructureNV_dynamic(device, accelerationStructure, pAllocator);
 }
 
-vkGetAccelerationStructureMemoryRequirementsNV :: (device: VkDevice, pInfo: *VkAccelerationStructureMemoryRequirementsInfoNV, pMemoryRequirements: *VkMemoryRequirements2KHR) -> void #c_call {
+vkGetAccelerationStructureMemoryRequirementsNV :: (device: VkDevice, pInfo: *VkAccelerationStructureMemoryRequirementsInfoNV, pMemoryRequirements: *VkMemoryRequirements2) -> void #c_call {
     vkGetAccelerationStructureMemoryRequirementsNV_dynamic(device, pInfo, pMemoryRequirements);
 }
 
@@ -4949,7 +5075,7 @@ vkGetImageSubresourceLayout2KHR :: vkGetImageSubresourceLayout2;
 
 vkGetImageSubresourceLayout2EXT :: vkGetImageSubresourceLayout2;
 
-vkGetPipelinePropertiesEXT :: (device: VkDevice, pPipelineInfo: *VkPipelineInfoEXT, pPipelineProperties: *VkBaseOutStructure) -> VkResult #c_call {
+vkGetPipelinePropertiesEXT :: (device: VkDevice, pPipelineInfo: *VkPipelineInfoKHR, pPipelineProperties: *VkBaseOutStructure) -> VkResult #c_call {
     return vkGetPipelinePropertiesEXT_dynamic(device, pPipelineInfo, pPipelineProperties);
 }
 
@@ -4991,6 +5117,14 @@ vkCmdOpticalFlowExecuteNV :: (commandBuffer: VkCommandBuffer, session: VkOptical
 
 vkGetDeviceFaultInfoEXT :: (device: VkDevice, pFaultCounts: *VkDeviceFaultCountsEXT, pFaultInfo: *VkDeviceFaultInfoEXT) -> VkResult #c_call {
     return vkGetDeviceFaultInfoEXT_dynamic(device, pFaultCounts, pFaultInfo);
+}
+
+vkGetDeviceFaultReportsKHR :: (device: VkDevice, timeout: u64, pFaultCounts: *u32, pFaultInfo: *VkDeviceFaultInfoKHR) -> VkResult #c_call {
+    return vkGetDeviceFaultReportsKHR_dynamic(device, timeout, pFaultCounts, pFaultInfo);
+}
+
+vkGetDeviceFaultDebugInfoKHR :: (device: VkDevice, pDebugInfo: *VkDeviceFaultDebugInfoKHR) -> VkResult #c_call {
+    return vkGetDeviceFaultDebugInfoKHR_dynamic(device, pDebugInfo);
 }
 
 vkCmdSetDepthBias2EXT :: (commandBuffer: VkCommandBuffer, pDepthBiasInfo: *VkDepthBiasInfoEXT) -> void #c_call {
@@ -5205,6 +5339,34 @@ vkGetExternalComputeQueueDataNV :: (externalQueue: VkExternalComputeQueueNV, par
     vkGetExternalComputeQueueDataNV_dynamic(externalQueue, params, pData);
 }
 
+vkEnumeratePhysicalDeviceShaderInstrumentationMetricsARM :: (physicalDevice: VkPhysicalDevice, pDescriptionCount: *u32, pDescriptions: *VkShaderInstrumentationMetricDescriptionARM) -> VkResult #c_call {
+    return vkEnumeratePhysicalDeviceShaderInstrumentationMetricsARM_dynamic(physicalDevice, pDescriptionCount, pDescriptions);
+}
+
+vkCreateShaderInstrumentationARM :: (device: VkDevice, pCreateInfo: *VkShaderInstrumentationCreateInfoARM, pAllocator: *VkAllocationCallbacks, pInstrumentation: *VkShaderInstrumentationARM) -> VkResult #c_call {
+    return vkCreateShaderInstrumentationARM_dynamic(device, pCreateInfo, pAllocator, pInstrumentation);
+}
+
+vkDestroyShaderInstrumentationARM :: (device: VkDevice, instrumentation: VkShaderInstrumentationARM, pAllocator: *VkAllocationCallbacks) -> void #c_call {
+    vkDestroyShaderInstrumentationARM_dynamic(device, instrumentation, pAllocator);
+}
+
+vkCmdBeginShaderInstrumentationARM :: (commandBuffer: VkCommandBuffer, instrumentation: VkShaderInstrumentationARM) -> void #c_call {
+    vkCmdBeginShaderInstrumentationARM_dynamic(commandBuffer, instrumentation);
+}
+
+vkCmdEndShaderInstrumentationARM :: (commandBuffer: VkCommandBuffer) -> void #c_call {
+    vkCmdEndShaderInstrumentationARM_dynamic(commandBuffer);
+}
+
+vkGetShaderInstrumentationValuesARM :: (device: VkDevice, instrumentation: VkShaderInstrumentationARM, pMetricBlockCount: *u32, pMetricValues: *void, flags: VkShaderInstrumentationValuesFlagsARM) -> VkResult #c_call {
+    return vkGetShaderInstrumentationValuesARM_dynamic(device, instrumentation, pMetricBlockCount, pMetricValues, flags);
+}
+
+vkClearShaderInstrumentationMetricsARM :: (device: VkDevice, instrumentation: VkShaderInstrumentationARM) -> void #c_call {
+    vkClearShaderInstrumentationMetricsARM_dynamic(device, instrumentation);
+}
+
 vkCreateTensorARM :: (device: VkDevice, pCreateInfo: *VkTensorCreateInfoARM, pAllocator: *VkAllocationCallbacks, pTensor: *VkTensorARM) -> VkResult #c_call {
     return vkCreateTensorARM_dynamic(device, pCreateInfo, pAllocator, pTensor);
 }
@@ -5313,6 +5475,10 @@ vkQueueSignalReleaseImageOHOS :: (queue: VkQueue, waitSemaphoreCount: u32, pWait
     return vkQueueSignalReleaseImageOHOS_dynamic(queue, waitSemaphoreCount, pWaitSemaphores, image, pNativeFenceFd);
 }
 
+vkQueueSetPerfHintQCOM :: (queue: VkQueue, pPerfHintInfo: *VkPerfHintInfoQCOM) -> VkResult #c_call {
+    return vkQueueSetPerfHintQCOM_dynamic(queue, pPerfHintInfo);
+}
+
 vkEnumeratePhysicalDeviceQueueFamilyPerformanceCountersByRegionARM :: (physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, pCounterCount: *u32, pCounters: *VkPerformanceCounterARM, pCounterDescriptions: *VkPerformanceCounterDescriptionARM) -> VkResult #c_call {
     return vkEnumeratePhysicalDeviceQueueFamilyPerformanceCountersByRegionARM_dynamic(physicalDevice, queueFamilyIndex, pCounterCount, pCounters, pCounterDescriptions);
 }
@@ -5359,5 +5525,105 @@ vkGetPhysicalDeviceDescriptorSizeEXT :: (physicalDevice: VkPhysicalDevice, descr
 
 vkGetTensorOpaqueCaptureDataARM :: (device: VkDevice, tensorCount: u32, pTensors: *VkTensorARM, pDatas: *VkHostAddressRangeEXT) -> VkResult #c_call {
     return vkGetTensorOpaqueCaptureDataARM_dynamic(device, tensorCount, pTensors, pDatas);
+}
+
+vkCmdCopyMemoryKHR :: (commandBuffer: VkCommandBuffer, pCopyMemoryInfo: *VkCopyDeviceMemoryInfoKHR) -> void #c_call {
+    vkCmdCopyMemoryKHR_dynamic(commandBuffer, pCopyMemoryInfo);
+}
+
+vkCmdCopyMemoryToImageKHR :: (commandBuffer: VkCommandBuffer, pCopyMemoryInfo: *VkCopyDeviceMemoryImageInfoKHR) -> void #c_call {
+    vkCmdCopyMemoryToImageKHR_dynamic(commandBuffer, pCopyMemoryInfo);
+}
+
+vkCmdCopyImageToMemoryKHR :: (commandBuffer: VkCommandBuffer, pCopyMemoryInfo: *VkCopyDeviceMemoryImageInfoKHR) -> void #c_call {
+    vkCmdCopyImageToMemoryKHR_dynamic(commandBuffer, pCopyMemoryInfo);
+}
+
+vkCmdUpdateMemoryKHR :: (commandBuffer: VkCommandBuffer, pDstRange: *VkDeviceAddressRangeKHR, dstFlags: VkAddressCommandFlagsKHR, dataSize: VkDeviceSize, pData: *void) -> void #c_call {
+    vkCmdUpdateMemoryKHR_dynamic(commandBuffer, pDstRange, dstFlags, dataSize, pData);
+}
+
+vkCmdFillMemoryKHR :: (commandBuffer: VkCommandBuffer, pDstRange: *VkDeviceAddressRangeKHR, dstFlags: VkAddressCommandFlagsKHR, data: u32) -> void #c_call {
+    vkCmdFillMemoryKHR_dynamic(commandBuffer, pDstRange, dstFlags, data);
+}
+
+vkCmdCopyQueryPoolResultsToMemoryKHR :: (commandBuffer: VkCommandBuffer, queryPool: VkQueryPool, firstQuery: u32, queryCount: u32, pDstRange: *VkStridedDeviceAddressRangeKHR, dstFlags: VkAddressCommandFlagsKHR, queryResultFlags: VkQueryResultFlags) -> void #c_call {
+    vkCmdCopyQueryPoolResultsToMemoryKHR_dynamic(commandBuffer, queryPool, firstQuery, queryCount, pDstRange, dstFlags, queryResultFlags);
+}
+
+vkCmdBeginConditionalRendering2EXT :: (commandBuffer: VkCommandBuffer, pConditionalRenderingBegin: *VkConditionalRenderingBeginInfo2EXT) -> void #c_call {
+    vkCmdBeginConditionalRendering2EXT_dynamic(commandBuffer, pConditionalRenderingBegin);
+}
+
+vkCmdBindTransformFeedbackBuffers2EXT :: (commandBuffer: VkCommandBuffer, firstBinding: u32, bindingCount: u32, pBindingInfos: *VkBindTransformFeedbackBuffer2InfoEXT) -> void #c_call {
+    vkCmdBindTransformFeedbackBuffers2EXT_dynamic(commandBuffer, firstBinding, bindingCount, pBindingInfos);
+}
+
+vkCmdBeginTransformFeedback2EXT :: (commandBuffer: VkCommandBuffer, firstCounterRange: u32, counterRangeCount: u32, pCounterInfos: *VkBindTransformFeedbackBuffer2InfoEXT) -> void #c_call {
+    vkCmdBeginTransformFeedback2EXT_dynamic(commandBuffer, firstCounterRange, counterRangeCount, pCounterInfos);
+}
+
+vkCmdEndTransformFeedback2EXT :: (commandBuffer: VkCommandBuffer, firstCounterRange: u32, counterRangeCount: u32, pCounterInfos: *VkBindTransformFeedbackBuffer2InfoEXT) -> void #c_call {
+    vkCmdEndTransformFeedback2EXT_dynamic(commandBuffer, firstCounterRange, counterRangeCount, pCounterInfos);
+}
+
+vkCmdDrawIndirectByteCount2EXT :: (commandBuffer: VkCommandBuffer, instanceCount: u32, firstInstance: u32, pCounterInfo: *VkBindTransformFeedbackBuffer2InfoEXT, counterOffset: u32, vertexStride: u32) -> void #c_call {
+    vkCmdDrawIndirectByteCount2EXT_dynamic(commandBuffer, instanceCount, firstInstance, pCounterInfo, counterOffset, vertexStride);
+}
+
+vkCmdWriteMarkerToMemoryAMD :: (commandBuffer: VkCommandBuffer, pInfo: *VkMemoryMarkerInfoAMD) -> void #c_call {
+    vkCmdWriteMarkerToMemoryAMD_dynamic(commandBuffer, pInfo);
+}
+
+vkCmdBindIndexBuffer3KHR :: (commandBuffer: VkCommandBuffer, pInfo: *VkBindIndexBuffer3InfoKHR) -> void #c_call {
+    vkCmdBindIndexBuffer3KHR_dynamic(commandBuffer, pInfo);
+}
+
+vkCmdBindVertexBuffers3KHR :: (commandBuffer: VkCommandBuffer, firstBinding: u32, bindingCount: u32, pBindingInfos: *VkBindVertexBuffer3InfoKHR) -> void #c_call {
+    vkCmdBindVertexBuffers3KHR_dynamic(commandBuffer, firstBinding, bindingCount, pBindingInfos);
+}
+
+vkCmdDrawIndirect2KHR :: (commandBuffer: VkCommandBuffer, pInfo: *VkDrawIndirect2InfoKHR) -> void #c_call {
+    vkCmdDrawIndirect2KHR_dynamic(commandBuffer, pInfo);
+}
+
+vkCmdDrawIndexedIndirect2KHR :: (commandBuffer: VkCommandBuffer, pInfo: *VkDrawIndirect2InfoKHR) -> void #c_call {
+    vkCmdDrawIndexedIndirect2KHR_dynamic(commandBuffer, pInfo);
+}
+
+vkCmdDrawIndirectCount2KHR :: (commandBuffer: VkCommandBuffer, pInfo: *VkDrawIndirectCount2InfoKHR) -> void #c_call {
+    vkCmdDrawIndirectCount2KHR_dynamic(commandBuffer, pInfo);
+}
+
+vkCmdDrawIndexedIndirectCount2KHR :: (commandBuffer: VkCommandBuffer, pInfo: *VkDrawIndirectCount2InfoKHR) -> void #c_call {
+    vkCmdDrawIndexedIndirectCount2KHR_dynamic(commandBuffer, pInfo);
+}
+
+vkCmdDrawMeshTasksIndirect2EXT :: (commandBuffer: VkCommandBuffer, pInfo: *VkDrawIndirect2InfoKHR) -> void #c_call {
+    vkCmdDrawMeshTasksIndirect2EXT_dynamic(commandBuffer, pInfo);
+}
+
+vkCmdDrawMeshTasksIndirectCount2EXT :: (commandBuffer: VkCommandBuffer, pInfo: *VkDrawIndirectCount2InfoKHR) -> void #c_call {
+    vkCmdDrawMeshTasksIndirectCount2EXT_dynamic(commandBuffer, pInfo);
+}
+
+vkCmdDispatchIndirect2KHR :: (commandBuffer: VkCommandBuffer, pInfo: *VkDispatchIndirect2InfoKHR) -> void #c_call {
+    vkCmdDispatchIndirect2KHR_dynamic(commandBuffer, pInfo);
+}
+
+vkCreateAccelerationStructure2KHR :: (device: VkDevice, pCreateInfo: *VkAccelerationStructureCreateInfo2KHR, pAllocator: *VkAllocationCallbacks, pAccelerationStructure: *VkAccelerationStructureKHR) -> VkResult #c_call {
+    return vkCreateAccelerationStructure2KHR_dynamic(device, pCreateInfo, pAllocator, pAccelerationStructure);
+}
+
+vkGetPhysicalDeviceQueueFamilyDataGraphEngineOperationPropertiesARM :: (physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, pQueueFamilyDataGraphProperties: *VkQueueFamilyDataGraphPropertiesARM, pProperties: *VkBaseOutStructure) -> VkResult #c_call {
+    return vkGetPhysicalDeviceQueueFamilyDataGraphEngineOperationPropertiesARM_dynamic(physicalDevice, queueFamilyIndex, pQueueFamilyDataGraphProperties, pProperties);
+}
+
+vkCmdSetDispatchParametersARM :: (commandBuffer: VkCommandBuffer, pDispatchParameters: *VkDispatchParametersARM) -> void #c_call {
+    vkCmdSetDispatchParametersARM_dynamic(commandBuffer, pDispatchParameters);
+}
+
+vkGetPhysicalDeviceQueueFamilyDataGraphOpticalFlowImageFormatsARM :: (physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, pQueueFamilyDataGraphProperties: *VkQueueFamilyDataGraphPropertiesARM, pOpticalFlowImageFormatInfo: *VkDataGraphOpticalFlowImageFormatInfoARM, pFormatCount: *u32, pImageFormatProperties: *VkDataGraphOpticalFlowImageFormatPropertiesARM) -> VkResult #c_call {
+    return vkGetPhysicalDeviceQueueFamilyDataGraphOpticalFlowImageFormatsARM_dynamic(physicalDevice, queueFamilyIndex, pQueueFamilyDataGraphProperties, pOpticalFlowImageFormatInfo, pFormatCount, pImageFormatProperties);
 }
 
