@@ -29,8 +29,16 @@ init_renderer :: (sdl_window: *SDL_Window) {
     GPU.init(*all_params_arena);
     frame_count := GPU.frame_count();
 
-    clear_pipeline = create_compute_pipeline_from_file("shaders/clear_texture.slang");
-    solid_rectangle_pipeline = create_compute_pipeline_from_file("shaders/solid_rectangle.slang");
+    {
+        ir := GPU.load_compute_ir("clear_texture");
+        defer GPU.destroy_ir(ir);
+        clear_pipeline = GPU.create_compute_pipeline(ir);
+    }
+    {
+        ir := GPU.load_compute_ir("solid_rectangle");
+        defer GPU.destroy_ir(ir);
+        solid_rectangle_pipeline = GPU.create_compute_pipeline(ir);
+    }
 
     color_targets: [1]GPU.Color_Target;
     color_targets[0].format = .B8G8R8A8_UNORM;
@@ -103,8 +111,11 @@ resize_callback :: () {
     draw_texture_view_desc: GPU.View_Desc = .{
         format = .B8G8R8A8_UNORM,
     };
-    draw_texture_descriptor = GPU.texture_view_descriptor(draw_texture, draw_texture_view_desc);
-    draw_heap[0] = draw_texture_descriptor;
+
+    if draw_heap.count {
+        draw_texture_descriptor = GPU.texture_view_descriptor(draw_texture, draw_texture_view_desc);
+        draw_heap[0] = draw_texture_descriptor;
+    }
 }
 
 draw_heap: [] GPU.Texture_Descriptor;
@@ -221,14 +232,6 @@ simple_params: [] Simple_Data;
 simple_params_base_gpu: u64;
 
 all_params_arena: GPU.Arena;
-
-create_compute_pipeline_from_file :: (shader_path: string) -> GPU.Pipeline {
-    shader := read_entire_file(shader_path);
-    ir := GPU.load_compute_ir(shader);
-    defer GPU.destroy_ir(ir);
-    log("Successfully compile %", shader_path);
-    return GPU.create_compute_pipeline(ir);
-}
 
 create_graphics_pipeline_from_file :: (shader_path: string, desc: GPU.Raster_Desc) -> GPU.Pipeline {
     shader := read_entire_file(shader_path);

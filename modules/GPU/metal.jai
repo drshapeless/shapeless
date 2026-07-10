@@ -27,7 +27,6 @@ GPU_Context :: struct {
 
     command_buffer_index:= 0;
 
-    // spirv_cross_context:    spvc_context;
     slang_global_session: *slang.IGlobalSession;
 
     // Useful for checking size and alignment.
@@ -40,17 +39,6 @@ GPU_Context :: struct {
 
     #overlay (argument_table) vertex_argument_table: *MTL4ArgumentTable;
     fragment_argument_table: *MTL4ArgumentTable;
-
-    // The use this ring buffer as the backing buffer of passing a
-    // pointer to shader. Before Metal 4, the compute encoder used to
-    // have setBytes function, but in Metal 4, everything is managed
-    // by user, so we have to create a backing buffer for such
-    // usage. The backing buffer is set to be 4kb, which is very
-    // overkill for such usage, the real used size should only be 8
-    // bytes times the number of command buffers.
-    argument_ring_buffer: Allocation;
-    current_argument_ring_buffer_position: u64;
-    DEFAULT_ARGUMENT_RING_BUFFER_SIZE :: 4 * 1024;
 
     residency_set: *MTLResidencySet;
 }
@@ -144,9 +132,6 @@ init :: (window: *SDL_Window = null) {
     fragment_argument_table = MTLDevice.newArgumentTableWithDescriptor_error_(device, argument_table_descriptor, *error);
     assert_metal(error);
 
-    // spv_result := spvc_context_create(*spirv_cross_context);
-    // assert_spvc(spv_result);
-
     slang_result := slang.slang_createGlobalSession(slang.SLANG_API_VERSION, *slang_global_session);
     Basic.assert(!slang.SLANG_FAILED(slang_result));
 
@@ -154,8 +139,6 @@ init :: (window: *SDL_Window = null) {
 
     residency_set = MTLDevice.newResidencySetWithDescriptor_error_(device, residency_set_descriptor, *error);
     assert_metal(error);
-
-    argument_ring_buffer = metal_allocate(DEFAULT_ARGUMENT_RING_BUFFER_SIZE);
 
     if window {
         sdl_window = window;
@@ -181,13 +164,8 @@ deinit :: () {
         slang.ISlangUnknown_release(xx slang_global_session);
     }
 
-    // if spirv_cross_context {
-    //     spvc_context_destroy(spirv_cross_context);
-    // }
-
     release(argument_table);
     release(fragment_argument_table);
-    metal_deallocate(argument_ring_buffer);
     SDL_Metal_DestroyView(view);
     release(compiler);
     release(temp_texture_descriptor);
@@ -307,22 +285,41 @@ load_msl :: (msl: string, entry_points: []string) -> []IR {
     return irs;
 }
 
-// I do not recommend anyone to use spirv in Metal shader, not
-// everything can be translated to metal. If you have slang shader
-// code, use that instead.
-// load_spirv :: (spirv: string, entry_points: []string) -> []IR {
-//     using context.gpu_context;
-
-//     shader_string := spirv_to_metal(spirv, spirv_cross_context);
-//     defer spvc_context_release_allocations(spirv_cross_context);
-
-//     return load_msl(shader_string, entry_points);
-// }
-
+// This function expects the content of the shader file, not the name nor the path.
 load_slang :: (shader: string, entry_points: []string) -> []IR {
     metal_code := slang_to_metal(shader, entry_points, context.gpu_context.slang_global_session);
 
     return load_msl(metal_code, entry_points);
+}
+
+load_ir :: (shader_name: string, entry_points: []string) -> []IR {
+    shader_path := Basic.tprint("%%.metal", SHADER_BASE_DIRECTORY, shader_name);
+
+    shader_data, ok := File.read_entire_file(shader_path);
+    Basic.assert(ok);
+    return load_msl(shader_data, entry_points);
+}
+
+// Pass the name without extension, e.g. "simple.slang" should be
+// "simple". If there is a metal alternative, the metal one would be
+// used. "simple.metal" would be loaded if it exists.
+load_compute_ir :: (shader_name: string, entry_point: string = "compute_main") -> IR {
+    Basic.push_allocator(Basic.temp);
+    Basic.auto_release_temp();
+
+    irs := load_ir(shader_name, .[entry_point]);
+
+    return irs[0];
+}
+
+// See load_compute_ir
+load_graphics_ir :: (shader_name: string, vertex_entry_point: string = "vertex_main", fragment_entry_point: string = "fragment_main") -> IR, IR {
+    Basic.push_allocator(Basic.temp);
+    Basic.auto_release_temp();
+
+    irs := load_ir(shader_name, .[vertex_entry_point, fragment_entry_point]);
+
+    return irs[0], irs[1];
 }
 
 destroy_ir :: (ir: IR) {
@@ -610,11 +607,7 @@ set_pipeline :: (cb: *Command_Buffer, pipeline: Pipeline) {
 dispatch :: (cb: *Command_Buffer, data_gpu: Ptr, groups: u32x3, threads: u32x3) {
     using context.gpu_context;
 
-    ptr_cpu, ptr_gpu := get_next_pointer_from_argument_ring_buffer();
-
-    ptr_cpu.(*u64).* = data_gpu;
-
-    MTL4ArgumentTable.setAddress_atIndex_(argument_table, ptr_gpu, 0);
+    MTL4ArgumentTable.setAddress_atIndex_(argument_table, data_gpu, 0);
 
     maybe_create_compute_encoder(cb);
 
@@ -654,15 +647,10 @@ end_render_pass :: (cb: *Command_Buffer) {
 draw_indexed_instanced :: (cb: *Command_Buffer, vertex_data_gpu: Ptr, fragment_data_gpu: Ptr, indices_gpu: Ptr, index_count: u32, instance_count: u32, topology: Topology) {
     using context.gpu_context;
 
-    vertex_cpu, vertex_gpu := get_next_pointer_from_argument_ring_buffer();
-    vertex_cpu.(*u64).* = vertex_data_gpu;
-
-    MTL4ArgumentTable.setAddress_atIndex_(vertex_argument_table, vertex_gpu, 0);
+    MTL4ArgumentTable.setAddress_atIndex_(vertex_argument_table, vertex_data_gpu, 0);
     MTL4RenderCommandEncoder.setArgumentTable_atStages_(cb.render_encoder, vertex_argument_table, .Vertex);
 
-    fragment_cpu, fragment_gpu := get_next_pointer_from_argument_ring_buffer();
-    fragment_cpu.(*u64).* = fragment_data_gpu;
-    MTL4ArgumentTable.setAddress_atIndex_(fragment_argument_table, fragment_gpu, 0);
+    MTL4ArgumentTable.setAddress_atIndex_(fragment_argument_table, fragment_data_gpu, 0);
     MTL4RenderCommandEncoder.setArgumentTable_atStages_(cb.render_encoder, fragment_argument_table, .Fragment);
     MTL4RenderCommandEncoder.drawIndexedPrimitives_indexCount_indexType_indexBuffer_indexBufferLength_instanceCount_(cb.render_encoder, to_metal_primitive_type(topology), index_count, .UInt32, indices_gpu, size_of(u32).(u32) * index_count, instance_count);
 }
@@ -1229,22 +1217,6 @@ metal_texture_size :: (metal_texture: *MTLTexture) -> MTLSize {
         height = MTLTexture.height(metal_texture),
         depth = MTLTexture.depth(metal_texture),
     };
-}
-
-get_next_pointer_from_argument_ring_buffer :: () -> cpu:*void, gpu:Ptr {
-    using context.gpu_context;
-
-    cpu: *void = argument_ring_buffer.cpu;
-    gpu: Ptr = argument_ring_buffer.gpu;
-    if current_argument_ring_buffer_position < argument_ring_buffer.size {
-        cpu += current_argument_ring_buffer_position;
-        gpu += current_argument_ring_buffer_position;
-        current_argument_ring_buffer_position += 8;
-    } else {
-        current_argument_ring_buffer_position = 0;
-    }
-
-    return cpu, gpu;
 }
 
 #import "Metal";

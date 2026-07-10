@@ -75,6 +75,8 @@
 //// resourceID, for Vulkan, it returns the inputed index.
 // texture_handle :: (texture: Texture, index: u64) -> u64
 
+SHADER_BASE_DIRECTORY :: "shaders/";
+
 Memory_Type :: enum {
     SHARED;
     PRIVATE;
@@ -316,14 +318,14 @@ Render_Pass_Desc :: struct {
     color_targets: [] Render_Pass_Attachment_Desc;
 }
 
-load_compute_ir :: inline (shader: string, entry_point: string = "compute_main") -> IR {
-    Basic.auto_release_temp();
-    Basic.push_allocator(Basic.temp);
-    irs := load_slang(shader, .[entry_point]);
-    return irs[0];
-}
+// load_compute_ir :: inline (shader: string, entry_point: string = "compute_main") -> IR {
+//     Basic.auto_release_temp();
+//     Basic.push_allocator(Basic.temp);
+//     irs := load_slang(shader, .[entry_point]);
+//     return irs[0];
+// }
 
-load_graphics_ir :: #bake_arguments load_slang(entry_points = .["vertex_main", "fragment_main"]);
+// load_graphics_ir :: #bake_arguments load_slang(entry_points = .["vertex_main", "fragment_main"]);
 
 //// Allocator
 // A GPU allocator has the same interface as a Jai allocator
