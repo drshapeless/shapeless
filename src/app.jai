@@ -77,11 +77,37 @@ app_iter :: (appstate: *void) -> SDL_AppResult {
 
     cb := GPU.start_command_recording();
 
-    GPU.set_active_texture_heap(cb, draw_heap);
-    GPU.set_pipeline(cb, clear_pipeline);
-    clear_screen(cb, .{0.2, 0.3, 0.4, 1.0});
+    color_target: GPU.Render_Pass_Attachment_Desc = .{
+        texture = draw_texture,
+    };
+    color_target.clear_color = .{0.2, 0.3, 0.4, 1.0};
+    render_pass_desc: GPU.Render_Pass_Desc = .{
+        color_targets = .[color_target],
+    };
+    GPU.begin_render_pass(cb, render_pass_desc);
 
-    GPU.barrier(cb, .COMPUTE, .COMPUTE);
+    GPU.set_pipeline(cb, simple_pipeline);
+    GPU.set_topology(cb, .TRIANGLE_LIST);
+
+    vertices: [3] Simple_Data;
+    vertices[0].position = .{0.0, 0.0, 0.0, 1.0};
+    vertices[1].position = .{0.5, 0.5, 0.0, 1.0};
+    vertices[2].position = .{0, 0.5, 0.0, 1.0};
+    vertices[0].color = .{0.0, 1.0, 0.0, 1.0};
+    vertices[1].color = .{1.0, 0.0, 0.0, 1.0};
+    vertices[2].color = .{1.0, 0.0, 0.0, 1.0};
+
+    indices: [3]u32 = .[0, 1, 2];
+
+
+    draw_simple(cb, vertices, indices);
+    GPU.end_render_pass(cb);
+
+    GPU.set_active_texture_heap(cb, draw_heap);
+    // GPU.set_pipeline(cb, clear_pipeline);
+    // clear_screen(cb, .{0.2, 0.3, 0.4, 1.0});
+
+    GPU.barrier(cb, .FRAGMENT, .COMPUTE);
     GPU.set_pipeline(cb, solid_rectangle_pipeline);
     rect1: Color_Rectangle = .{
         origin = .{0, 0},
@@ -89,13 +115,14 @@ app_iter :: (appstate: *void) -> SDL_AppResult {
         color  = .{0.0, 1.0, 1.0, 1.0},
     };
     rect2: Color_Rectangle = .{
-        origin = .{100, 150},
+        origin = .{150, 200},
         size   = .{400, 700},
         color  = .{0.0, 0.7, 1.0, 1.0},
     };
     draw_rectangles(cb, rect2, rect1);
 
-    GPU.barrier(cb, .BLIT, .COMPUTE);
+
+    GPU.barrier(cb, .COMPUTE, .BLIT);
     GPU.copy_texture(cb, swapchain_texture, draw_texture, true);
 
     GPU.submit_and_present(queue, swapchain_texture, cb);

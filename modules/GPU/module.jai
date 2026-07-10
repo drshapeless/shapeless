@@ -301,8 +301,8 @@ Store_OP :: enum {
 
 Render_Pass_Attachment_Desc :: struct {
     texture: Texture;
-    load_op: Load_OP;
-    store_op: Store_OP;
+    load_op: Load_OP = .CLEAR;
+    store_op: Store_OP = .STORE;
     union {
         clear_color: Color;
         clear_value: struct {
@@ -476,6 +476,7 @@ gpu_pointer_to_allocation :: (ptr: Ptr) -> Allocation {
     return allocation;
 }
 
+// TODO: This name is confusing.
 Array :: struct {
     gpu_ptr: Ptr;
     count:   s64;

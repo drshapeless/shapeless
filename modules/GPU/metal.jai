@@ -95,6 +95,12 @@ Command_Buffer :: struct {
     render_encoder:         *MTL4RenderCommandEncoder;
 
     render_pass_descriptor: *MTL4RenderPassDescriptor;
+
+    // The reason why topology is here is because the setting of
+    // topology in Metal is not in a separate function, but as an
+    // argument in the draw call. To maintain consistency between
+    // Vulkan and Metal, topology is temporarily cached here.
+    topology:               Topology;
 }
 
 Semaphore :: struct {
@@ -346,12 +352,6 @@ create_graphics_pipeline :: (vertex_ir: IR, fragment_ir: IR, desc: Raster_Desc) 
     error: *NSError;
     render_pipeline_desc := objc_new(MTL4RenderPipelineDescriptor);
     defer release(render_pipeline_desc);
-
-    Basic.log("render pipeline: %", render_pipeline_desc);
-
-    Basic.assert(vertex_ir.library_function_descriptor != null, "The vertex ir function is null");
-    Basic.log("vertex ir: %", vertex_ir.library_function_descriptor);
-
     MTL4RenderPipelineDescriptor.setVertexFunctionDescriptor_(render_pipeline_desc, xx vertex_ir.library_function_descriptor);
     MTL4RenderPipelineDescriptor.setFragmentFunctionDescriptor_(render_pipeline_desc, xx fragment_ir.library_function_descriptor);
 
@@ -644,7 +644,11 @@ end_render_pass :: (cb: *Command_Buffer) {
     end_render_encoder(cb);
 }
 
-draw_indexed_instanced :: (cb: *Command_Buffer, vertex_data_gpu: Ptr, fragment_data_gpu: Ptr, indices_gpu: Ptr, index_count: u32, instance_count: u32, topology: Topology) {
+set_topology :: (cb: *Command_Buffer, topology: Topology) {
+    cb.topology = topology;
+}
+
+draw_indexed_instanced :: (cb: *Command_Buffer, vertex_data_gpu: Ptr, fragment_data_gpu: Ptr, indices: Array, instance_count: u32) {
     using context.gpu_context;
 
     MTL4ArgumentTable.setAddress_atIndex_(vertex_argument_table, vertex_data_gpu, 0);
@@ -652,7 +656,7 @@ draw_indexed_instanced :: (cb: *Command_Buffer, vertex_data_gpu: Ptr, fragment_d
 
     MTL4ArgumentTable.setAddress_atIndex_(fragment_argument_table, fragment_data_gpu, 0);
     MTL4RenderCommandEncoder.setArgumentTable_atStages_(cb.render_encoder, fragment_argument_table, .Fragment);
-    MTL4RenderCommandEncoder.drawIndexedPrimitives_indexCount_indexType_indexBuffer_indexBufferLength_instanceCount_(cb.render_encoder, to_metal_primitive_type(topology), index_count, .UInt32, indices_gpu, size_of(u32).(u32) * index_count, instance_count);
+    MTL4RenderCommandEncoder.drawIndexedPrimitives_indexCount_indexType_indexBuffer_indexBufferLength_instanceCount_(cb.render_encoder, to_metal_primitive_type(cb.topology), xx indices.count, .UInt32, indices.gpu_ptr, size_of(u32).(u32) *  xx indices.count, instance_count);
 }
 
 acquire_swapchain_texture :: () -> bool, Texture {
@@ -682,7 +686,7 @@ barrier :: (cb: *Command_Buffer, before: Stage, after: Stage, hazards: Hazard = 
         encoder = xx cb.compute_encoder;
     }
 
-    MTL4CommandEncoder.barrierAfterEncoderStages_beforeEncoderStages_visibilityOptions_(encoder, to_metal_stages(before), to_metal_stages(after), .Device);
+    MTL4CommandEncoder.barrierAfterEncoderStages_beforeEncoderStages_visibilityOptions_(encoder, to_metal_stages(after), to_metal_stages(before), .Device);
 }
 
 resize_callback :: (width: float64, height: float64) {

@@ -40,14 +40,18 @@ init_renderer :: (sdl_window: *SDL_Window) {
         solid_rectangle_pipeline = GPU.create_compute_pipeline(ir);
     }
 
-    color_targets: [1]GPU.Color_Target;
-    color_targets[0].format = .B8G8R8A8_UNORM;
+    {
+        color_targets: [1]GPU.Color_Target;
+        color_targets[0].format = .B8G8R8A8_UNORM;
 
-    simple_raster_desc: GPU.Raster_Desc = .{
-        color_targets = color_targets,
-    };
-
-    // simple_pipeline = create_graphics_pipeline_from_file("shaders/simple.slang", simple_raster_desc);
+        desc: GPU.Raster_Desc = .{
+            color_targets = color_targets,
+        };
+        vir, fir := GPU.load_graphics_ir("simple");
+        defer GPU.destroy_ir(vir);
+        defer GPU.destroy_ir(fir);
+        simple_pipeline = GPU.create_graphics_pipeline(vir, fir, desc);
+    }
 
     {
         GPU.push_allocator(GPU.arena_allocator_proc, *all_params_arena);
@@ -138,7 +142,7 @@ Solid_Rectangle_Data :: struct {
 }
 
 Simple_Data :: struct {
-    positions: GPU.Ptr;
+    position:  Vector4;
     color:     Color;
 }
 
@@ -189,7 +193,7 @@ draw_rectangles :: (cb: *GPU.Command_Buffer, rects: .. Color_Rectangle) {
     GPU.dispatch(cb, solid_rectangle_params_base_gpu + cast(u64) (size_of(Solid_Rectangle_Data) * i), group_size, threads_size);
 }
 
-draw_simple :: (cb: *GPU.Command_Buffer, vertices: [] Vector2, indices: [] u32, color: Color) {
+draw_simple :: (cb: *GPU.Command_Buffer, vertices: [] Simple_Data, indices: [] u32) {
     i := GPU.frame_index();
     GPU.push_allocator(GPU.arena_allocator_proc, *frame_arenas[i]);
 
@@ -197,13 +201,9 @@ draw_simple :: (cb: *GPU.Command_Buffer, vertices: [] Vector2, indices: [] u32, 
     v_ptr := GPU.host_to_device_pointer(gpu_vertices.data);
 
     gpu_indices := GPU.array_copy(indices);
-    i_ptr := GPU.host_to_device_pointer(gpu_indices.data);
+    indices_array := GPU.to_device_array(gpu_indices);
 
-    gpu_color := GPU.New(Color);
-    gpu_color.* = color;
-    c_ptr := GPU.host_to_device_pointer(gpu_color);
-
-    GPU.draw_indexed_instanced(cb, v_ptr, c_ptr, i_ptr, xx indices.count, 1, .TRIANGLE_LIST);
+    GPU.draw_indexed_instanced(cb, v_ptr, 0, indices_array, 1);
 }
 
 #load "font.jai";
