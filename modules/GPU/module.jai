@@ -490,6 +490,28 @@ to_device_array :: (arr: []$T) -> Array {
     return gpu_array;
 }
 
+// Pass the name without extension, e.g. "simple.slang" should be
+// "simple". If there is a metal alternative, the metal one would be
+// used. "simple.metal" would be loaded if it exists.
+load_compute_ir :: (shader_name: string, entry_point: string = "compute_main") -> IR {
+    Basic.push_allocator(Basic.temp);
+    Basic.auto_release_temp();
+
+    irs := load_ir(shader_name, .[entry_point]);
+
+    return irs[0];
+}
+
+// See load_compute_ir
+load_graphics_ir :: (shader_name: string, vertex_entry_point: string = "vertex_main", fragment_entry_point: string = "fragment_main") -> IR, IR {
+    Basic.push_allocator(Basic.temp);
+    Basic.auto_release_temp();
+
+    irs := load_ir(shader_name, .[vertex_entry_point, fragment_entry_point]);
+
+    return irs[0], irs[1];
+}
+
 #if OS == .MACOS {
     #load "metal.jai";
 } else {

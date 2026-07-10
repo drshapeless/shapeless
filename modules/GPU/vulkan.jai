@@ -88,6 +88,9 @@ Allocation :: struct {
 // TODO: the Texture struct has too many field, some of them should be removed.
 Texture :: struct {
     image: VkImage;
+    // I thought image view could be omitted, but color attachment
+    // requires an image view.
+    view:  VkImageView;
     format: VkFormat;
     extent: VkExtent3D;
     gpu: Ptr;
@@ -399,12 +402,35 @@ create_texture :: (desc: Texture_Desc, ptr_gpu: Ptr) -> Texture {
 
     vkTransitionImageLayout(device, 1, *transition_info);
 
+    // The image view is hard coded as 2D, it should only be used in
+    // color attachment.
+    image_view_create_info := VkImageViewCreateInfo.{
+        image = texture.image,
+        viewType = .e2D,
+        format = desc.format,
+        subresourceRange = .{
+            aspectMask   = .COLOR,
+            baseMipLevel   = 0,
+            levelCount     = VK_REMAINING_MIP_LEVELS,
+            baseArrayLayer = 0,
+            layerCount     = VK_REMAINING_ARRAY_LAYERS
+        },
+    };
+
+    result = check_vk(vkCreateImageView(device, *image_view_create_info, vka, *texture.view));
+    assert_vk_result(result);
+
     return texture;
 }
 
 destroy_texture :: (texture: Texture) {
     using context.gpu_context;
-    vkDestroyImage(device, texture.image, vka);
+    if texture.image {
+        vkDestroyImage(device, texture.image, vka);
+    }
+    if texture.view {
+        vkDestroyImageView(device, texture.view, vka);
+    }
 }
 
 // This returns a 32 bytes texture descriptor that can be written in a texture heap
@@ -453,6 +479,14 @@ load_slang :: (shader: string, entry_points: [] string) -> []IR {
     return load_spirv(spirv_code, entry_points);
 }
 
+load_ir :: (shader_name: string, entry_points: []string) -> []IR {
+    shader_path := Basic.tprint("%%.slang", SHADER_BASE_DIRECTORY, shader_name);
+
+    shader_data, ok := File.read_entire_file(shader_path);
+    Basic.assert(ok);
+    return load_slang(shader_data, entry_points);
+}
+
 // This is a dummy function in Vulkan
 destroy_ir :: (ir: IR) {
 
@@ -496,9 +530,15 @@ create_graphics_pipeline :: (vertex_ir: IR, fragment_ir: IR, desc: Raster_Desc) 
     using context.gpu_context;
     Basic.auto_release_temp();
 
+    descriptor_set_and_binding_mapping_info := VkShaderDescriptorSetAndBindingMappingInfoEXT.{
+        mappingCount = 1,
+        pMappings = *set_and_binding_mapping,
+    };
+
     create_infos: [2]VkShaderCreateInfoEXT;
 
     create_infos[0] = VkShaderCreateInfoEXT.{
+        pNext = *descriptor_set_and_binding_mapping_info,
         stage = .VERTEX,
         nextStage = .FRAGMENT,
         codeType = .SPIRV,
@@ -507,12 +547,13 @@ create_graphics_pipeline :: (vertex_ir: IR, fragment_ir: IR, desc: Raster_Desc) 
         pName = Basic.temp_c_string(vertex_ir.entry_point),
         setLayoutCount = 0, // We don't use any descriptor set
         pSetLayouts = null,
-        pushConstantRangeCount = 1,
-        pPushConstantRanges = *PUSH_CONSTANT_RANGE,
+        pushConstantRangeCount = 0,
+        pPushConstantRanges = null,
         pSpecializationInfo = null, // Don't know what this is yet
     };
 
     create_infos[1] = VkShaderCreateInfoEXT.{
+        pNext = *descriptor_set_and_binding_mapping_info,
         stage = .FRAGMENT,
         nextStage = 0,
         codeType = .SPIRV,
@@ -521,14 +562,14 @@ create_graphics_pipeline :: (vertex_ir: IR, fragment_ir: IR, desc: Raster_Desc) 
         pName = Basic.temp_c_string(fragment_ir.entry_point),
         setLayoutCount = 0, // We don't use any descriptor set
         pSetLayouts = null,
-        pushConstantRangeCount = 1,
-        pPushConstantRanges = *PUSH_CONSTANT_RANGE,
+        pushConstantRangeCount = 0,
+        pPushConstantRanges = null,
         pSpecializationInfo = null, // Don't know what this is yet
     };
 
     result: VkResult;
     shaders: [2]VkShaderEXT;
-    result = check_vk(vkCreateShadersEXT(device, 1, create_infos.data, vka, shaders.data));
+    result = check_vk(vkCreateShadersEXT(device, 2, create_infos.data, vka, shaders.data));
     assert_vk_result(result);
 
     pipeline: Pipeline;
@@ -1026,7 +1067,7 @@ begin_render_pass :: (cb: *Command_Buffer, desc: Render_Pass_Desc) {
     Basic.auto_release_temp();
     rendering_info := to_vulkan_rendering_info(desc);
     vkCmdBeginRendering(cb.vk, *rendering_info);
-
+    vkCmdSetVertexInputEXT(cb.vk, 0, null, 0, null);
     // Set viewport and scissor?
 }
 
@@ -1098,6 +1139,42 @@ create_texture_heap :: (count: s64) -> [] Texture_Descriptor {
     return heap;
 }
 
+set_topology :: (cb: *Command_Buffer, topology: Topology) {
+    vkCmdSetPrimitiveTopology(cb.vk, to_vulkan_topology(topology));
+}
+
+draw_indexed_instanced :: (cb: *Command_Buffer, vertex_data_gpu: Ptr, fragment_data_gpu: Ptr, indices: Array, instance_count: u32) {
+    using context.gpu_context;
+
+    Params :: struct {
+        vertex_input: Ptr;
+        fragment_input: Ptr;
+    }
+
+    params := Params.{
+        vertex_data_gpu,
+        fragment_data_gpu,
+    };
+
+    push_data_info := VkPushDataInfoEXT.{
+        data = VkHostAddressRangeConstEXT.{
+            address = *params,
+            size    = xx size_of(Params),
+        },
+    };
+    vkCmdPushDataEXT(cb.vk, *push_data_info);
+    index_buffer_info := VkBindIndexBuffer3InfoKHR.{
+        addressRange = .{
+            address = indices.gpu_ptr,
+            size = xx (size_of(u32) * indices.count),
+        },
+        indexType = .UINT32,
+    };
+    vkCmdBindIndexBuffer3KHR(cb.vk, *index_buffer_info);
+
+    vkCmdDrawIndexed(cb.vk, xx indices.count, instance_count, 0, 0, 0);
+}
+
 #scope_file
 application_info :: VkApplicationInfo.{
     pApplicationName = "shapeless",
@@ -1133,6 +1210,7 @@ VK_EXT_SHADER_OBJECT_EXTENSION_NAME,
 VK_EXT_DESCRIPTOR_HEAP_EXTENSION_NAME,
 VK_KHR_UNIFIED_IMAGE_LAYOUTS_EXTENSION_NAME,
 VK_KHR_SHADER_UNTYPED_POINTERS_EXTENSION_NAME,
+VK_KHR_DEVICE_ADDRESS_COMMANDS_EXTENSION_NAME,
 ];
 
 assert_vk_result :: (result: VkResult) #expand {
@@ -1402,7 +1480,13 @@ make_device :: (device_extensions: [] *u8) -> VkResult, VkDevice {
     }
 
     chain: *void;
+    features_device_address_commands := VkPhysicalDeviceDeviceAddressCommandsFeaturesKHR.{
+        deviceAddressCommands = VK_TRUE,
+    };
+    chain = *features_device_address_commands;
+
     features_shader_untyped_pointer := VkPhysicalDeviceShaderUntypedPointersFeaturesKHR.{
+        pNext = chain,
         shaderUntypedPointers = VK_TRUE,
     };
     chain = *features_shader_untyped_pointer;
@@ -1723,6 +1807,7 @@ to_vulkan_clear_color :: (color: Color) -> VkClearValue {
 
 // Recommend to use temp allocator
 to_vulkan_rendering_info :: (desc: Render_Pass_Desc) -> VkRenderingInfo {
+    using context.gpu_context;
     color_attachments: [..] VkRenderingAttachmentInfo;
     for desc.color_targets {
         color_attachment := VkRenderingAttachmentInfo.{
@@ -1741,10 +1826,8 @@ to_vulkan_rendering_info :: (desc: Render_Pass_Desc) -> VkRenderingInfo {
         imageLayout = .GENERAL,
         loadOp = to_vulkan_load_op(desc.depth_target.load_op),
         storeOp = to_vulkan_store_op(desc.depth_target.store_op),
-        clearValue = .{
-            depthStencil = .{depth = desc.depth_target.clear_value.depth}
-        },
     };
+    depth_attachment.clearValue.depthStencil = .{depth = desc.depth_target.clear_value.depth};
 
     stencil_attachment := Basic.New(VkRenderingAttachmentInfo);
     stencil_attachment.* = .{
@@ -1752,10 +1835,8 @@ to_vulkan_rendering_info :: (desc: Render_Pass_Desc) -> VkRenderingInfo {
         imageLayout = .GENERAL,
         loadOp = to_vulkan_load_op(desc.stencil_target.load_op),
         storeOp = to_vulkan_store_op(desc.stencil_target.store_op),
-        clearValue = .{
-            depthStencil = .{stencil = desc.stencil_target.clear_value.stencil}
-        },
     };
+    stencil_attachment.clearValue.depthStencil = .{stencil = desc.stencil_target.clear_value.stencil};
 
     rendering_info := VkRenderingInfo.{
         renderArea = .{offset = .{0, 0}, extent = swapchain.extent},
@@ -1773,6 +1854,10 @@ aligned_vk_size :: (value: u64, alignment: u64) -> u64 {
     return (value + alignment - 1) & ~(alignment - 1);
 }
 
+to_vulkan_topology :: (topology: Topology) -> VkPrimitiveTopology {
+    return cast(VkPrimitiveTopology) topology;
+}
+
 #import "Vulkan";
 #import "SDL3";
 Basic :: #import "Basic";
@@ -1780,3 +1865,4 @@ Math :: #import "Math";
 Compiler :: #import "Compiler";
 #import "Hash_Table";
 slang :: #import "slang";
+File :: #import "File";
