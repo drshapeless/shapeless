@@ -101,6 +101,11 @@ Queue_Type :: enum {
     TRANSFER :: 2;
 }
 
+u32x2 :: struct {
+    x: u32;
+    y: u32;
+}
+
 u32x3 :: struct {
     x: u32;
     y: u32;
@@ -316,6 +321,20 @@ Render_Pass_Desc :: struct {
     depth_target: Render_Pass_Attachment_Desc;
     stencil_target: Render_Pass_Attachment_Desc;
     color_targets: [] Render_Pass_Attachment_Desc;
+}
+
+Viewport :: struct {
+    x:         float = 0;
+    y:         float = 0;
+    width:     float;
+    height:    float;
+    min_depth: float = 0;
+    max_depth: float = 1;
+}
+
+Rect :: struct {
+    origin: u32x2;
+    size:   u32x2;
 }
 
 // load_compute_ir :: inline (shader: string, entry_point: string = "compute_main") -> IR {

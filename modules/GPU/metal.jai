@@ -622,6 +622,26 @@ end_render_pass :: (cb: *Command_Buffer) {
     end_render_encoder(cb);
 }
 
+set_viewport :: (cb: *Command_Buffer, viewport: Viewport) {
+    mtl: MTLViewport;
+    mtl.originX = viewport.x;
+    mtl.originY = viewport.y;
+    mtl.width   = viewport.width;
+    mtl.height  = viewport.height;
+    mtl.znear   = viewport.min_depth;
+    mtl.zfar    = viewport.max_depth;
+    MTL4RenderCommandEncoder.setViewport_(cb.render_encoder, mtl);
+}
+
+set_scissor :: (cb: *Command_Buffer, scissor: Rect) {
+    mtl: MTLScissorRect;
+    mtl.x      = scissor.origin.x;
+    mtl.y      = scissor.origin.y;
+    mtl.width  = scissor.size.x;
+    mtl.height = scissor.size.y;
+    MTL4RenderCommandEncoder.setScissorRect_(cb.render_encoder, mtl);
+}
+
 set_topology :: (cb: *Command_Buffer, topology: Topology) {
     cb.topology = topology;
 }
