@@ -122,6 +122,8 @@ resize_callback :: () {
     }
 }
 
+window_dimensions: GPU.u32x3;
+
 draw_heap: [] GPU.Texture_Descriptor;
 
 draw_texture:             GPU.Texture;
@@ -219,8 +221,6 @@ window: *SDL_Window;
 
 draw_arena:   GPU.Arena;
 draw_texture_descriptor: GPU.Texture_Descriptor;
-
-window_dimensions: GPU.u32x3;
 
 clear_params: [] Clear_Data;
 clear_params_base_gpu: u64;

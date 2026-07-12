@@ -333,7 +333,7 @@ Viewport :: struct {
 }
 
 Rect :: struct {
-    origin: u32x2;
+    origin: u32x2 = .{0, 0};
     size:   u32x2;
 }
 

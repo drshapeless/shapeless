@@ -88,6 +88,14 @@ app_iter :: (appstate: *void) -> SDL_AppResult {
 
     GPU.set_pipeline(cb, simple_pipeline);
     GPU.set_topology(cb, .TRIANGLE_LIST);
+    viewport: GPU.Viewport;
+    viewport.width  = xx window_dimensions.x;
+    viewport.height = xx window_dimensions.y;
+    GPU.set_viewport(cb, viewport);
+    scissor: GPU.Rect;
+    scissor.size.x  = window_dimensions.x;
+    scissor.size.y  = window_dimensions.y;
+    GPU.set_scissor(cb, scissor);
 
     vertices: [3] Simple_Data;
     vertices[0].position = .{0.0, 0.0, 0.0, 1.0};

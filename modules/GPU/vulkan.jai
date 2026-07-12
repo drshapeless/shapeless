@@ -539,6 +539,7 @@ create_graphics_pipeline :: (vertex_ir: IR, fragment_ir: IR, desc: Raster_Desc) 
 
     create_infos[0] = VkShaderCreateInfoEXT.{
         pNext = *descriptor_set_and_binding_mapping_info,
+        flags = .DESCRIPTOR_HEAP,
         stage = .VERTEX,
         nextStage = .FRAGMENT,
         codeType = .SPIRV,
@@ -554,6 +555,7 @@ create_graphics_pipeline :: (vertex_ir: IR, fragment_ir: IR, desc: Raster_Desc) 
 
     create_infos[1] = VkShaderCreateInfoEXT.{
         pNext = *descriptor_set_and_binding_mapping_info,
+        flags = .DESCRIPTOR_HEAP,
         stage = .FRAGMENT,
         nextStage = 0,
         codeType = .SPIRV,
@@ -1137,6 +1139,25 @@ create_texture_heap :: (count: s64) -> [] Texture_Descriptor {
     heap.data = allocation.cpu;
 
     return heap;
+}
+
+set_viewport :: (cb: *Command_Buffer, viewport: Viewport) {
+    vk: VkViewport;
+    vk.x = viewport.x;
+    vk.y = viewport.y;
+    vk.width = viewport.width;
+    vk.height = viewport.height;
+    vk.minDepth = viewport.min_depth;
+    vk.maxDepth = viewport.max_depth;
+    vkCmdSetViewport(cb.vk, 0, 1, *vk);
+}
+
+set_scissor :: (cb: *Command_Buffer, scissor: Rect) {
+    rect: VkRect2D;
+    rect.offset.x = xx scissor.origin.x;
+    rect.offset.y = xx scissor.origin.y;
+    rect.extent = cast,force(VkExtent2D) scissor.size;
+    vkCmdSetScissor(cb.vk, 0, 1, *rect);
 }
 
 set_topology :: (cb: *Command_Buffer, topology: Topology) {
