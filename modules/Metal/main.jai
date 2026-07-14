@@ -38,7 +38,68 @@ main :: () {
     ca_metal_layer_root := clang_getTranslationUnitCursor(ca_metal_layer_translation_unit);
     clang_visitChildren(ca_metal_layer_root, ca_metal_layer_visitor, null);
 
-    write_to_file();
+    write_to_file("Metal");
+}
+
+metal_visitor :: (cursor: CXCursor, parent: CXCursor, client_data: CXClientData) -> CXChildVisitResult #c_call {
+    push_context {
+        auto_release_temp();
+        cursor_name := to_string(clang_getCursorSpelling(cursor),, temp);
+        cursor_type := clang_getCursorType(cursor);
+        cursor_kind := clang_getCursorKind(cursor);
+        if !begins_with(cursor_name, "MTL") return .Continue;
+
+        if cursor_kind == {
+        case .EnumDecl;
+            handle_enum(cursor);
+        case .MacroInstantiation;
+            // Ignore
+            ;
+        case .MacroDefinition;
+            ;
+        case .ObjCClassRef;
+            ;
+        case .ObjCProtocolRef;
+            ;
+        case .TypedefDecl;
+            handle_typedef(cursor);
+        case .FunctionDecl;
+            handle_function(cursor);
+        case .VarDecl;
+            handle_var(cursor);
+        case .ObjCInterfaceDecl;
+            handle_objc_interface(cursor);
+        case .ObjCProtocolDecl;
+            handle_objc_protocol(cursor);
+        case .StructDecl;
+            handle_struct(cursor);
+        case;
+            log("What is this % %", cursor_name, cursor_kind);
+        }
+    }
+
+    return .Continue;
+}
+
+ca_metal_layer_visitor :: (cursor: CXCursor, parent: CXCursor, client_data: CXClientData) -> CXChildVisitResult #c_call {
+    push_context {
+        name := to_string(cursor);
+        kind := clang_getCursorKind(cursor);
+        if begins_with(name, "CAMetal") {
+            if kind == {
+            case .ObjCClassRef;
+                // Don't care
+            case .ObjCProtocolDecl;
+                handle_objc_protocol(cursor);
+            case .ObjCInterfaceDecl;
+                handle_objc_interface(cursor);
+            case;
+                assert(false, "unexpected quartz type %", kind);
+            }
+        }
+    }
+
+    return .Continue;
 }
 
 Objc_Enum_Member :: struct {
@@ -126,67 +187,6 @@ objc_interfaces: [..] Objc_Interface;
 objc_protocols: [..] Objc_Protocol;
 
 selector_table: Table(string, struct{});
-
-metal_visitor :: (cursor: CXCursor, parent: CXCursor, client_data: CXClientData) -> CXChildVisitResult #c_call {
-    push_context {
-        auto_release_temp();
-        cursor_name := to_string(clang_getCursorSpelling(cursor),, temp);
-        cursor_type := clang_getCursorType(cursor);
-        cursor_kind := clang_getCursorKind(cursor);
-        if !begins_with(cursor_name, "MTL") return .Continue;
-
-        if cursor_kind == {
-        case .EnumDecl;
-            handle_enum(cursor);
-        case .MacroInstantiation;
-            // Ignore
-            ;
-        case .MacroDefinition;
-            ;
-        case .ObjCClassRef;
-            ;
-        case .ObjCProtocolRef;
-            ;
-        case .TypedefDecl;
-            handle_typedef(cursor);
-        case .FunctionDecl;
-            handle_function(cursor);
-        case .VarDecl;
-            handle_var(cursor);
-        case .ObjCInterfaceDecl;
-            handle_objc_interface(cursor);
-        case .ObjCProtocolDecl;
-            handle_objc_protocol(cursor);
-        case .StructDecl;
-            handle_struct(cursor);
-        case;
-            log("What is this % %", cursor_name, cursor_kind);
-        }
-    }
-
-    return .Continue;
-}
-
-ca_metal_layer_visitor :: (cursor: CXCursor, parent: CXCursor, client_data: CXClientData) -> CXChildVisitResult #c_call {
-    push_context {
-        name := to_string(cursor);
-        kind := clang_getCursorKind(cursor);
-        if begins_with(name, "CAMetal") {
-            if kind == {
-            case .ObjCClassRef;
-                // Don't care
-            case .ObjCProtocolDecl;
-                handle_objc_protocol(cursor);
-            case .ObjCInterfaceDecl;
-                handle_objc_interface(cursor);
-            case;
-                assert(false, "unexpected quartz type %", kind);
-            }
-        }
-    }
-
-    return .Continue;
-}
 
 // This function return a newly allocated Jai string
 to_string :: (spelling: CXString) -> string {
@@ -445,8 +445,8 @@ handle_enum :: (cursor: CXCursor) {
                 if occurences == 0 && ends_with(parent_name, "s") {
                     modified_parent_name := slice(parent_name, 0, parent_name.count - 1);
                     name_string, occurences = replace(name_string, modified_parent_name, "",, temp);
-                    if occurences == 0 && parent_name == "MTLResourceOptions" {
-                        modified_parent_name = "MTLResource";
+                    if occurences == 0 && ends_with(parent_name, "Options") {
+                        modified_parent_name = replace(parent_name, "Options", "",, temp);
                         name_string = replace(name_string, modified_parent_name, "",, temp);
                     }
                 }
@@ -771,7 +771,7 @@ handle_objc_protocol :: (cursor: CXCursor) {
     array_add(*objc_protocols, protocol);
 }
 
-write_to_file :: () {
+write_to_file :: (export_library_name: string) {
     sb: String_Builder;
     for e: objc_enums {
         if e.comment != "" {
@@ -842,7 +842,7 @@ write_to_file :: () {
             }
             print_to_builder(*sb, "%: %", sanitize_parameter_name(p.name), p.type);
         }
-        print_to_builder(*sb, ") -> % #foreign Metal;\n", f.return_type);
+        print_to_builder(*sb, ") -> % #foreign %;\n", f.return_type, export_library_name);
     }
 
     write_entire_file("function.jai", *sb);
@@ -853,7 +853,7 @@ write_to_file :: () {
             append(*sb, "\n");
         }
         if v.value == "" {
-            print_to_builder(*sb, "%: % #elsewhere Metal;\n", v.name, v.type);
+            print_to_builder(*sb, "%: % #elsewhere %;\n", v.name, v.type, export_library_name);
         } else {
             print_to_builder(*sb, "%: % : %;\n", v.name, v.type, v.value);
         }
