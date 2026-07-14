@@ -76,6 +76,7 @@ init_renderer :: (sdl_window: *SDL_Window) {
 }
 
 deinit_renderer :: () {
+    GPU.destroy_pipeline(simple_pipeline);
     GPU.destroy_pipeline(clear_pipeline);
     GPU.destroy_pipeline(solid_rectangle_pipeline);
     for * frame_arenas {
