@@ -122,6 +122,16 @@ IR :: struct {
     entry_point: string;
 }
 
+Depth_Stencil_State :: struct {
+
+}
+
+Blend_State :: struct {
+    enable_blend: VkBool32;
+    color_blend_equation: VkColorBlendEquationEXT;
+    color_write_mask: VkColorComponentFlags;
+}
+
 init :: (window: *SDL_Window = null) {
     using context.gpu_context;
     get_instance_proc_addr := SDL_Vulkan_GetVkGetInstanceProcAddr();
