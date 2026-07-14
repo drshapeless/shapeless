@@ -14,6 +14,7 @@ struct Params {
 
 [vk::push_constant]
 Params *pc;
+Params pc;
 
 [shader("vertex")]
 Vertex_Output vertex_main(uint vid : SV_VertexID, uint iid : SV_InstanceID) {

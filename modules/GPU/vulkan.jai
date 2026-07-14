@@ -286,7 +286,7 @@ vulkan_allocator_proc :: (mode: Allocator_Mode, requested_size: s64, old_size: s
 }
 
 // This only allocates shared memory (rebar).
-vulkan_allocate :: (bytes: u64, usage: VkBufferUsageFlags = .SHADER_DEVICE_ADDRESS | .STORAGE_BUFFER | .TRANSFER_DST | .TRANSFER_SRC, required_flags: VkMemoryPropertyFlags = .DEVICE_LOCAL | .HOST_VISIBLE | .HOST_COHERENT, $mapped := true) -> Allocation {
+vulkan_allocate :: (bytes: u64, usage: VkBufferUsageFlags = .SHADER_DEVICE_ADDRESS | .STORAGE_BUFFER | .TRANSFER_DST | .TRANSFER_SRC | .INDEX_BUFFER, required_flags: VkMemoryPropertyFlags = .DEVICE_LOCAL | .HOST_VISIBLE | .HOST_COHERENT, $mapped := true) -> Allocation {
     using context.gpu_context;
     buffer: VkBuffer;
     buffer_create_info := VkBufferCreateInfo.{
@@ -1069,8 +1069,41 @@ begin_render_pass :: (cb: *Command_Buffer, desc: Render_Pass_Desc) {
     Basic.auto_release_temp();
     rendering_info := to_vulkan_rendering_info(desc);
     vkCmdBeginRendering(cb.vk, *rendering_info);
+    is_enabled: VkBool32 = VK_FALSE;
+    vkCmdSetCullMode(cb.vk, .NONE);
+    vkCmdSetLineWidth(cb.vk, 1.0);
+    vkCmdSetRasterizerDiscardEnable(cb.vk, VK_FALSE);
+    vkCmdSetRasterizationSamplesEXT(cb.vk, .e1);
+    vkCmdSetAlphaToCoverageEnableEXT(cb.vk, VK_FALSE);
+    sample_mask: VkSampleMask = 1;
+    vkCmdSetSampleMaskEXT(cb.vk, .e1, *sample_mask);
+    vkCmdSetPolygonModeEXT(cb.vk, .FILL);
+
+    // Depth
+    vkCmdSetDepthBiasEnable(cb.vk, VK_FALSE);
+    vkCmdSetDepthTestEnable(cb.vk, VK_FALSE);
+    vkCmdSetDepthWriteEnable(cb.vk, VK_FALSE);
+    vkCmdSetDepthCompareOp(cb.vk, .NEVER);
+    vkCmdSetStencilTestEnable(cb.vk, VK_FALSE);
+    vkCmdSetStencilOp(cb.vk, .FRONT, .KEEP, .KEEP, .KEEP, .NEVER);
+
+    // Blending
+    vkCmdSetColorBlendEnableEXT(cb.vk, 0, 1, *is_enabled);
+    color_blend_equation := VkColorBlendEquationEXT.{
+
+    };
+    vkCmdSetColorBlendEquationEXT(cb.vk, 0, 1, *color_blend_equation);
+    color_write_mask: VkColorComponentFlags;
+    vkCmdSetColorWriteMaskEXT(cb.vk, 0, 1, *color_write_mask);
+    blend_constants: float;
+    vkCmdSetBlendConstants(cb.vk, *blend_constants);
+    vkCmdSetLogicOpEnableEXT(cb.vk, VK_FALSE);
+
+    // Vertex
     vkCmdSetVertexInputEXT(cb.vk, 0, null, 0, null);
-    // Set viewport and scissor?
+
+    // What is this??
+    vkCmdSetPrimitiveRestartEnable(cb.vk, VK_FALSE);
 }
 
 end_render_pass :: (cb: *Command_Buffer) {
@@ -1149,7 +1182,8 @@ set_viewport :: (cb: *Command_Buffer, viewport: Viewport) {
     vk.height = viewport.height;
     vk.minDepth = viewport.min_depth;
     vk.maxDepth = viewport.max_depth;
-    vkCmdSetViewport(cb.vk, 0, 1, *vk);
+    // vkCmdSetViewport(cb.vk, 0, 1, *vk);
+    vkCmdSetViewportWithCount(cb.vk, 1, *vk);
 }
 
 set_scissor :: (cb: *Command_Buffer, scissor: Rect) {
@@ -1157,7 +1191,8 @@ set_scissor :: (cb: *Command_Buffer, scissor: Rect) {
     rect.offset.x = xx scissor.origin.x;
     rect.offset.y = xx scissor.origin.y;
     rect.extent = cast,force(VkExtent2D) scissor.size;
-    vkCmdSetScissor(cb.vk, 0, 1, *rect);
+    // vkCmdSetScissor(cb.vk, 0, 1, *rect);
+    vkCmdSetScissorWithCount(cb.vk, 1, *rect);
 }
 
 set_topology :: (cb: *Command_Buffer, topology: Topology) {
@@ -1184,16 +1219,19 @@ draw_indexed_instanced :: (cb: *Command_Buffer, vertex_data_gpu: Ptr, fragment_d
         },
     };
     vkCmdPushDataEXT(cb.vk, *push_data_info);
-    index_buffer_info := VkBindIndexBuffer3InfoKHR.{
-        addressRange = .{
-            address = indices.gpu_ptr,
-            size = xx (size_of(u32) * indices.count),
-        },
-        indexType = .UINT32,
-    };
-    vkCmdBindIndexBuffer3KHR(cb.vk, *index_buffer_info);
+    // index_buffer_info := VkBindIndexBuffer3InfoKHR.{
+    //     addressRange = .{
+    //         address = indices.gpu_ptr,
+    //         size = xx (size_of(u32) * indices.count),
+    //     },
+    //     addressFlags = .STORAGE_BUFFER_USAGE,
+    //     indexType = .UINT32,
+    // };
+    // vkCmdBindIndexBuffer3KHR(cb.vk, *index_buffer_info);
 
-    vkCmdDrawIndexed(cb.vk, xx indices.count, instance_count, 0, 0, 0);
+    // vkCmdDrawIndexed(cb.vk, xx indices.count, instance_count, 0, 0, 0);
+
+    vkCmdDraw(cb.vk, 3, 1, 0, 0);
 }
 
 #scope_file
@@ -1312,10 +1350,10 @@ get_vk_instance_extensions :: () -> [] *u8 {
 debug_utils_callback :: (messageSeverity: VkDebugUtilsMessageSeverityFlagBitsEXT, messageTypes: VkDebugUtilsMessageTypeFlagsEXT, pCallbackData: *VkDebugUtilsMessengerCallbackDataEXT, pUserData: *void) -> VkBool32 #c_call {
     push_context {
         if messageSeverity == {
-        case .VERBOSE;
-            ;
-        case .INFO;
-            ;
+        // case .VERBOSE;
+        //     Basic.log("[VERBOSE] %", to_string(pCallbackData.pMessage));
+        // case .INFO;
+        //     Basic.log("[INFO ] %", to_string(pCallbackData.pMessage));
         case .WARNING;
             Basic.log("[WARN ] %", to_string(pCallbackData.pMessage));
         case .ERROR;
@@ -1841,32 +1879,37 @@ to_vulkan_rendering_info :: (desc: Render_Pass_Desc) -> VkRenderingInfo {
         Basic.array_add(*color_attachments, color_attachment);
     }
 
-    depth_attachment := Basic.New(VkRenderingAttachmentInfo);
-    depth_attachment.* = .{
-        imageView = desc.depth_target.texture.view,
-        imageLayout = .GENERAL,
-        loadOp = to_vulkan_load_op(desc.depth_target.load_op),
-        storeOp = to_vulkan_store_op(desc.depth_target.store_op),
-    };
-    depth_attachment.clearValue.depthStencil = .{depth = desc.depth_target.clear_value.depth};
-
-    stencil_attachment := Basic.New(VkRenderingAttachmentInfo);
-    stencil_attachment.* = .{
-        imageView = desc.stencil_target.texture.view,
-        imageLayout = .GENERAL,
-        loadOp = to_vulkan_load_op(desc.stencil_target.load_op),
-        storeOp = to_vulkan_store_op(desc.stencil_target.store_op),
-    };
-    stencil_attachment.clearValue.depthStencil = .{stencil = desc.stencil_target.clear_value.stencil};
-
     rendering_info := VkRenderingInfo.{
         renderArea = .{offset = .{0, 0}, extent = swapchain.extent},
         layerCount = 1,
         colorAttachmentCount = xx color_attachments.count,
         pColorAttachments = color_attachments.data,
-        pDepthAttachment = depth_attachment,
-        pStencilAttachment = stencil_attachment,
     };
+
+    if desc.depth_target.texture.image != null {
+        depth_attachment := Basic.New(VkRenderingAttachmentInfo);
+        depth_attachment.* = .{
+            imageView = desc.depth_target.texture.view,
+            imageLayout = .GENERAL,
+            loadOp = to_vulkan_load_op(desc.depth_target.load_op),
+            storeOp = to_vulkan_store_op(desc.depth_target.store_op),
+        };
+        depth_attachment.clearValue.depthStencil = .{depth = desc.depth_target.clear_value.depth};
+        rendering_info.pDepthAttachment = depth_attachment;
+
+    }
+
+    if desc.stencil_target.texture.image != null {
+        stencil_attachment := Basic.New(VkRenderingAttachmentInfo);
+        stencil_attachment.* = .{
+            imageView = desc.stencil_target.texture.view,
+            imageLayout = .GENERAL,
+            loadOp = to_vulkan_load_op(desc.stencil_target.load_op),
+            storeOp = to_vulkan_store_op(desc.stencil_target.store_op),
+        };
+        stencil_attachment.clearValue.depthStencil = .{stencil = desc.stencil_target.clear_value.stencil};
+        rendering_info.pStencilAttachment = stencil_attachment;
+    }
 
     return rendering_info;
 }
