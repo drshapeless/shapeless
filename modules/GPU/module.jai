@@ -1,4 +1,4 @@
-#module_parameters(VALIDATION := true, DEBUG_ASSERT := true);
+#module_parameters(VALIDATION := true, DEBUG_ASSERT := true, SHADER_BASE_DIRECTORY := "shaders/");
 
 // The GPU module is a very minimalistic GPU API targeting very new
 // hardware. It uses Metal 4 on macOS, and Vulkan 1.4 on
@@ -74,8 +74,6 @@
 //// Thus I make this dummy function, for Metal, it returns the
 //// resourceID, for Vulkan, it returns the inputed index.
 // texture_handle :: (texture: Texture, index: u64) -> u64
-
-SHADER_BASE_DIRECTORY :: "shaders/";
 
 Memory_Type :: enum {
     SHARED;
