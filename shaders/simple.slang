@@ -13,7 +13,6 @@ struct Params {
 };
 
 [vk::push_constant]
-Params *pc;
 Params pc;
 
 [shader("vertex")]
