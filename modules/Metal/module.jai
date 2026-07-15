@@ -1,12 +1,5 @@
 #scope_export
-#load "enum.jai";
-#load "struct.jai";
-#load "typedef.jai";
-#load "function.jai";
-#load "var.jai";
-#load "selectors.jai";
-#load "protocol.jai";
-#load "interface.jai";
+#load "bindings.jai";
 
 init_metal :: () {
     if __sel.layer return;

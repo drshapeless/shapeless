@@ -12,7 +12,7 @@ main :: () {
     array_add(*options.headers, metal_path, ca_metal_layer_path);
     options.visitor = my_visitor;
 
-    generate_bindings(options);
+    generate_bindings(options, "bindings.jai");
 }
 
 my_visitor :: (cursor: Objc_Cursor, parent: Objc_Cursor, client_data: *void) -> Objc_Generate_Result {

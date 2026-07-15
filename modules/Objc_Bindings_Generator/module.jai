@@ -19,7 +19,7 @@ Objc_Generate_Result :: enum {
 
 Objc_Visitor :: #type (cursor: Objc_Cursor, parent: Objc_Cursor, client_data: *void) -> Objc_Generate_Result;
 
-generate_bindings :: (options: Objc_Generate_Bindings_Options) -> bool {
+generate_bindings :: (options: Objc_Generate_Bindings_Options, output_filename: string) -> bool {
     // To extract the comment from the header, we have to use
     // -fretain-comments-from-system-headers
 
@@ -48,7 +48,7 @@ generate_bindings :: (options: Objc_Generate_Bindings_Options) -> bool {
         cd.userdata = options.userdata;
         clang_visitChildren(root, objc_default_visitor, *cd);
     }
-    write_to_file(options.export_library_name);
+    write_to_file(options.export_library_name, output_filename);
 
     return true;
 }
@@ -800,7 +800,7 @@ handle_objc_protocol :: (cursor: CXCursor) {
     array_add_if_unique(*objc_protocols, protocol, protocol_compare);
 }
 
-write_to_file :: (export_library_name: string) {
+write_to_file :: (export_library_name: string, output_filename: string) {
     sb: String_Builder;
     for e: objc_enums {
         if e.comment != "" {
@@ -827,8 +827,6 @@ write_to_file :: (export_library_name: string) {
         append(*sb, "}\n\n");
     }
 
-    write_entire_file("enum.jai", *sb);
-
     for s: objc_structs {
         if s.comment != "" {
             append(*sb, s.comment);
@@ -847,8 +845,6 @@ write_to_file :: (export_library_name: string) {
         append(*sb, "}\n\n");
     }
 
-    write_entire_file("struct.jai", *sb);
-
     for t: objc_typedefs {
         if t.comment != "" {
             append(*sb, t.comment);
@@ -856,8 +852,6 @@ write_to_file :: (export_library_name: string) {
         }
         print_to_builder(*sb, "% :: %;\n", t.name, t.alias);
     }
-
-    write_entire_file("typedef.jai", *sb);
 
     for f: objc_functions {
         if f.comment != "" {
@@ -874,8 +868,6 @@ write_to_file :: (export_library_name: string) {
         print_to_builder(*sb, ") -> % #foreign %;\n", f.return_type, export_library_name);
     }
 
-    write_entire_file("function.jai", *sb);
-
     for v: objc_vars {
         if v.comment != "" {
             append(*sb, v.comment);
@@ -887,8 +879,6 @@ write_to_file :: (export_library_name: string) {
             print_to_builder(*sb, "%: % : %;\n", v.name, v.type, v.value);
         }
     }
-
-    write_entire_file("var.jai", *sb);
 
     for i: objc_interfaces {
         if i.comment != "" {
@@ -974,8 +964,6 @@ write_to_file :: (export_library_name: string) {
         append(*sb, "}\n\n");
     }
 
-    write_entire_file("interface.jai", *sb);
-
     for protocol: objc_protocols {
         if protocol.comment != "" {
             append(*sb, protocol.comment);
@@ -1027,15 +1015,14 @@ write_to_file :: (export_library_name: string) {
 
     }
 
-    write_entire_file("protocol.jai", *sb);
-
     append(*sb, "_Generated_Selectors :: struct #type_info_no_size_complaint {\n");
     for selector_table {
         real_selector_name := replace(it_index, ":", "_");
         print_to_builder(*sb, "    %: *void = ---;\n", real_selector_name);
     }
     append(*sb, "}\n__sel: _Generated_Selectors;\n");
-    write_entire_file("selectors.jai", *sb);
+
+    write_entire_file(output_filename, *sb);
 }
 
 #import "clang";
