@@ -245,8 +245,11 @@ to_jai_type :: (sb: *String_Builder, type: CXType, user_data: *void = null) {
         #through;
     case .Pointer;
         pointee_type := clang_getPointeeType(type);
-        append(sb, "*");
-        to_jai_type(sb, pointee_type);
+        if pointee_type.kind != .FunctionProto {
+            append(sb, "*");
+        }
+
+        to_jai_type(sb, pointee_type, user_data);
     case .ObjCObject;
         base_type := clang_Type_getObjCObjectBaseType(type);
         base_name := to_string(base_type);
@@ -286,8 +289,12 @@ to_jai_type :: (sb: *String_Builder, type: CXType, user_data: *void = null) {
         append(sb, "float64");
     case .Char_S;
         append(sb, "s8");
+    case .SChar;
+        append(sb, "s8");
     case .Int;
         append(sb, "s32");
+    case .Short;
+        append(sb, "s16");
     case .UInt;
         append(sb, "u32");
     case .UShort;
@@ -305,11 +312,15 @@ to_jai_type :: (sb: *String_Builder, type: CXType, user_data: *void = null) {
         to_jai_type(sb, element_type);
     case .BlockPointer;
         pointee := clang_getPointeeType(type);
+        to_jai_type(sb, pointee, user_data);
+    case .Record;
+        // WTF?? Why are we encountering this?
+        // struct something
+        declaration_cursor := clang_getTypeDeclaration(type);
+        type_string := to_string(declaration_cursor);
+        append(sb, type_string);
+    case .FunctionProto;
         append(sb, "#type (");
-        // For the mess in BlockPointer, libclang does not store the
-        // name of parameters in CXType, if we want to read the name,
-        // we have to use CXCursor, which is not the standard way of
-        // passing in this codebase.
         if user_data {
             cursor_pointer := cast(*CXCursor) user_data;
             params := collect_block_parameters(cursor_pointer.*);
@@ -325,7 +336,7 @@ to_jai_type :: (sb: *String_Builder, type: CXType, user_data: *void = null) {
 
             }
         } else {
-            params := get_block_parameters(pointee);
+            params := get_block_parameters(type);
             for params {
                 if it_index > 0 {
                     append(sb, ", ");
@@ -334,11 +345,11 @@ to_jai_type :: (sb: *String_Builder, type: CXType, user_data: *void = null) {
             }
         }
         append(sb, ") -> ");
-        return_type := clang_getResultType(pointee);
+        return_type := clang_getResultType(type);
         to_jai_type(sb, return_type);
         append(sb, " #c_call");
     case;
-        assert(false, "Error when converting to Jai type, Unexpected kind: % %", type.kind, to_string(type));
+        assert(false, "Error when converting to Jai type, Unexpected kind: %, %", type.kind, to_string(type));
     }
 }
 
@@ -569,7 +580,7 @@ handle_typedef :: (cursor: CXCursor) {
     case .Typedef;
         typedef := Objc_Typedef.{
             name = name,
-            alias = to_jai_type(underlying_type),
+            alias = to_jai_type(underlying_type, *cursor),
             comment = get_raw_comment_string(cursor),
         };
         array_add_if_unique(*objc_typedefs, typedef, typedef_compare);
