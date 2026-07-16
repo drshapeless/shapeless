@@ -1,8 +1,19 @@
+// This module is not as sophisticated as the built-in Binding
+// Generator, but it handles Objective-C library much better. The
+// bindings it generate does not require a dynamic library to check
+// function availability.
+
 Objc_Generate_Bindings_Options :: struct {
     export_library_name: string;
 
     // In absolute path
     headers: [..] string;
+
+    // This is a handy shortcut, you can just provide the name of a
+    // Apple framework and let the generator find the absolute header
+    // path. You should not duplicate the entries here and in the
+    // headers.
+    frameworks: [..] string;
 
     visitor: Objc_Visitor;
     userdata: *void;
@@ -37,6 +48,12 @@ generate_bindings :: (options: Objc_Generate_Bindings_Options, output_filename: 
 
     flags: CXTranslationUnit_Flags = .DetailedPreprocessingRecord | .IncludeBriefCommentsInCodeCompletion | .KeepGoing;
 
+    for framework: options.frameworks {
+        header_path := sprint("%/%.Framework/Headers/%.h", framework_path, framework, framework);
+
+        array_add_if_unique(*options.headers, header_path);
+    }
+
     for header: options.headers {
         index := clang_createIndex(0, 0);
         defer clang_disposeIndex(index);
@@ -48,6 +65,7 @@ generate_bindings :: (options: Objc_Generate_Bindings_Options, output_filename: 
         cd.userdata = options.userdata;
         clang_visitChildren(root, objc_default_visitor, *cd);
     }
+
     write_to_file(options.export_library_name, output_filename);
 
     return true;
@@ -113,14 +131,22 @@ objc_default_visitor :: (cursor: CXCursor, parent: CXCursor, client_data: CXClie
     return .Continue;
 }
 
-Objc_Enum_Member :: struct {
+Objc_Thing :: struct {
     name: string;
+}
+
+objc_thing_compare_func :: (a: Objc_Thing, b: Objc_Thing) -> bool {
+    return a.name == b.name;
+}
+
+Objc_Enum_Member :: struct {
+    using #as thing: Objc_Thing;
     value: string;
     comment: string;
 }
 
 Objc_Enum :: struct {
-    name: string;
+    using #as thing: Objc_Thing;
     type: string;
     comment: string;
     members: [..] Objc_Enum_Member;
@@ -128,37 +154,37 @@ Objc_Enum :: struct {
 }
 
 Objc_Struct_Member :: struct {
-    name: string;
+    using #as thing: Objc_Thing;
     type: string;
     comment: string;
 }
 
 Objc_Struct :: struct {
-    name: string;
+    using #as thing: Objc_Thing;
     comment: string;
     members: [..] Objc_Struct_Member;
 }
 
 Objc_Typedef :: struct {
-    name: string;
+    using #as thing: Objc_Thing;
     alias: string;
     comment: string;
 }
 
 Objc_Function_Parameter :: struct {
-    name: string;
+    using #as thing: Objc_Thing;
     type: string;
 }
 
 Objc_Function :: struct {
-    name: string;
+    using #as thing: Objc_Thing;
     return_type: string;
     parameters: [..] Objc_Function_Parameter;
     comment: string;
 }
 
 Objc_Var :: struct {
-    name: string;
+    using #as thing: Objc_Thing;
     type: string;
     value: string;
     comment: string;
@@ -170,12 +196,12 @@ Objc_Method :: struct {
 }
 
 Objc_Property :: struct {
-    name: string;
+    using #as thing: Objc_Thing;
     comment: string;
 }
 
 Objc_Interface :: struct {
-    name: string;
+    using #as thing: Objc_Thing;
     comment: string;
     class_methods: [..] Objc_Method;
     instance_methods: [..] Objc_Method;
@@ -183,10 +209,20 @@ Objc_Interface :: struct {
 }
 
 Objc_Protocol :: struct {
-    name: string;
+    using #as thing: Objc_Thing;
     comment: string;
     instance_methods: [..] Objc_Method;
     properties: [..] Objc_Property;
+}
+
+Objc_Record_Kind :: enum {
+    STRUCT;
+    ENUM;
+}
+
+Objc_Record :: struct {
+    using #as thing: Objc_Thing;
+    kind: Objc_Record_Kind;
 }
 
 objc_enums: [..] Objc_Enum;
@@ -196,6 +232,7 @@ objc_functions: [..] Objc_Function;
 objc_vars: [..] Objc_Var;
 objc_interfaces: [..] Objc_Interface;
 objc_protocols: [..] Objc_Protocol;
+objc_records: [..] Objc_Record;
 
 selector_table: Table(string, struct{});
 
@@ -318,6 +355,19 @@ to_jai_type :: (sb: *String_Builder, type: CXType, user_data: *void = null) {
         // struct something
         declaration_cursor := clang_getTypeDeclaration(type);
         type_string := to_string(declaration_cursor);
+        cursor_kind := clang_getCursorKind(declaration_cursor);
+
+        record_compare :: (a: Objc_Record, b: Objc_Record) -> bool {
+            return a.name == b.name;
+        }
+        // We have to create an empty struct for the base type of record
+        record: Objc_Record;
+        record.name = type_string;
+        if cursor_kind == {
+        case .StructDecl;
+            record.kind = .STRUCT;
+        }
+        array_add_if_unique(*objc_records, record, record_compare);
         append(sb, type_string);
     case .FunctionProto;
         append(sb, "#type (");
@@ -565,7 +615,7 @@ handle_typedef :: (cursor: CXCursor) {
     case .Enum;
         return;
     case .Record;
-    // log("record: %", to_string(cursor));
+        // log("record: %", to_string(cursor));
     case .BlockPointer;
         typedef := Objc_Typedef.{
             name = name,
@@ -1014,6 +1064,12 @@ write_to_file :: (export_library_name: string, output_filename: string) {
         append(*sb, "}\n\n");
 
     }
+
+    for record: objc_records {
+        assert(record.kind == .STRUCT, "deal with non struct record type");
+        print_to_builder(*sb, "% :: struct {};\n", record.name);
+    }
+    append(*sb, "\n\n");
 
     append(*sb, "_Generated_Selectors :: struct #type_info_no_size_complaint {\n");
     for selector_table {
