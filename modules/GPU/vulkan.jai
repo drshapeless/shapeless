@@ -1079,40 +1079,64 @@ begin_render_pass :: (cb: *Command_Buffer, desc: Render_Pass_Desc) {
     Basic.auto_release_temp();
     rendering_info := to_vulkan_rendering_info(desc);
     vkCmdBeginRendering(cb.vk, *rendering_info);
-    is_enabled: VkBool32 = VK_FALSE;
+
+    // There are a lot of dynamic states to set. If we truely follow
+    // No Graphics API, we will end up calling disable on some
+    // function and then enable it when binding to a state, which is
+    // fine for now, because we want a sensible default to show
+    // something on screen first.
+    //
+    // Most of the state only set for the first render target, which
+    // should be the render texture. A lot of setting are commented
+    // out just for reference.
+
+    // No culling by default
     vkCmdSetCullMode(cb.vk, .NONE);
-    vkCmdSetLineWidth(cb.vk, 1.0);
-    vkCmdSetRasterizerDiscardEnable(cb.vk, VK_FALSE);
+
+    // No blending by default, blend should be set by blend_state object.
+    is_enable_blend: VkBool32 = VK_FALSE;
+    vkCmdSetColorBlendEnableEXT(cb.vk, 0, 1, *is_enable_blend);
+    // color_blend_equation := VkColorBlendEquationEXT.{
+
+    // };
+    // vkCmdSetColorBlendEquationEXT(cb.vk, 0, 1, *color_blend_equation);
+    // blend_constants: float;
+    // vkCmdSetBlendConstants(cb.vk, *blend_constants);
+    // vkCmdSetLogicOpEnableEXT(cb.vk, VK_FALSE);
+
+    // MSAA (multisample anti-aliasing), we don't want msaa, just set
+    // to one bit.
+    sample_mask: VkSampleMask = 0x1;
+    vkCmdSetSampleMaskEXT(cb.vk, .e1, *sample_mask);
     vkCmdSetRasterizationSamplesEXT(cb.vk, .e1);
     vkCmdSetAlphaToCoverageEnableEXT(cb.vk, VK_FALSE);
-    sample_mask: VkSampleMask = 1;
-    vkCmdSetSampleMaskEXT(cb.vk, .e1, *sample_mask);
+
+    // This should never be discarded, otherwise fragment shader will
+    // not be executed. Don't know why this is necessary.
+    vkCmdSetRasterizerDiscardEnable(cb.vk, VK_FALSE);
+
+    // If the default mode is FILL, line width does not matter, but I
+    // just want to have a default width for future dynamically
+    // changing polygon mode without validation error.
     vkCmdSetPolygonModeEXT(cb.vk, .FILL);
+    vkCmdSetLineWidth(cb.vk, 1.0); // Not necessary
 
     // Depth
-    vkCmdSetDepthBiasEnable(cb.vk, VK_FALSE);
     vkCmdSetDepthTestEnable(cb.vk, VK_FALSE);
-    vkCmdSetDepthWriteEnable(cb.vk, VK_FALSE);
-    vkCmdSetDepthCompareOp(cb.vk, .NEVER);
+    vkCmdSetDepthBiasEnable(cb.vk, VK_FALSE);
+    // vkCmdSetDepthWriteEnable(cb.vk, VK_FALSE);
+    // vkCmdSetDepthCompareOp(cb.vk, .NEVER);
     vkCmdSetStencilTestEnable(cb.vk, VK_FALSE);
-    vkCmdSetStencilOp(cb.vk, .FRONT, .KEEP, .KEEP, .KEEP, .NEVER);
+    // vkCmdSetStencilOp(cb.vk, .FRONT, .KEEP, .KEEP, .KEEP, .NEVER);
 
-    // Blending
-    vkCmdSetColorBlendEnableEXT(cb.vk, 0, 1, *is_enabled);
-    color_blend_equation := VkColorBlendEquationEXT.{
-
-    };
-    vkCmdSetColorBlendEquationEXT(cb.vk, 0, 1, *color_blend_equation);
-    color_write_mask: VkColorComponentFlags;
+    // Allow 4-channel write by default
+    color_write_mask: VkColorComponentFlags  = .R | .G | .B | .A;
     vkCmdSetColorWriteMaskEXT(cb.vk, 0, 1, *color_write_mask);
-    blend_constants: float;
-    vkCmdSetBlendConstants(cb.vk, *blend_constants);
-    vkCmdSetLogicOpEnableEXT(cb.vk, VK_FALSE);
 
-    // Vertex
+    // Vertex input is always nothing in No Graphics API
     vkCmdSetVertexInputEXT(cb.vk, 0, null, 0, null);
 
-    // What is this??
+    // TODO: Understand this, this is index draw magic shit.
     vkCmdSetPrimitiveRestartEnable(cb.vk, VK_FALSE);
 }
 
