@@ -171,20 +171,35 @@ Cull :: enum {
     ALL;
 }
 
-Blend :: enum {
-    ADD;
-    SUBTRACT;
-    REV_SUBTRACT;
-    MIN;
-    MAX;
+Blend :: enum u32 {
+    ADD          :: 0;
+    SUBTRACT     :: 1;
+    REV_SUBTRACT :: 2;
+    MIN          :: 3;
+    MAX          :: 4;
 }
 
-Factor :: enum {
-    ZERO;
-    ONE;
-    SRC_COLOR;
-    DST_COLOR;
-    SRC_ALPHA;
+// This is a direct copy from VkBlendFactor
+Factor :: enum u32 {
+    ZERO                     :: 0;
+    ONE                      :: 1;
+    SRC_COLOR                :: 2;
+    ONE_MINUS_SRC_COLOR      :: 3;
+    DST_COLOR                :: 4;
+    ONE_MINUS_DST_COLOR      :: 5;
+    SRC_ALPHA                :: 6;
+    ONE_MINUS_SRC_ALPHA      :: 7;
+    DST_ALPHA                :: 8;
+    ONE_MINUS_DST_ALPHA      :: 9;
+    CONSTANT_COLOR           :: 10;
+    ONE_MINUS_CONSTANT_COLOR :: 11;
+    CONSTANT_ALPHA           :: 12;
+    ONE_MINUS_CONSTANT_ALPHA :: 13;
+    SRC_ALPHA_SATURATE       :: 14;
+    SRC1_COLOR               :: 15;
+    ONE_MINUS_SRC1_COLOR     :: 16;
+    SRC1_ALPHA               :: 17;
+    ONE_MINUS_SRC1_ALPHA     :: 18;
 }
 
 Blend_Desc :: struct {
@@ -222,22 +237,26 @@ Depth_Flags :: enum_flags {
     WRITE :: 0x2;
 }
 
-OP :: enum {
-    NEVER;
-    LESS;
-    EQUAL;
-    LESS_EQUAL;
-    GREATER;
-    NOT_EQUAL;
-    GREATER_EQUAL;
-    ALWAYS;
-    KEEP;
-    REPLACE;
-    INCREMENT_CLAMP;
-    DECREMENT_CLAMP;
-    INVERT;
-    INCREMENT_WRAP;
-    DECREMENT_WRAP;
+OP :: enum u32 {
+    NEVER            :: 0;
+    LESS             :: 1;
+    EQUAL            :: 2;
+    LESS_OR_EQUAL    :: 3;
+    GREATER          :: 4;
+    NOT_EQUAL        :: 5;
+    GREATER_OR_EQUAL :: 6;
+    ALWAYS           :: 7;
+
+    // I am not sure why No Graphics API prefer only a big OP enum for
+    // everything.
+    KEEP                :: 0;
+    ZERO                :: 1;
+    REPLACE             :: 2;
+    INCREMENT_AND_CLAMP :: 3;
+    DECREMENT_AND_CLAMP :: 4;
+    INVERT              :: 5;
+    INCREMENT_AND_WRAP  :: 6;
+    DECREMENT_AND_WRAP  :: 7;
 }
 
 Stencil :: struct {

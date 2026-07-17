@@ -123,13 +123,19 @@ IR :: struct {
 }
 
 Depth_Stencil_State :: struct {
+    enable_depth_test: VkBool32;
+    enable_depth_write: VkBool32;
+    depth_compare_op: VkCompareOp;
 
+    enable_depth_bias:       VkBool32;
+    depth_bias:              float;
+    depth_bias_slope_factor: float;
+    depth_bias_clamp:        float;
 }
 
 Blend_State :: struct {
-    enable_blend: VkBool32;
     color_blend_equation: VkColorBlendEquationEXT;
-    color_write_mask: VkColorComponentFlags;
+    color_write_mask:     VkColorComponentFlags;
 }
 
 init :: (window: *SDL_Window = null) {
@@ -1104,6 +1110,11 @@ begin_render_pass :: (cb: *Command_Buffer, desc: Render_Pass_Desc) {
     // vkCmdSetBlendConstants(cb.vk, *blend_constants);
     // vkCmdSetLogicOpEnableEXT(cb.vk, VK_FALSE);
 
+    // Allow 4-channel write by default
+    color_write_mask: VkColorComponentFlags  = .R | .G | .B | .A;
+    vkCmdSetColorWriteMaskEXT(cb.vk, 0, 1, *color_write_mask);
+
+
     // MSAA (multisample anti-aliasing), we don't want msaa, just set
     // to one bit.
     sample_mask: VkSampleMask = 0x1;
@@ -1128,10 +1139,6 @@ begin_render_pass :: (cb: *Command_Buffer, desc: Render_Pass_Desc) {
     // vkCmdSetDepthCompareOp(cb.vk, .NEVER);
     vkCmdSetStencilTestEnable(cb.vk, VK_FALSE);
     // vkCmdSetStencilOp(cb.vk, .FRONT, .KEEP, .KEEP, .KEEP, .NEVER);
-
-    // Allow 4-channel write by default
-    color_write_mask: VkColorComponentFlags  = .R | .G | .B | .A;
-    vkCmdSetColorWriteMaskEXT(cb.vk, 0, 1, *color_write_mask);
 
     // Vertex input is always nothing in No Graphics API
     vkCmdSetVertexInputEXT(cb.vk, 0, null, 0, null);
@@ -1266,6 +1273,66 @@ draw_indexed_instanced :: (cb: *Command_Buffer, vertex_data_gpu: Ptr, fragment_d
     // vkCmdDrawIndexed(cb.vk, xx indices.count, instance_count, 0, 0, 0);
 
     vkCmdDraw(cb.vk, 3, 1, 0, 0);
+}
+
+create_blend_state :: (desc: Blend_Desc) -> Blend_State {
+    state: Blend_State;
+
+    state.color_blend_equation = VkColorBlendEquationEXT.{
+        srcColorBlendFactor = to_vulkan_blend_factor(desc.src_color_factor),
+        dstColorBlendFactor = to_vulkan_blend_factor(desc.dst_color_factor),
+        colorBlendOp = to_vulkan_blend_op(desc.color_op),
+        srcAlphaBlendFactor = to_vulkan_blend_factor(desc.src_alpha_factor),
+        dstAlphaBlendFactor = to_vulkan_blend_factor(desc.dst_alpha_factor),
+        alphaBlendOp = to_vulkan_blend_op(desc.alpha_op),
+    };
+    state.color_write_mask = cast,force(VkColorWriteMask) desc.color_write_mask;
+
+    return state;
+}
+
+// It only sets the first color attachment.
+set_blend_state :: (cb: *Command_Buffer, state: Blend_State) {
+    enable: VkBool32 = VK_TRUE;
+    vkCmdSetColorBlendEnableEXT(cb.vk, 0, 1, *enable);
+    vkCmdSetColorBlendEquationEXT(cb.vk, 0, 1, *state.color_blend_equation);
+    // This constant should no matter if we are not using any CONSTANT
+    // thing in blend factor.
+    //
+    // blend_constants: float;
+    // vkCmdSetBlendConstants(cb.vk, *blend_constants);
+
+    vkCmdSetColorWriteMaskEXT(cb.vk, 0, 1, *state.color_write_mask);
+}
+
+create_depth_stencil_state :: (desc: Depth_Stencil_Desc) -> Depth_Stencil_State {
+    state: Depth_Stencil_State;
+    state.depth_compare_op = to_vulkan_compare_op(desc.depth_test);
+    state.enable_depth_test = ifx desc.depth_mode & .READ then VK_TRUE else VK_FALSE;
+    state.enable_depth_write = ifx desc.depth_mode & .WRITE then VK_TRUE else VK_FALSE;
+
+    if desc.depth_bias == 0.0 {
+        state.enable_depth_bias = VK_FALSE;
+    } else {
+        state.enable_depth_bias = VK_TRUE;
+        state.depth_bias = desc.depth_bias;
+        state.depth_bias_slope_factor = desc.depth_bias_slope_factor;
+        state.depth_bias_clamp = desc.depth_bias_clamp;
+    }
+
+    return state;
+}
+
+set_depth_stencil_state :: (cb: *Command_Buffer, state: Depth_Stencil_State) {
+    vkCmdSetDepthTestEnable(cb.vk, state.enable_depth_test);
+    vkCmdSetDepthCompareOp(cb.vk, state.depth_compare_op);
+    vkCmdSetDepthWriteEnable(cb.vk, state.enable_depth_write);
+    vkCmdSetDepthBiasEnable(cb.vk, state.enable_depth_bias);
+    vkCmdSetDepthBias(cb.vk, state.depth_bias, state.depth_bias_clamp, state.depth_bias_slope_factor);
+
+    // I am not sure about this.
+    vkCmdSetStencilTestEnable(cb.vk, VK_TRUE);
+
 }
 
 #scope_file
@@ -1954,6 +2021,23 @@ aligned_vk_size :: (value: u64, alignment: u64) -> u64 {
 
 to_vulkan_topology :: (topology: Topology) -> VkPrimitiveTopology {
     return cast(VkPrimitiveTopology) topology;
+}
+
+to_vulkan_blend_op :: (blend: Blend) -> VkBlendOp {
+    // It is the same
+    return cast,force(VkBlendOp)blend;
+}
+
+to_vulkan_blend_factor :: (factor: Factor) -> VkBlendFactor {
+    return cast,force(VkBlendFactor)factor;
+}
+
+to_vulkan_compare_op :: (op: OP) -> VkCompareOp {
+    return cast,force(VkCompareOp) op;
+}
+
+to_vulkan_stencil_op :: (op: OP) -> VkStencilOp {
+    return cast,force(VkStencilOp) op;
 }
 
 #import "Vulkan";
