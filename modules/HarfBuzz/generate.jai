@@ -66,9 +66,12 @@ EOF;
     opts.generate_library_declarations = false;
 
     array_add(*opts.libraries, .{filename = "libharfbuzz"});
+    array_add(*opts.system_include_paths, "/usr/include/freetype2");
+    array_add(*opts.system_include_paths, "/usr/lib/clang/22/include");
 
     array_add(*opts.include_paths, "include");
     array_add(*opts.source_files, "include/harfbuzz/hb.h");
+    array_add(*opts.source_files, "include/harfbuzz/hb-ft.h");
     opts.visitor = visitor;
     opts.generate_compile_time_struct_checks = false;
 
