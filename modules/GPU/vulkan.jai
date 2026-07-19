@@ -123,14 +123,7 @@ IR :: struct {
 }
 
 Depth_Stencil_State :: struct {
-    enable_depth_test: VkBool32;
-    enable_depth_write: VkBool32;
-    depth_compare_op: VkCompareOp;
-
-    enable_depth_bias:       VkBool32;
-    depth_bias:              float;
-    depth_bias_slope_factor: float;
-    depth_bias_clamp:        float;
+    using desc: Depth_Stencil_Desc;
 }
 
 Blend_State :: struct {
@@ -1305,34 +1298,32 @@ set_blend_state :: (cb: *Command_Buffer, state: Blend_State) {
     vkCmdSetColorWriteMaskEXT(cb.vk, 0, 1, *state.color_write_mask);
 }
 
+// There is no such a thing as depth stencil state in vulkan, we just
+// set the related things dynamically according to desc.
 create_depth_stencil_state :: (desc: Depth_Stencil_Desc) -> Depth_Stencil_State {
     state: Depth_Stencil_State;
-    state.depth_compare_op = to_vulkan_compare_op(desc.depth_test);
-    state.enable_depth_test = ifx desc.depth_mode & .READ then VK_TRUE else VK_FALSE;
-    state.enable_depth_write = ifx desc.depth_mode & .WRITE then VK_TRUE else VK_FALSE;
-
-    if desc.depth_bias == 0.0 {
-        state.enable_depth_bias = VK_FALSE;
-    } else {
-        state.enable_depth_bias = VK_TRUE;
-        state.depth_bias = desc.depth_bias;
-        state.depth_bias_slope_factor = desc.depth_bias_slope_factor;
-        state.depth_bias_clamp = desc.depth_bias_clamp;
-    }
+    state.desc = desc;
 
     return state;
 }
 
 set_depth_stencil_state :: (cb: *Command_Buffer, state: Depth_Stencil_State) {
-    vkCmdSetDepthTestEnable(cb.vk, state.enable_depth_test);
-    vkCmdSetDepthCompareOp(cb.vk, state.depth_compare_op);
-    vkCmdSetDepthWriteEnable(cb.vk, state.enable_depth_write);
-    vkCmdSetDepthBiasEnable(cb.vk, state.enable_depth_bias);
+    vkCmdSetDepthTestEnable(cb.vk, ifx state.depth_mode & .READ then VK_TRUE else VK_FALSE);
+    vkCmdSetDepthCompareOp(cb.vk, to_vulkan_compare_op(state.depth_test));
+    vkCmdSetDepthWriteEnable(cb.vk, ifx state.depth_mode & .WRITE then VK_TRUE else VK_FALSE);
+
+    // TODO: Always enableds this?
+    vkCmdSetDepthBiasEnable(cb.vk, VK_TRUE);
     vkCmdSetDepthBias(cb.vk, state.depth_bias, state.depth_bias_clamp, state.depth_bias_slope_factor);
 
-    // I am not sure about this.
+    // TODO: Is there any way to disable this?
     vkCmdSetStencilTestEnable(cb.vk, VK_TRUE);
-
+    vkCmdSetStencilOp(cb.vk, .FRONT, to_vulkan_stencil_op(state.stencil_front.fail_op), to_vulkan_stencil_op(state.stencil_front.pass_op), to_vulkan_stencil_op(state.stencil_front.depth_fail_op), to_vulkan_stencil_op(state.stencil_front.test));
+    vkCmdSetStencilOp(cb.vk, .BACK, to_vulkan_stencil_op(state.stencil_back.fail_op), to_vulkan_stencil_op(state.stencil_back.pass_op), to_vulkan_stencil_op(state.stencil_back.depth_fail_op), to_vulkan_stencil_op(state.stencil_back.test));
+    vkCmdSetStencilCompareMask(cb.vk, .FRONT_AND_BACK, cast(u32) state.stencil_read_mask);
+    vkCmdSetStencilWriteMask(cb.vk, .FRONT_AND_BACK, cast(u32) state.stencil_write_mask);
+    vkCmdSetStencilReference(cb.vk, .FRONT, cast(u32)state.stencil_front.reference);
+    vkCmdSetStencilReference(cb.vk, .BACK, cast(u32)state.stencil_back.reference);
 }
 
 #scope_file

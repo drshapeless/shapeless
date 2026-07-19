@@ -202,6 +202,10 @@ Factor :: enum u32 {
     ONE_MINUS_SRC1_ALPHA     :: 18;
 }
 
+// Color write mask in Vulkan and Metal is in opposite order, the
+// write mask here follows Vulkan's convention VkColorComponentFlags.
+// For the lowest 4 bit, ABGR where R is the lowest bit.
+
 Blend_Desc :: struct {
     color_op:         Blend = .ADD;
     src_color_factor: Factor = .ONE;

@@ -71,6 +71,11 @@ Depth_Stencil_State :: struct {
     mtl: *MTLDepthStencilState;
 };
 
+// This does nothing
+Blend_State :: struct {
+
+}
+
 Queue :: struct {
     mtl: *MTL4CommandQueue;
 }
@@ -343,9 +348,20 @@ create_graphics_pipeline :: (vertex_ir: IR, fragment_ir: IR, desc: Raster_Desc) 
         attachment.setPixelFormat_(attachment, to_metal_format(target.format));
         attachment.setWriteMask_(attachment, to_metal_write_mask(target.write_mask));
 
-        // Currently, blendstate is completely ignored in pipeline
-        // creation, if you want to set pipeline, set it in command
-        // buffer.
+        // There is no dynamic blend state in Metal, all blend state
+        // must be embedded in the PSO, maybe we should immitate it by
+        // creating a brand new pipeline, but currently only embedded
+        // one takes effects.
+        if desc.blendstate {
+            MTL4RenderPipelineColorAttachmentDescriptor.setBlendingState_(attachment, .Enabled);
+            MTL4RenderPipelineColorAttachmentDescriptor.setSourceRGBBlendFactor_(attachment, to_metal_blend_factor(desc.blendstate.src_color_factor));
+            MTL4RenderPipelineColorAttachmentDescriptor.setDestinationRGBBlendFactor_(attachment, to_metal_blend_factor(desc.blendstate.dst_color_factor));
+            MTL4RenderPipelineColorAttachmentDescriptor.setRgbBlendOperation_(attachment, to_metal_blend_operation(desc.blendstate.color_op));
+            MTL4RenderPipelineColorAttachmentDescriptor.setSourceAlphaBlendFactor_(attachment, to_metal_blend_factor(desc.blendstate.src_alpha_factor));
+            MTL4RenderPipelineColorAttachmentDescriptor.setDestinationAlphaBlendFactor_(attachment, to_metal_blend_factor(desc.blendstate.dst_alpha_factor));
+            MTL4RenderPipelineColorAttachmentDescriptor.setAlphaBlendOperation_(attachment, to_metal_blend_operation(desc.blendstate.alpha_op));
+            MTL4RenderPipelineColorAttachmentDescriptor.setWriteMask_(attachment, to_metal_write_mask(desc.blendstate.color_write_mask));
+        }
 
         color_attachments.setObject_atIndexedSubscript_(color_attachments, attachment, xx it_index);
     }
@@ -715,6 +731,16 @@ create_texture_heap :: (count: s64) -> [] Texture_Descriptor {
     return .[];
 }
 
+// This is a dumb function.
+create_blend_state :: (desc: Blend_Desc) -> Blend_State {
+    return .{};
+}
+
+// Also a dumb function.
+set_blend_state :: (cb: *Command_Buffer, state: Blend_State) {
+    Basic.log("Metal does not support dynamic blend state yet");
+}
+
 #scope_file
 to_metal_texture_descriptor :: (metal_descriptor: *MTLTextureDescriptor, desc: Texture_Desc) {
     // WTF is this ugly shit.
@@ -782,6 +808,7 @@ to_metal_texture_usage :: (texture_usage: Texture_Usage) -> MTLTextureUsage {
 
 to_metal_blend_factor :: (factor: Factor) -> MTLBlendFactor {
     metal_factor: MTLBlendFactor = .Unspecialized;
+    // The order is by MTLBlendFactor
     if factor == {
     case .ZERO;
         metal_factor = .Zero;
@@ -789,10 +816,40 @@ to_metal_blend_factor :: (factor: Factor) -> MTLBlendFactor {
         metal_factor = .One;
     case .SRC_COLOR;
         metal_factor = .SourceColor;
-    case .DST_COLOR;
-        metal_factor = .DestinationColor;
+    case .ONE_MINUS_SRC_COLOR;
+        metal_factor = .OneMinusSourceColor;
     case .SRC_ALPHA;
         metal_factor = .SourceAlpha;
+    case .ONE_MINUS_SRC_ALPHA;
+        metal_factor = .OneMinusSourceAlpha;
+    case .DST_COLOR;
+        metal_factor = .DestinationColor;
+    case .ONE_MINUS_DST_COLOR;
+        metal_factor = .OneMinusDestinationColor;
+    case .DST_ALPHA;
+        metal_factor = .DestinationAlpha;
+    case .ONE_MINUS_DST_ALPHA;
+        metal_factor = .OneMinusDestinationAlpha;
+    case .SRC_ALPHA_SATURATE;
+        metal_factor = .SourceAlphaSaturated;
+    case .CONSTANT_COLOR;
+        metal_factor = .BlendColor;
+    case .ONE_MINUS_CONSTANT_COLOR;
+        metal_factor = .OneMinusBlendColor;
+    case .CONSTANT_ALPHA;
+        metal_factor = .BlendAlpha;
+    case .ONE_MINUS_CONSTANT_ALPHA;
+        metal_factor = .OneMinusBlendAlpha;
+    case .SRC1_COLOR;
+        metal_factor = .Source1Color;
+    case .ONE_MINUS_SRC1_COLOR;
+        metal_factor = .OneMinusSource1Color;
+    case .SRC1_ALPHA;
+        metal_factor = .Source1Alpha;
+    case .ONE_MINUS_SRC1_ALPHA;
+        metal_factor = .OneMinusSource1Alpha;
+    case;
+        Basic.assert(false, "unknown blend factor in metal");
     }
 
     return metal_factor;
@@ -818,7 +875,11 @@ to_metal_blend_operation :: (op: Blend) -> MTLBlendOperation {
 to_metal_write_mask :: (mask: u8) -> MTLColorWriteMask {
     metal_mask: MTLColorWriteMask = .Unspecialized;
 
-    metal_mask = cast(MTLColorWriteMask) mask;
+    // We have to cast the mask in reverse. This function sucks.
+    metal_mask |= xx ((mask & 0x1) << 3); // R
+    metal_mask |= xx ((mask & 0x2) << 2); // G
+    metal_mask |= xx ((mask & 0x4) << 1); // B
+    metal_mask |= xx ((mask & 0x8) << 0); // A
 
     return metal_mask;
 }
