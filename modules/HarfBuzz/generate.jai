@@ -66,12 +66,21 @@ EOF;
     opts.generate_library_declarations = false;
 
     array_add(*opts.libraries, .{filename = "libharfbuzz"});
-    array_add(*opts.system_include_paths, "/usr/include/freetype2");
-    array_add(*opts.system_include_paths, "/usr/lib/clang/22/include");
+    array_add(*opts.system_include_paths, .. get_default_system_include_paths());
 
     array_add(*opts.include_paths, "include");
     array_add(*opts.source_files, "include/harfbuzz/hb.h");
     array_add(*opts.source_files, "include/harfbuzz/hb-ft.h");
+
+    #if OS == .LINUX {
+        array_add(*opts.system_include_paths, "/usr/include/freetype2");
+    } else #if OS == .MACOS {
+        array_add(*opts.system_include_paths, "/opt/homebrew/include/freetype2");
+        array_add(*opts.source_files, "include/harfbuzz/hb-coretext.h");
+        #import "macOS/Toolchain";
+        array_add(*opts.extra_clang_arguments, "-isysroot", get_macos_sdk_path());
+    }
+
     opts.visitor = visitor;
     opts.generate_compile_time_struct_checks = false;
 

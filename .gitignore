@@ -2,3 +2,4 @@
 *.so
 *.dylib
 *.spv
+/modules/HarfBuzz/include/

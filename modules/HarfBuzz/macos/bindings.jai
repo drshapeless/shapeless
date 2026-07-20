@@ -28,11 +28,11 @@ HB_UNICODE_MAX_DECOMPOSITION_LEN :: 18+1;
 
 HB_VERSION_MAJOR :: 14;
 
-HB_VERSION_MINOR :: 1;
+HB_VERSION_MINOR :: 2;
 
-HB_VERSION_MICRO :: 0;
+HB_VERSION_MICRO :: 1;
 
-HB_VERSION_STRING :: "14.1.0";
+HB_VERSION_STRING :: "14.2.1";
 
 /**
 * hb_bool_t:
@@ -69,25 +69,27 @@ hb_position_t :: s32;
 **/
 hb_mask_t :: u32;
 
-_hb_var_int_t :: union {
+_hb_var_int_t :: struct {
     _u32: u32;
-    i32:  s32;
-    _u16: [2] u16;
-    i16:  [2] s16;
-    _u8:  [4] u8;
-    i8:   [4] s8;
+
+    #overlay (_u32) i32:  s32;
+    #overlay (_u32) _u16: [2] u16;
+    #overlay (_u32) i16:  [2] s16;
+    #overlay (_u32) _u8:  [4] u8;
+    #overlay (_u32) i8:   [4] s8;
 }
 
 hb_var_int_t :: _hb_var_int_t;
 
-_hb_var_num_t :: union {
-    f:    float;
-    _u32: u32;
-    i32:  s32;
-    _u16: [2] u16;
-    i16:  [2] s16;
-    _u8:  [4] u8;
-    i8:   [4] s8;
+_hb_var_num_t :: struct {
+    f: float;
+
+    #overlay (f) _u32: u32;
+    #overlay (f) i32:  s32;
+    #overlay (f) _u16: [2] u16;
+    #overlay (f) i16:  [2] s16;
+    #overlay (f) _u8:  [4] u8;
+    #overlay (f) i8:   [4] s8;
 }
 
 hb_var_num_t :: _hb_var_num_t;
@@ -1771,6 +1773,33 @@ hb_draw_cubic_to :: (dfuncs: *hb_draw_funcs_t, draw_data: *void, st: *hb_draw_st
 
 hb_draw_close_path :: (dfuncs: *hb_draw_funcs_t, draw_data: *void, st: *hb_draw_state_t) -> void #foreign libharfbuzz;
 
+/**
+* hb_draw_line_cap_t:
+* @HB_DRAW_LINE_CAP_BUTT:   No cap; the line ends exactly at
+*   its endpoint.
+* @HB_DRAW_LINE_CAP_SQUARE: Square cap; the line is extended
+*   past its endpoint by half the local stroke width.  Useful
+*   for composing closed shapes from line segments (e.g. a
+*   rectangle made from four lines).
+*
+* End-cap shape for hb_draw_line().
+*
+* Since: 14.2.0
+**/
+hb_draw_line_cap_t :: enum u32 {
+    BUTT   :: 0;
+    SQUARE :: 1;
+
+    HB_DRAW_LINE_CAP_BUTT   :: BUTT;
+    HB_DRAW_LINE_CAP_SQUARE :: SQUARE;
+}
+
+hb_draw_line :: (dfuncs: *hb_draw_funcs_t, draw_data: *void, st: *hb_draw_state_t, x0: float, y0: float, w0: float, x1: float, y1: float, w1: float, cap: hb_draw_line_cap_t) -> void #foreign libharfbuzz;
+
+hb_draw_rectangle :: (dfuncs: *hb_draw_funcs_t, draw_data: *void, st: *hb_draw_state_t, x: float, y: float, w: float, h: float, stroke_width: float) -> void #foreign libharfbuzz;
+
+hb_draw_circle :: (dfuncs: *hb_draw_funcs_t, draw_data: *void, st: *hb_draw_state_t, cx: float, cy: float, r: float, stroke_width: float) -> void #foreign libharfbuzz;
+
 hb_paint_funcs_t :: struct {}
 
 hb_paint_funcs_create :: () -> *hb_paint_funcs_t #foreign libharfbuzz;
@@ -1891,14 +1920,57 @@ hb_paint_push_clip_glyph_func_t :: #type (funcs: *hb_paint_funcs_t, paint_data: 
 hb_paint_push_clip_rectangle_func_t :: #type (funcs: *hb_paint_funcs_t, paint_data: *void, xmin: float, ymin: float, xmax: float, ymax: float, user_data: *void) -> void #c_call;
 
 /**
+* hb_paint_push_clip_path_start_func_t:
+* @funcs: paint functions object
+* @paint_data: The data accompanying the paint functions in hb_font_paint_glyph()
+* @draw_data: (out): location to store the draw data the caller should
+*   pass alongside the returned draw funcs.
+* @user_data: User data pointer passed to hb_paint_funcs_set_push_clip_path_start_func()
+*
+* A virtual method for the #hb_paint_funcs_t to begin clipping
+* to an arbitrary path.  The backend returns an
+* #hb_draw_funcs_t it owns (the caller must not free it)
+* that the caller feeds the clip outline to via hb_draw_*()
+* calls, plus a @draw_data value to pass alongside those
+* calls.  Both are only valid until the matching
+* #hb_paint_push_clip_path_end_func_t call; no other paint
+* calls should be made in between.  The clip remains
+* in effect until a later #hb_paint_pop_clip_func_t call.
+*
+* Return value: (transfer none): draw funcs that accumulate
+*   the clip path, or `NULL` if arbitrary-path clipping is not
+*   supported.
+*
+* Since: 14.2.0
+*/
+hb_paint_push_clip_path_start_func_t :: #type (funcs: *hb_paint_funcs_t, paint_data: *void, draw_data: **void, user_data: *void) -> *hb_draw_funcs_t #c_call;
+
+/**
+* hb_paint_push_clip_path_end_func_t:
+* @funcs: paint functions object
+* @paint_data: The data accompanying the paint functions in hb_font_paint_glyph()
+* @user_data: User data pointer passed to hb_paint_funcs_set_push_clip_path_end_func()
+*
+* A virtual method for the #hb_paint_funcs_t to close the
+* clip path started by the #hb_paint_push_clip_path_start_func_t
+* vfunc.  The emitted path is now active as a clip; subsequent
+* paint ops are masked by it until a matching
+* #hb_paint_pop_clip_func_t call.
+*
+* Since: 14.2.0
+*/
+hb_paint_push_clip_path_end_func_t :: #type (funcs: *hb_paint_funcs_t, paint_data: *void, user_data: *void) -> void #c_call;
+
+/**
 * hb_paint_pop_clip_func_t:
 * @funcs: paint functions object
 * @paint_data: The data accompanying the paint functions in hb_font_paint_glyph()
 * @user_data: User data pointer passed to hb_paint_funcs_set_pop_clip_func()
 *
 * A virtual method for the #hb_paint_funcs_t to undo
-* the effect of a prior call to the #hb_paint_funcs_push_clip_glyph_func_t
-* or #hb_paint_funcs_push_clip_rectangle_func_t vfuncs.
+* the effect of a prior call to the #hb_paint_funcs_push_clip_glyph_func_t,
+* #hb_paint_funcs_push_clip_rectangle_func_t, or
+* #hb_paint_funcs_push_clip_path_end_func_t vfuncs.
 *
 * Since: 7.0.0
 */
@@ -1914,6 +1986,23 @@ hb_paint_pop_clip_func_t :: #type (funcs: *hb_paint_funcs_t, paint_data: *void, 
 *
 * A virtual method for the #hb_paint_funcs_t to paint a
 * color everywhere within the current clip.
+*
+* When @is_foreground is true, this color originates from the
+* foreground-color sentinel in the font's color data.  The
+* @color parameter still carries a fully resolved RGBA value
+* (with any paint-tree alpha already applied), so backends
+* that do not need to distinguish the foreground can simply
+* use @color directly.
+*
+* Backends that defer foreground resolution (e.g. to honor a
+* CSS `currentColor` or a runtime uniform) should substitute
+* their own foreground RGB when @is_foreground is true, but
+* must combine the alpha from @color with their foreground
+* alpha, since it encodes additional modulation from the
+* paint tree.  For this mode to work correctly, the caller
+* should pass a fully-opaque foreground color to
+* hb_font_paint_glyph(), so that the alpha in @color
+* reflects only the paint-tree contribution.
 *
 * Since: 7.0.0
 */
@@ -1957,6 +2046,9 @@ hb_paint_image_func_t :: #type (funcs: *hb_paint_funcs_t, paint_data: *void, ima
 *
 * Color lines typically have offsets ranging between 0 and 1,
 * but that is not required.
+*
+* The @is_foreground and @color fields have the same semantics
+* as in #hb_paint_color_func_t.
 *
 * Note: despite @color being unpremultiplied here, interpolation in
 * gradients shall happen in premultiplied space. See the OpenType spec
@@ -2297,6 +2389,25 @@ hb_paint_composite_mode_t :: enum u32 {
 hb_paint_push_group_func_t :: #type (funcs: *hb_paint_funcs_t, paint_data: *void, user_data: *void) -> void #c_call;
 
 /**
+* hb_paint_push_group_for_func_t:
+* @funcs: paint functions object
+* @paint_data: The data accompanying the paint functions in hb_font_paint_glyph()
+* @mode: the compositing mode that will be used when the group is popped
+* @user_data: User data pointer passed to hb_paint_funcs_set_push_group_for_func()
+*
+* A virtual method for the #hb_paint_funcs_t to use
+* an intermediate surface for subsequent paint calls,
+* with the compositing mode known in advance.
+*
+* This is like #hb_paint_push_group_func_t, but the
+* compositing mode is provided at push time. By default
+* this calls #hb_paint_push_group_func_t.
+*
+* Since: 14.2.0
+*/
+hb_paint_push_group_for_func_t :: #type (funcs: *hb_paint_funcs_t, paint_data: *void, mode: hb_paint_composite_mode_t, user_data: *void) -> void #c_call;
+
+/**
 * hb_paint_pop_group_func_t:
 * @funcs: paint functions object
 * @paint_data: The data accompanying the paint functions in hb_font_paint_glyph()
@@ -2406,6 +2517,32 @@ hb_paint_funcs_set_push_clip_glyph_func :: (funcs: *hb_paint_funcs_t, func: hb_p
 hb_paint_funcs_set_push_clip_rectangle_func :: (funcs: *hb_paint_funcs_t, func: hb_paint_push_clip_rectangle_func_t, user_data: *void, destroy: hb_destroy_func_t) -> void #foreign libharfbuzz;
 
 /**
+* hb_paint_funcs_set_push_clip_path_start_func:
+* @funcs: A paint functions struct
+* @func: (closure user_data) (destroy destroy) (scope notified): The push-clip-path-start callback
+* @user_data: Data to pass to @func
+* @destroy: (nullable): Function to call when @user_data is no longer needed
+*
+* Sets the push-clip-path-start callback on the paint functions struct.
+*
+* Since: 14.2.0
+*/
+hb_paint_funcs_set_push_clip_path_start_func :: (funcs: *hb_paint_funcs_t, func: hb_paint_push_clip_path_start_func_t, user_data: *void, destroy: hb_destroy_func_t) -> void #foreign libharfbuzz;
+
+/**
+* hb_paint_funcs_set_push_clip_path_end_func:
+* @funcs: A paint functions struct
+* @func: (closure user_data) (destroy destroy) (scope notified): The push-clip-path-end callback
+* @user_data: Data to pass to @func
+* @destroy: (nullable): Function to call when @user_data is no longer needed
+*
+* Sets the push-clip-path-end callback on the paint functions struct.
+*
+* Since: 14.2.0
+*/
+hb_paint_funcs_set_push_clip_path_end_func :: (funcs: *hb_paint_funcs_t, func: hb_paint_push_clip_path_end_func_t, user_data: *void, destroy: hb_destroy_func_t) -> void #foreign libharfbuzz;
+
+/**
 * hb_paint_funcs_set_pop_clip_func:
 * @funcs: A paint functions struct
 * @func: (closure user_data) (destroy destroy) (scope notified): The pop-clip callback
@@ -2497,6 +2634,19 @@ hb_paint_funcs_set_sweep_gradient_func :: (funcs: *hb_paint_funcs_t, func: hb_pa
 hb_paint_funcs_set_push_group_func :: (funcs: *hb_paint_funcs_t, func: hb_paint_push_group_func_t, user_data: *void, destroy: hb_destroy_func_t) -> void #foreign libharfbuzz;
 
 /**
+* hb_paint_funcs_set_push_group_for_func:
+* @funcs: A paint functions struct
+* @func: (closure user_data) (destroy destroy) (scope notified): The push-group-for callback
+* @user_data: Data to pass to @func
+* @destroy: (nullable): Function to call when @user_data is no longer needed
+*
+* Sets the push-group-for callback on the paint functions struct.
+*
+* Since: 14.2.0
+*/
+hb_paint_funcs_set_push_group_for_func :: (funcs: *hb_paint_funcs_t, func: hb_paint_push_group_for_func_t, user_data: *void, destroy: hb_destroy_func_t) -> void #foreign libharfbuzz;
+
+/**
 * hb_paint_funcs_set_pop_group_func:
 * @funcs: A paint functions struct
 * @func: (closure user_data) (destroy destroy) (scope notified): The pop-group callback
@@ -2539,6 +2689,10 @@ hb_paint_push_clip_glyph :: (funcs: *hb_paint_funcs_t, paint_data: *void, glyph:
 
 hb_paint_push_clip_rectangle :: (funcs: *hb_paint_funcs_t, paint_data: *void, xmin: float, ymin: float, xmax: float, ymax: float) -> void #foreign libharfbuzz;
 
+hb_paint_push_clip_path_start :: (funcs: *hb_paint_funcs_t, paint_data: *void, draw_data: **void) -> *hb_draw_funcs_t #foreign libharfbuzz;
+
+hb_paint_push_clip_path_end :: (funcs: *hb_paint_funcs_t, paint_data: *void) -> void #foreign libharfbuzz;
+
 hb_paint_pop_clip :: (funcs: *hb_paint_funcs_t, paint_data: *void) -> void #foreign libharfbuzz;
 
 hb_paint_color :: (funcs: *hb_paint_funcs_t, paint_data: *void, is_foreground: hb_bool_t, color: hb_color_t) -> void #foreign libharfbuzz;
@@ -2553,9 +2707,40 @@ hb_paint_sweep_gradient :: (funcs: *hb_paint_funcs_t, paint_data: *void, color_l
 
 hb_paint_push_group :: (funcs: *hb_paint_funcs_t, paint_data: *void) -> void #foreign libharfbuzz;
 
+hb_paint_push_group_for :: (funcs: *hb_paint_funcs_t, paint_data: *void, mode: hb_paint_composite_mode_t) -> void #foreign libharfbuzz;
+
 hb_paint_pop_group :: (funcs: *hb_paint_funcs_t, paint_data: *void, mode: hb_paint_composite_mode_t) -> void #foreign libharfbuzz;
 
 hb_paint_custom_palette_color :: (funcs: *hb_paint_funcs_t, paint_data: *void, color_index: u32, color: *hb_color_t) -> hb_bool_t #foreign libharfbuzz;
+
+/*
+* Gradient helpers for paint backends.
+*
+* These are small, self-contained utilities that every COLRv1
+* renderer ends up reinventing.  Exposed here so third-party
+* paint backends can consume a single canonical implementation
+* instead of forking one per project.
+*/
+hb_paint_reduce_linear_anchors :: (x0: float, y0: float, x1: float, y1: float, x2: float, y2: float, xx0: *float, yy0: *float, xx1: *float, yy1: *float) -> void #foreign libharfbuzz;
+
+hb_paint_normalize_color_line :: (stops: *hb_color_stop_t, len: u32, min: *float, max: *float) -> void #foreign libharfbuzz;
+
+/**
+* hb_paint_sweep_gradient_tile_func_t:
+* @a0: segment start angle, in radians.
+* @c0: segment start color.
+* @a1: segment end angle, in radians.
+* @c1: segment end color.
+* @user_data: user data passed to hb_paint_sweep_gradient_tiles().
+*
+* Callback invoked once per (a0, a1) sector of a sweep
+* gradient tiling.  See hb_paint_sweep_gradient_tiles().
+*
+* Since: 14.2.0
+**/
+hb_paint_sweep_gradient_tile_func_t :: #type (a0: float, c0: hb_color_t, a1: float, c1: hb_color_t, user_data: *void) -> void #c_call;
+
+hb_paint_sweep_gradient_tiles :: (stops: *hb_color_stop_t, n_stops: u32, extend: hb_paint_extend_t, start_angle: float, end_angle: float, emit_patch: hb_paint_sweep_gradient_tile_func_t, user_data: *void) -> void #foreign libharfbuzz;
 
 hb_font_funcs_t :: struct {}
 
@@ -4349,6 +4534,93 @@ hb_version :: (major: *u32, minor: *u32, micro: *u32) -> void #foreign libharfbu
 hb_version_string :: () -> *u8 #foreign libharfbuzz;
 
 hb_version_atleast :: (major: u32, minor: u32, micro: u32) -> hb_bool_t #foreign libharfbuzz;
+
+/* This one creates a new hb-face for given ft-face.
+* When the returned hb-face is destroyed, the destroy
+* callback is called (if not NULL), with the ft-face passed
+* to it.
+*
+* The client is responsible to make sure that ft-face is
+* destroyed after hb-face is destroyed.
+*
+* Most often you don't want this function.  You should use either
+* hb_ft_face_create_cached(), or hb_ft_face_create_referenced().
+* In particular, if you are going to pass NULL as destroy, you
+* probably should use (the more recent) hb_ft_face_create_referenced()
+* instead.
+*/
+hb_ft_face_create :: (ft_face: FT_Face, destroy: hb_destroy_func_t) -> *hb_face_t #foreign libharfbuzz;
+
+/* This version is like hb_ft_face_create(), except that it caches
+* the hb-face using the generic pointer of the ft-face.  This means
+* that subsequent calls to this function with the same ft-face will
+* return the same hb-face (correctly referenced).
+*
+* Client is still responsible for making sure that ft-face is destroyed
+* after hb-face is.
+*/
+hb_ft_face_create_cached :: (ft_face: FT_Face) -> *hb_face_t #foreign libharfbuzz;
+
+/* This version is like hb_ft_face_create(), except that it calls
+* FT_Reference_Face() on ft-face, as such keeping ft-face alive
+* as long as the hb-face is.
+*
+* This is the most convenient version to use.  Use it unless you have
+* very good reasons not to.
+*/
+hb_ft_face_create_referenced :: (ft_face: FT_Face) -> *hb_face_t #foreign libharfbuzz;
+
+hb_ft_face_create_from_file_or_fail :: (file_name: *u8, index: u32) -> *hb_face_t #foreign libharfbuzz;
+
+hb_ft_face_create_from_blob_or_fail :: (blob: *hb_blob_t, index: u32) -> *hb_face_t #foreign libharfbuzz;
+
+/* See notes on hb_ft_face_create().  Same issues re lifecycle-management
+* apply here.  Use hb_ft_font_create_referenced() if you can. */
+hb_ft_font_create :: (ft_face: FT_Face, destroy: hb_destroy_func_t) -> *hb_font_t #foreign libharfbuzz;
+
+/* See notes on hb_ft_face_create_referenced() re lifecycle-management
+* issues. */
+hb_ft_font_create_referenced :: (ft_face: FT_Face) -> *hb_font_t #foreign libharfbuzz;
+
+hb_ft_font_get_ft_face :: (font: *hb_font_t) -> FT_Face #foreign libharfbuzz;
+
+hb_ft_font_lock_face :: (font: *hb_font_t) -> FT_Face #foreign libharfbuzz;
+
+hb_ft_font_unlock_face :: (font: *hb_font_t) -> void #foreign libharfbuzz;
+
+hb_ft_font_set_load_flags :: (font: *hb_font_t, load_flags: s32) -> void #foreign libharfbuzz;
+
+hb_ft_font_get_load_flags :: (font: *hb_font_t) -> s32 #foreign libharfbuzz;
+
+/* Call when size or variations settings on underlying FT_Face changed,
+* and you want to update the hb_font_t from it. */
+hb_ft_font_changed :: (font: *hb_font_t) -> void #foreign libharfbuzz;
+
+/* Call when size or variations settings on underlying hb_font_t may have
+* changed, and you want to update the FT_Face from it.  This call is fast
+* if nothing changed on hb_font_t. Returns true if changed. */
+hb_ft_hb_font_changed :: (font: *hb_font_t) -> hb_bool_t #foreign libharfbuzz;
+
+/* Makes an hb_font_t use FreeType internally to implement font functions.
+* Note: this internally creates an FT_Face.  Use it when you create your
+* hb_face_t using hb_face_create(). */
+hb_ft_font_set_funcs :: (font: *hb_font_t) -> void #foreign libharfbuzz;
+
+hb_ft_font_get_face :: (font: *hb_font_t) -> FT_Face #foreign libharfbuzz;
+
+hb_coretext_face_create :: (cg_font: CGFontRef) -> *hb_face_t #foreign libharfbuzz;
+
+hb_coretext_face_create_from_file_or_fail :: (file_name: *u8, index: u32) -> *hb_face_t #foreign libharfbuzz;
+
+hb_coretext_face_create_from_blob_or_fail :: (blob: *hb_blob_t, index: u32) -> *hb_face_t #foreign libharfbuzz;
+
+hb_coretext_font_create :: (ct_font: CTFontRef) -> *hb_font_t #foreign libharfbuzz;
+
+hb_coretext_face_get_cg_font :: (face: *hb_face_t) -> CGFontRef #foreign libharfbuzz;
+
+hb_coretext_font_get_ct_font :: (font: *hb_font_t) -> CTFontRef #foreign libharfbuzz;
+
+hb_coretext_font_set_funcs :: (font: *hb_font_t) -> void #foreign libharfbuzz;
 
 #scope_file
 
