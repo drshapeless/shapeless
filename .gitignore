@@ -3,3 +3,4 @@
 *.dylib
 *.spv
 /modules/HarfBuzz/include/
+*.dSYM/
