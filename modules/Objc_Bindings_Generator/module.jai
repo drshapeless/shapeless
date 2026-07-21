@@ -332,6 +332,10 @@ to_jai_type :: (sb: *String_Builder, type: CXType, user_data: *void = null) {
         append(sb, "s32");
     case .Short;
         append(sb, "s16");
+    case .Long;
+        append(sb, "s64");
+    case .LongLong;
+        append(sb, "s64");
     case .UInt;
         append(sb, "u32");
     case .UShort;
@@ -357,9 +361,6 @@ to_jai_type :: (sb: *String_Builder, type: CXType, user_data: *void = null) {
         type_string := to_string(declaration_cursor);
         cursor_kind := clang_getCursorKind(declaration_cursor);
 
-        record_compare :: (a: Objc_Record, b: Objc_Record) -> bool {
-            return a.name == b.name;
-        }
         // We have to create an empty struct for the base type of record
         record: Objc_Record;
         record.name = type_string;
@@ -381,7 +382,7 @@ to_jai_type :: (sb: *String_Builder, type: CXType, user_data: *void = null) {
                 if it.name == "" {
                     print_to_builder(sb, "unknown_%: %", it_index, it.type);
                 } else {
-                    print_to_builder(sb, "%: %", it.name, it.type);
+                    print_to_builder(sb, "%: %", sanitize_parameter_name(it.name), it.type);
                 }
 
             }
@@ -479,11 +480,13 @@ sanitize_parameter_name :: (name: string) -> string {
     bad_names :: string.[
     "context",
     "string",
+    "Code",
     ];
 
     good_names :: string.[
     "ctx",
     "str",
+    "_Code",
     ];
 
     found, index := array_find(bad_names, name);
@@ -536,10 +539,15 @@ handle_enum :: (cursor: CXCursor) {
                 if is_exist return .Continue;
 
                 value_string: string;
-                if objc_enum.type == "NSInteger" {
+                if objc_enum.type == {
+                case "s32";
+                    #through;
+                case "s8";
+                    #through;
+                case  "NSInteger";
                     v := clang_getEnumConstantDeclValue(cursor);
                     value_string = tprint("%", v);
-                } else {
+                case;
                     v := clang_getEnumConstantDeclUnsignedValue(cursor);
                     value_string = tprint("%", v);
                 }
@@ -581,6 +589,7 @@ handle_struct :: (cursor: CXCursor) {
     visitor :: (cursor: CXCursor, parent: CXCursor, client_data: CXClientData) -> CXChildVisitResult #c_call {
         push_context {
             member_type := clang_getCursorType(cursor);
+            if member_type.kind == .Invalid return .Continue;
             name := to_string(cursor);
             type_string := to_jai_type(member_type);
             // log("%: %", name, type_string);
@@ -601,6 +610,9 @@ handle_struct :: (cursor: CXCursor) {
         comment = get_raw_comment_string(cursor),
     };
     clang_visitChildren(cursor, visitor, *objc_struct);
+    if objc_struct.members.count == 0 {
+        return;
+    }
     array_add(*objc_structs, objc_struct);
 }
 
@@ -615,7 +627,15 @@ handle_typedef :: (cursor: CXCursor) {
     case .Enum;
         return;
     case .Record;
-        // log("record: %", to_string(cursor));
+        // log("record: % :: %", name, to_string(underlying_type));
+        record: Objc_Record;
+        record.name = name;
+        // if cursor_kind == {
+        // case .StructDecl;
+        //     record.kind = .STRUCT;
+        // }
+        array_add_if_unique(*objc_records, record, record_compare);
+
     case .BlockPointer;
         typedef := Objc_Typedef.{
             name = name,
@@ -626,6 +646,16 @@ handle_typedef :: (cursor: CXCursor) {
     case .ObjCObjectPointer;
         #through;
     case .Pointer;
+        #through;
+    case .Double;
+        #through;
+    case .UShort;
+        #through;
+    case .UChar;
+        #through;
+    case .Long;
+        #through;
+    case .Float;
         #through;
     case .Typedef;
         typedef := Objc_Typedef.{
@@ -668,6 +698,11 @@ handle_function :: (cursor: CXCursor) {
     };
 
     clang_visitChildren(cursor, visitor, *objc_function);
+
+    // No va_list
+    for objc_function.parameters {
+        if it.type == "va_list" return;
+    }
 
     array_add(*objc_functions, objc_function);
 }
@@ -872,7 +907,7 @@ write_to_file :: (export_library_name: string, output_filename: string) {
                 append(*sb, m.comment);
                 append(*sb, "\n");
             }
-            print_to_builder(*sb, "    % :: %;\n", m.name, m.value);
+            print_to_builder(*sb, "    % :: %;\n", sanitize_parameter_name(m.name), m.value);
         }
         append(*sb, "}\n\n");
     }
@@ -913,7 +948,9 @@ write_to_file :: (export_library_name: string, output_filename: string) {
             if it_index > 0 {
                 append(*sb, ", ");
             }
-            print_to_builder(*sb, "%: %", sanitize_parameter_name(p.name), p.type);
+            param_name := p.name;
+            if param_name == "" then param_name = sprint("unknown_%", it_index);
+            print_to_builder(*sb, "%: %", sanitize_parameter_name(param_name), p.type);
         }
         print_to_builder(*sb, ") -> % #foreign %;\n", f.return_type, export_library_name);
     }
@@ -1079,6 +1116,10 @@ write_to_file :: (export_library_name: string, output_filename: string) {
     append(*sb, "}\n__sel: _Generated_Selectors;\n");
 
     write_entire_file(output_filename, *sb);
+}
+
+record_compare :: (a: Objc_Record, b: Objc_Record) -> bool {
+    return a.name == b.name;
 }
 
 #import "clang";
