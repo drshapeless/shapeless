@@ -27,8 +27,6 @@ GPU_Context :: struct {
 
     command_buffer_index:= 0;
 
-    slang_global_session: *slang.IGlobalSession;
-
     // Useful for checking size and alignment.
     temp_texture_descriptor: *MTLTextureDescriptor;
     cpu_pointer_table:       Table(*void, Allocation);
@@ -143,9 +141,6 @@ init :: (window: *SDL_Window = null) {
     fragment_argument_table = MTLDevice.newArgumentTableWithDescriptor_error_(device, argument_table_descriptor, *error);
     assert_metal(error);
 
-    slang_result := slang.slang_createGlobalSession(slang.SLANG_API_VERSION, *slang_global_session);
-    Basic.assert(!slang.SLANG_FAILED(slang_result));
-
     residency_set_descriptor :*MTLResidencySetDescriptor = objc_new(MTLResidencySetDescriptor);
 
     residency_set = MTLDevice.newResidencySetWithDescriptor_error_(device, residency_set_descriptor, *error);
@@ -169,10 +164,6 @@ deinit :: () {
         release(it.cmd);
         release(it.command_allocator);
         release(it.render_pass_descriptor);
-    }
-
-    if slang_global_session {
-        slang.ISlangUnknown_release(xx slang_global_session);
     }
 
     release(argument_table);
@@ -297,11 +288,11 @@ load_msl :: (msl: string, entry_points: []string) -> []IR {
 }
 
 // This function expects the content of the shader file, not the name nor the path.
-load_slang :: (shader: string, entry_points: []string) -> []IR {
-    metal_code := slang_to_metal(shader, entry_points, context.gpu_context.slang_global_session);
+// load_slang :: (shader: string, entry_points: []string) -> []IR {
+//     metal_code := slang_to_metal(shader, entry_points, context.gpu_context.slang_global_session);
 
-    return load_msl(metal_code, entry_points);
-}
+//     return load_msl(metal_code, entry_points);
+// }
 
 load_ir :: (shader_name: string, entry_points: []string) -> []IR {
     shader_path := Basic.tprint("%%.metal", SHADER_BASE_DIRECTORY, shader_name);
@@ -641,9 +632,14 @@ end_render_pass :: (cb: *Command_Buffer) {
 set_viewport :: (cb: *Command_Buffer, viewport: Viewport) {
     mtl: MTLViewport;
     mtl.originX = viewport.x;
-    mtl.originY = viewport.y;
     mtl.width   = viewport.width;
-    mtl.height  = viewport.height;
+    #if Y_AXIS_DOWN {
+        mtl.height  = -viewport.height;
+        mtl.originY = viewport.y + viewport.height;
+    } else {
+        mtl.height  = viewport.height;
+        mtl.originY = viewport.y;
+    }
     mtl.znear   = viewport.min_depth;
     mtl.zfar    = viewport.max_depth;
     MTL4RenderCommandEncoder.setViewport_(cb.render_encoder, mtl);
@@ -671,6 +667,17 @@ draw_indexed_instanced :: (cb: *Command_Buffer, vertex_data_gpu: Ptr, fragment_d
     MTL4ArgumentTable.setAddress_atIndex_(fragment_argument_table, fragment_data_gpu, 0);
     MTL4RenderCommandEncoder.setArgumentTable_atStages_(cb.render_encoder, fragment_argument_table, .Fragment);
     MTL4RenderCommandEncoder.drawIndexedPrimitives_indexCount_indexType_indexBuffer_indexBufferLength_instanceCount_(cb.render_encoder, to_metal_primitive_type(cb.topology), xx indices.count, .UInt32, indices.gpu_ptr, size_of(u32).(u32) *  xx indices.count, instance_count);
+}
+
+draw :: (cb: *Command_Buffer, vertex_data_gpu: Ptr, fragment_data_gpu: Ptr, vertex_count: u32, instance_count: u32) {
+    using context.gpu_context;
+
+    MTL4ArgumentTable.setAddress_atIndex_(vertex_argument_table, vertex_data_gpu, 0);
+    MTL4RenderCommandEncoder.setArgumentTable_atStages_(cb.render_encoder, vertex_argument_table, .Vertex);
+
+    MTL4ArgumentTable.setAddress_atIndex_(fragment_argument_table, fragment_data_gpu, 0);
+    MTL4RenderCommandEncoder.setArgumentTable_atStages_(cb.render_encoder, fragment_argument_table, .Fragment);
+    MTL4RenderCommandEncoder.drawPrimitives_vertexStart_vertexCount_instanceCount_(cb.render_encoder, to_metal_primitive_type(cb.topology), 0, xx vertex_count, xx instance_count);
 }
 
 acquire_swapchain_texture :: () -> bool, Texture {
@@ -763,6 +770,7 @@ to_metal_texture_descriptor :: (desc: Texture_Desc) -> *MTLTextureDescriptor {
     if desc.type == .e2D {
         metal_desc = MTLTextureDescriptor.texture2DDescriptorWithPixelFormat_width_height_mipmapped_(to_metal_format(desc.format), desc.dimensions.x, desc.dimensions.y, xx (desc.mip_count > 1));
         metal_desc.setResourceOptions_(metal_desc, .StorageModeShared);
+        metal_desc.setUsage_(metal_desc, to_metal_texture_usage(desc.usage));
     } else {
         metal_desc: *MTLTextureDescriptor = objc_new(MTLTextureDescriptor);
         to_metal_texture_descriptor(metal_desc, desc);
@@ -803,6 +811,7 @@ to_metal_texture_usage :: (texture_usage: Texture_Usage) -> MTLTextureUsage {
     if texture_usage & .COLOR_ATTACHMENT || texture_usage & .DEPTH_STENCIL_ATTACHMENT {
         mtl_usage |= .RenderTarget;
     }
+
     return mtl_usage;
 }
 
@@ -1223,7 +1232,7 @@ to_metal_stages :: (stage: Stage) -> MTLStages {
     if stage & .FRAGMENT {
         s |= .Fragment;
     }
-    if stage & .COPY || stage & .BLIT{
+    if stage & .COPY || stage & .BLIT {
         s |= .Blit;
     }
     if stage & .ALL {
@@ -1292,4 +1301,3 @@ String :: #import "String";
 #import "Hash_Table";
 Vulkan :: #import "Vulkan";
 #load "format.jai";
-slang :: #import "slang";
