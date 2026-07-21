@@ -1,4 +1,4 @@
-#module_parameters(VALIDATION := true, DEBUG_ASSERT := true, SHADER_BASE_DIRECTORY := "shaders/");
+#module_parameters(VALIDATION := true, DEBUG_ASSERT := true, SHADER_BASE_DIRECTORY := "shaders/", Y_AXIS_DOWN := true);
 
 // The GPU module is a very minimalistic GPU API targeting very new
 // hardware. It uses Metal 4 on macOS, and Vulkan 1.4 on
@@ -74,6 +74,12 @@
 //// Thus I make this dummy function, for Metal, it returns the
 //// resourceID, for Vulkan, it returns the inputed index.
 // texture_handle :: (texture: Texture, index: u64) -> u64
+
+//// NDC space
+// The default NDC space of Metal is Y-up, while Vulkan is Y-down, I
+// am not sure which is better, but since I work with Vulkan a lot
+// more than Metal, the default is Y-down. In metal, this is done by
+// setting negative viewport height.
 
 Memory_Type :: enum {
     SHARED;
@@ -558,7 +564,6 @@ load_graphics_ir :: (shader_name: string, vertex_entry_point: string = "vertex_m
     #load "vulkan.jai";
 }
 #load "arena.jai";
-#load "shader_conversion.jai";
 
 #scope_file
 Basic :: #import "Basic";

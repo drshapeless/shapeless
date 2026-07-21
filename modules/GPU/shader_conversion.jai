@@ -180,7 +180,7 @@ slang_to_spirv :: (shader: string, entry_points: [] string, global_session: *sla
     session_desc := slang.SessionDesc.{
         targets                  = *target_desc,
         targetCount              = 1,
-        defaultMatrixLayoutMode  = .ROW_MAJOR,
+        defaultMatrixLayoutMode  = .COLUMN_MAJOR,
         searchPaths              = *search_paths,
         searchPathCount          = 1,
         compilerOptionEntries    = options.data,
