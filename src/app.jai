@@ -107,16 +107,9 @@ app_iter :: (appstate: *void) -> SDL_AppResult {
 
     indices: [3]u32 = .[0, 1, 2];
 
-
     draw_simple(cb, vertices, indices);
-    GPU.end_render_pass(cb);
 
-    GPU.set_active_texture_heap(cb, draw_heap);
-    // GPU.set_pipeline(cb, clear_pipeline);
-    // clear_screen(cb, .{0.2, 0.3, 0.4, 1.0});
-
-    GPU.barrier(cb, .FRAGMENT, .COMPUTE);
-    GPU.set_pipeline(cb, solid_rectangle_pipeline);
+    GPU.set_pipeline(cb, rectangle_pipeline);
     rect1: Color_Rectangle = .{
         origin = .{0, 0},
         size   = .{200, 200},
@@ -124,13 +117,13 @@ app_iter :: (appstate: *void) -> SDL_AppResult {
     };
     rect2: Color_Rectangle = .{
         origin = .{150, 200},
-        size   = .{400, 700},
+        size   = .{400, 300},
         color  = .{0.0, 0.7, 1.0, 1.0},
     };
+    GPU.set_topology(cb, .TRIANGLE_STRIP);
     draw_rectangles(cb, rect2, rect1);
+    GPU.end_render_pass(cb);
 
-
-    GPU.barrier(cb, .COMPUTE, .BLIT);
     GPU.copy_texture(cb, swapchain_texture, draw_texture, true);
 
     GPU.submit_and_present(queue, swapchain_texture, cb);

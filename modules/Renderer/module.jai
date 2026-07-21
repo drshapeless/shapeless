@@ -40,17 +40,23 @@ init_renderer :: (sdl_window: *SDL_Window) {
         solid_rectangle_pipeline = GPU.create_compute_pipeline(ir);
     }
 
-    {
-        color_targets: [1]GPU.Color_Target;
-        color_targets[0].format = .B8G8R8A8_UNORM;
+    color_targets: [1]GPU.Color_Target;
+    color_targets[0].format = .B8G8R8A8_UNORM;
 
-        desc: GPU.Raster_Desc = .{
-            color_targets = color_targets,
-        };
+    desc: GPU.Raster_Desc = .{
+        color_targets = color_targets,
+    };
+    {
         vir, fir := GPU.load_graphics_ir("simple");
         defer GPU.destroy_ir(vir);
         defer GPU.destroy_ir(fir);
         simple_pipeline = GPU.create_graphics_pipeline(vir, fir, desc);
+    }
+    {
+        vir, fir := GPU.load_graphics_ir("rectangle");
+        defer GPU.destroy_ir(vir);
+        defer GPU.destroy_ir(fir);
+        rectangle_pipeline = GPU.create_graphics_pipeline(vir, fir, desc);
     }
 
     {
@@ -76,6 +82,7 @@ init_renderer :: (sdl_window: *SDL_Window) {
 }
 
 deinit_renderer :: () {
+    GPU.destroy_pipeline(rectangle_pipeline);
     GPU.destroy_pipeline(simple_pipeline);
     GPU.destroy_pipeline(clear_pipeline);
     GPU.destroy_pipeline(solid_rectangle_pipeline);
@@ -133,6 +140,7 @@ frame_arenas: [] GPU.Arena;
 clear_pipeline:           GPU.Pipeline;
 solid_rectangle_pipeline: GPU.Pipeline;
 simple_pipeline:          GPU.Pipeline;
+rectangle_pipeline:       GPU.Pipeline;
 
 Clear_Data :: struct {
     clear_color: Color;
@@ -180,21 +188,21 @@ clear_screen :: (cb: *GPU.Command_Buffer, clear_color: Color) {
 }
 
 // This way of drawing is very much like ray tracing
-draw_rectangles :: (cb: *GPU.Command_Buffer, rects: .. Color_Rectangle) {
-    i := GPU.frame_index();
+// draw_rectangles :: (cb: *GPU.Command_Buffer, rects: .. Color_Rectangle) {
+//     i := GPU.frame_index();
 
-    GPU.push_allocator(GPU.arena_allocator_proc, *frame_arenas[i]);
+//     GPU.push_allocator(GPU.arena_allocator_proc, *frame_arenas[i]);
 
-    gpu_rects := GPU.array_copy(rects);
+//     gpu_rects := GPU.array_copy(rects);
 
-    solid_rectangle_params[i].texture_index = GPU.texture_handle(draw_texture, 0);
-    solid_rectangle_params[i].rects = GPU.to_device_array(gpu_rects);
+//     solid_rectangle_params[i].texture_index = GPU.texture_handle(draw_texture, 0);
+//     solid_rectangle_params[i].rects = GPU.to_device_array(gpu_rects);
 
-    threads_size: GPU.u32x3 = .{8, 8, 1};
-    group_size := calculate_group_size(window_dimensions, threads_size);
+//     threads_size: GPU.u32x3 = .{8, 8, 1};
+//     group_size := calculate_group_size(window_dimensions, threads_size);
 
-    GPU.dispatch(cb, solid_rectangle_params_base_gpu + cast(u64) (size_of(Solid_Rectangle_Data) * i), group_size, threads_size);
-}
+//     GPU.dispatch(cb, solid_rectangle_params_base_gpu + cast(u64) (size_of(Solid_Rectangle_Data) * i), group_size, threads_size);
+// }
 
 draw_simple :: (cb: *GPU.Command_Buffer, vertices: [] Simple_Data, indices: [] u32) {
     i := GPU.frame_index();
@@ -207,6 +215,30 @@ draw_simple :: (cb: *GPU.Command_Buffer, vertices: [] Simple_Data, indices: [] u
     indices_array := GPU.to_device_array(gpu_indices);
 
     GPU.draw_indexed_instanced(cb, v_ptr, 0, indices_array, 1);
+}
+
+draw_rectangles :: (cb: *GPU.Command_Buffer, rects: .. Color_Rectangle) {
+    i := GPU.frame_index();
+    GPU.push_allocator(GPU.arena_allocator_proc, *frame_arenas[i]);
+
+    gpu_rects := GPU.array_copy(rects);
+
+    Vertex_Input :: struct {
+        projection: Matrix4;
+        rectangles: GPU.Ptr;
+    }
+
+    input := GPU.New(Vertex_Input);
+    input.rectangles = GPU.host_to_device_pointer(gpu_rects.data);
+
+    input.projection._11 = 2.0 / cast(float) window_dimensions.x;
+    input.projection._22 = 2.0 / cast(float) window_dimensions.y;
+    input.projection._33 = 1.0;
+    input.projection._44 = 1.0;
+    input.projection._41 = -1.0;
+    input.projection._42 = -1.0;
+
+    GPU.draw(cb, GPU.host_to_device_pointer(input), 0, 4, xx rects.count);
 }
 
 #load "font.jai";
@@ -254,4 +286,11 @@ calculate_group_size :: (dimensions: GPU.u32x3, threads_per_group: GPU.u32x3) ->
     };
 
     return group_size;
+}
+
+to_ndc :: (dimensions: s32x2) -> Vector2 {
+    return .{
+        x = cast(float)(2 * dimensions.x) / cast(float) window_dimensions.x - 1.0,
+        y = cast(float)(2 * dimensions.y) / cast(float) window_dimensions.y - 1.0,
+    };
 }
