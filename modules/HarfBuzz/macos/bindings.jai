@@ -4608,20 +4608,6 @@ hb_ft_font_set_funcs :: (font: *hb_font_t) -> void #foreign libharfbuzz;
 
 hb_ft_font_get_face :: (font: *hb_font_t) -> FT_Face #foreign libharfbuzz;
 
-hb_coretext_face_create :: (cg_font: CGFontRef) -> *hb_face_t #foreign libharfbuzz;
-
-hb_coretext_face_create_from_file_or_fail :: (file_name: *u8, index: u32) -> *hb_face_t #foreign libharfbuzz;
-
-hb_coretext_face_create_from_blob_or_fail :: (blob: *hb_blob_t, index: u32) -> *hb_face_t #foreign libharfbuzz;
-
-hb_coretext_font_create :: (ct_font: CTFontRef) -> *hb_font_t #foreign libharfbuzz;
-
-hb_coretext_face_get_cg_font :: (face: *hb_face_t) -> CGFontRef #foreign libharfbuzz;
-
-hb_coretext_font_get_ct_font :: (font: *hb_font_t) -> CTFontRef #foreign libharfbuzz;
-
-hb_coretext_font_set_funcs :: (font: *hb_font_t) -> void #foreign libharfbuzz;
-
 #scope_file
 
 libharfbuzz :: #library "libharfbuzz";

@@ -22,7 +22,7 @@ do_copy_libraries :: true;
 
 update_headers :: () {
     delete_directory("include/harfbuzz");
-    make_directory_if_it_does_not_exist("include/harfbuzz");
+    make_directory_if_it_does_not_exist("include/harfbuzz", true);
 
     prefix: string;
     #if OS == .MACOS {
@@ -76,9 +76,9 @@ EOF;
         array_add(*opts.system_include_paths, "/usr/include/freetype2");
     } else #if OS == .MACOS {
         array_add(*opts.system_include_paths, "/opt/homebrew/include/freetype2");
-        array_add(*opts.source_files, "include/harfbuzz/hb-coretext.h");
-        #import "macOS/Toolchain";
-        array_add(*opts.extra_clang_arguments, "-isysroot", get_macos_sdk_path());
+        // array_add(*opts.source_files, "include/harfbuzz/hb-coretext.h");
+        // #import "macOS/Toolchain";
+        // array_add(*opts.extra_clang_arguments, "-isysroot", get_macos_sdk_path());
     }
 
     opts.visitor = visitor;
