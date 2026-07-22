@@ -124,6 +124,7 @@ app_iter :: (appstate: *void) -> SDL_AppResult {
     draw_rectangles(cb, rect2, rect1);
     GPU.end_render_pass(cb);
 
+    GPU.barrier(cb, .ALL, .BLIT);
     GPU.copy_texture(cb, swapchain_texture, draw_texture, true);
 
     GPU.submit_and_present(queue, swapchain_texture, cb);

@@ -1253,19 +1253,41 @@ draw_indexed_instanced :: (cb: *Command_Buffer, vertex_data_gpu: Ptr, fragment_d
         },
     };
     vkCmdPushDataEXT(cb.vk, *push_data_info);
-    // index_buffer_info := VkBindIndexBuffer3InfoKHR.{
-    //     addressRange = .{
-    //         address = indices.gpu_ptr,
-    //         size = xx (size_of(u32) * indices.count),
-    //     },
-    //     addressFlags = .STORAGE_BUFFER_USAGE,
-    //     indexType = .UINT32,
-    // };
-    // vkCmdBindIndexBuffer3KHR(cb.vk, *index_buffer_info);
+    index_buffer_info := VkBindIndexBuffer3InfoKHR.{
+        addressRange = .{
+            address = indices.gpu_ptr,
+            size = xx (size_of(u32) * indices.count),
+        },
+        addressFlags = .STORAGE_BUFFER_USAGE,
+        indexType = .UINT32,
+    };
+    vkCmdBindIndexBuffer3KHR(cb.vk, *index_buffer_info);
 
-    // vkCmdDrawIndexed(cb.vk, xx indices.count, instance_count, 0, 0, 0);
+    vkCmdDrawIndexed(cb.vk, xx indices.count, instance_count, 0, 0, 0);
+}
 
-    vkCmdDraw(cb.vk, 3, 1, 0, 0);
+draw :: (cb: *Command_Buffer, vertex_data_gpu: Ptr, fragment_data_gpu: Ptr, vertex_count: u32, instance_count: u32) {
+    using context.gpu_context;
+
+    Params :: struct {
+        vertex_input: Ptr;
+        fragment_input: Ptr;
+    }
+
+    params := Params.{
+        vertex_data_gpu,
+        fragment_data_gpu,
+    };
+
+    push_data_info := VkPushDataInfoEXT.{
+        data = VkHostAddressRangeConstEXT.{
+            address = *params,
+            size    = xx size_of(Params),
+        },
+    };
+    vkCmdPushDataEXT(cb.vk, *push_data_info);
+
+    vkCmdDraw(cb.vk, vertex_count, instance_count, 0, 0);
 }
 
 create_blend_state :: (desc: Blend_Desc) -> Blend_State {
@@ -2039,3 +2061,4 @@ Compiler :: #import "Compiler";
 #import "Hash_Table";
 slang :: #import "slang";
 File :: #import "File";
+#load "shader_conversion.jai";
