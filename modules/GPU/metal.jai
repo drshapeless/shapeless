@@ -702,11 +702,12 @@ barrier :: (cb: *Command_Buffer, before: Stage, after: Stage, hazards: Hazard = 
     encoder: *MTL4CommandEncoder;
     if cb.render_encoder {
         encoder = xx cb.render_encoder;
-    } else {
-        maybe_create_compute_encoder(cb);
+    } else if cb.compute_encoder {
         encoder = xx cb.compute_encoder;
+    } else {
+        // If there is no active encoder, ignore this barrier
+        return;
     }
-
     MTL4CommandEncoder.barrierAfterEncoderStages_beforeEncoderStages_visibilityOptions_(encoder, to_metal_stages(after), to_metal_stages(before), .Device);
 }
 
