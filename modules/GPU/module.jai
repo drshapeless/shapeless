@@ -110,6 +110,10 @@ u32x2 :: struct {
     y: u32;
 }
 
+s32x3 :: struct {
+    x, y, z: s32;
+}
+
 u32x3 :: struct {
     x: u32;
     y: u32;

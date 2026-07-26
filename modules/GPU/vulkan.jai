@@ -92,7 +92,7 @@ Texture :: struct {
     // requires an image view.
     view:  VkImageView;
     format: VkFormat;
-    extent: VkExtent3D;
+    dimensions: u32x3;
     gpu: Ptr;
 }
 
@@ -387,7 +387,7 @@ create_texture :: (desc: Texture_Desc, ptr_gpu: Ptr) -> Texture {
 
     texture: Texture;
     texture.format = desc.format;
-    texture.extent = cast,force(VkExtent3D) desc.dimensions;
+    texture.dimensions = desc.dimensions;
     texture.gpu = ptr_gpu;
     result: VkResult;
     result = check_vk(vkCreateImage(device, *image_create_info, vka, *texture.image));
@@ -839,6 +839,10 @@ memcpy :: (cb: *Command_Buffer, dst: Ptr, src: Ptr, size: u64) {
 }
 
 copy_to_texture :: (cb: *Command_Buffer, dst: Texture, src: Ptr) {
+    copy_to_texture(cb, dst, src, .{0, 0, 0}, dst.dimensions);
+}
+
+copy_to_texture :: (cb: *Command_Buffer, dst: Texture, src: Ptr, image_offset: s32x3, image_extent: u32x3) {
     src_allocation := gpu_pointer_to_allocation(src);
 
     region := VkBufferImageCopy2.{
@@ -851,8 +855,8 @@ copy_to_texture :: (cb: *Command_Buffer, dst: Texture, src: Ptr) {
             baseArrayLayer = 0,
             layerCount = 1,
         },
-        imageOffset = VkOffset3D.{0, 0, 0},
-        imageExtent = dst.extent,
+        imageOffset = cast,force(VkOffset3D) image_offset,
+        imageExtent = cast,force(VkExtent3D)image_extent,
     };
 
     info := VkCopyBufferToImageInfo2.{
@@ -880,7 +884,7 @@ copy_from_texture :: (cb: *Command_Buffer, dst: Ptr, src: Texture) {
             layerCount = 1,
         },
         imageOffset = VkOffset3D.{0, 0, 0},
-        imageExtent = src.extent,
+        imageExtent = src.dimensions,
     };
 
     info := VkCopyImageToBufferInfo2.{
@@ -906,14 +910,14 @@ copy_texture :: (cb: *Command_Buffer, dst: Texture, src: Texture, $IDENTICAL := 
         },
     };
     region.srcOffsets[1] = .{
-        x = xx src.extent.width,
-        y = xx src.extent.height,
-        z = xx src.extent.depth,
+        x = xx src.dimensions.x,
+        y = xx src.dimensions.y,
+        z = xx src.dimensions.z,
     };
     region.dstOffsets[1] = .{
-        x = xx dst.extent.width,
-        y = xx dst.extent.height,
-        z = xx dst.extent.depth,
+        x = xx dst.dimensions.x,
+        y = xx dst.dimensions.y,
+        z = xx dst.dimensions.z,
     };
     info := VkBlitImageInfo2.{
         srcImage = src.image,
@@ -985,6 +989,10 @@ barrier :: (cb: *Command_Buffer, before: Stage, after: Stage, hazards: Hazard = 
         dstAccessMask = .NONE,
     };
 
+    if before & .BLIT || before & .COPY || before & .TRANSFER {
+        memory_barrier.srcAccessMask |= .TRANSFER_WRITE;
+    }
+
     if hazards & .DRAW_ARGUMENTS {
         memory_barrier.srcAccessMask |= .SHADER_WRITE;
         memory_barrier.dstAccessMask |= .INDIRECT_COMMAND_READ;
@@ -992,7 +1000,7 @@ barrier :: (cb: *Command_Buffer, before: Stage, after: Stage, hazards: Hazard = 
 
     if hazards & .DESCRIPTORS {
         memory_barrier.srcAccessMask |= .SHADER_WRITE;
-        memory_barrier.dstAccessMask |= .SHADER_READ;
+        memory_barrier.dstAccessMask |= .SHADER_READ | .SHADER_STORAGE_READ;
     }
 
     if hazards & .DEPTH_STENCIL {
@@ -1064,10 +1072,10 @@ acquire_swapchain_texture :: () -> success:bool, Texture {
     current_image := swapchain.images[acquired_image_index];
     texture: Texture;
     texture.image = current_image;
-    texture.extent = .{
-        width = swapchain.extent.width,
-        height = swapchain.extent.height,
-        depth = 1,
+    texture.dimensions = .{
+        x = swapchain.extent.width,
+        y = swapchain.extent.height,
+        z = 1,
     };
 
     return true, texture;
