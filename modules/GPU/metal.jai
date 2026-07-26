@@ -104,6 +104,8 @@ Command_Buffer :: struct {
     // argument in the draw call. To maintain consistency between
     // Vulkan and Metal, topology is temporarily cached here.
     topology:               Topology;
+
+    texture_heap:           [] Texture_Descriptor;
 }
 
 Semaphore :: struct {
@@ -251,13 +253,16 @@ destroy_texture :: (texture: Texture) {
     release(texture.mtl);
 }
 
+// TODO: We don't care about the View_Desc for now.
 texture_view_descriptor :: (texture: Texture, desc: View_Desc) -> Texture_Descriptor {
-    dummy: Texture_Descriptor;
-    return dummy;
+    descriptor: Texture_Descriptor;
+    descriptor[0] = texture.resource_id._impl;
+    return descriptor;
 }
 
-texture_handle :: inline (texture: Texture, index: u64) -> u64 {
-    return texture.resource_id._impl;
+texture_handle :: inline (cb: *Command_Buffer, index: u64) -> u64 {
+    descriptor := cb.texture_heap[index];
+    return descriptor[0];
 }
 
 load_msl :: (msl: string, entry_points: []string) -> []IR {
@@ -542,6 +547,28 @@ copy_to_texture :: (cb: *Command_Buffer, dest: Texture, src: Ptr) {
     MTL4ComputeCommandEncoder.copyFromBuffer_sourceOffset_sourceBytesPerRow_sourceBytesPerImage_sourceSize_toTexture_destinationSlice_destinationLevel_destinationOrigin_(cb.compute_encoder, src_allocation.buffer, src - src_allocation.gpu, bytes_per_row, 0, src_size, dest.mtl, 0, 1, .{0, 0, 0});
 }
 
+copy_to_texture :: (cb: *Command_Buffer, dst: Texture, src: Ptr, image_offset: s32x3, image_extent: u32x3) {
+    maybe_create_compute_encoder(cb);
+
+    // The input data must be tightly packed.
+
+    src_allocation := gpu_pointer_to_allocation(src);
+    src_size := MTLSize.{
+        width  = xx image_extent.x,
+        height = xx image_extent.y,
+        depth  = xx image_extent.z,
+    };
+
+    bytes_per_row: NSUInteger = image_extent.y;
+
+    dst_origin := MTLOrigin.{
+        x = xx image_offset.x,
+        y = xx image_offset.y,
+        z = xx image_offset.z,
+    };
+    MTL4ComputeCommandEncoder.copyFromBuffer_sourceOffset_sourceBytesPerRow_sourceBytesPerImage_sourceSize_toTexture_destinationSlice_destinationLevel_destinationOrigin_(cb.compute_encoder, src_allocation.buffer, src - src_allocation.gpu, bytes_per_row, 0, src_size, dst.mtl, 0, 1, dst_origin);
+}
+
 copy_from_texture :: (cb: *Command_Buffer, dest: Ptr, src: Texture) {
     maybe_create_compute_encoder(cb);
 
@@ -729,14 +756,19 @@ frame_index :: () -> s64 {
     return command_buffer_index;
 }
 
-// This is just a dummy function in Metal, it does nothing.
 set_active_texture_heap :: (cb: *Command_Buffer, texture_heap: [] Texture_Descriptor) {
-
+    cb.texture_heap = texture_heap;
 }
 
-// This is also a dummy function, it returns an empty heap
+// I used to ignore descriptor heap in Metal, but managing a separate
+// thing along side with a pure index is a pain in the ass. Texture
+// heap in Metal is CPU memory, we imitate the behaviour on host side.
 create_texture_heap :: (count: s64) -> [] Texture_Descriptor {
-    return .[];
+    return Basic.NewArray(count, Texture_Descriptor);
+}
+
+destroy_texture_heap :: (heap: [] Texture_Descriptor) {
+    Basic.array_free(heap);
 }
 
 // This is a dumb function.

@@ -1216,6 +1216,11 @@ create_texture_heap :: (count: s64) -> [] Texture_Descriptor {
     return heap;
 }
 
+destroy_texture_heap :: (heap: [] Texture_Descriptor) {
+    allocation := cpu_pointer_to_allocation(heap.data);
+    vulkan_deallocate(allocation);
+}
+
 set_viewport :: (cb: *Command_Buffer, viewport: Viewport) {
     vk: VkViewport;
     vk.x = viewport.x;

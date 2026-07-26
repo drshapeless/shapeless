@@ -82,6 +82,7 @@ init_renderer :: (sdl_window: *SDL_Window) {
 }
 
 deinit_renderer :: () {
+    GPU.destroy_texture_heap(draw_heap);
     GPU.destroy_pipeline(rectangle_pipeline);
     GPU.destroy_pipeline(simple_pipeline);
     GPU.destroy_pipeline(clear_pipeline);
@@ -178,7 +179,7 @@ Color_Rectangle :: struct {
 clear_screen :: (cb: *GPU.Command_Buffer, clear_color: Color) {
     i := GPU.frame_index();
 
-    clear_params[i].texture_index = GPU.texture_handle(draw_texture, 0);
+    clear_params[i].texture_index = GPU.texture_handle(cb, 0);
     clear_params[i].clear_color = clear_color;
 
     threads_size: GPU.u32x3 = .{8, 8, 1};
@@ -195,7 +196,7 @@ clear_screen :: (cb: *GPU.Command_Buffer, clear_color: Color) {
 
 //     gpu_rects := GPU.array_copy(rects);
 
-//     solid_rectangle_params[i].texture_index = GPU.texture_handle(draw_texture, 0);
+//     solid_rectangle_params[i].texture_index = GPU.texture_handle(cb, 0);
 //     solid_rectangle_params[i].rects = GPU.to_device_array(gpu_rects);
 
 //     threads_size: GPU.u32x3 = .{8, 8, 1};
