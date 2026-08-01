@@ -111,13 +111,11 @@ app_iter :: (appstate: *void) -> SDL_AppResult {
 
     GPU.set_pipeline(cb, rectangle_pipeline);
     rect1: Color_Rectangle = .{
-        origin = .{0, 0},
-        size   = .{200, 200},
+        rect = .{0, 0, 200, 200},
         color  = .{0.0, 1.0, 1.0, 1.0},
     };
     rect2: Color_Rectangle = .{
-        origin = .{150, 200},
-        size   = .{400, 300},
+        rect = .{150, 200, 400, 300},
         color  = .{0.0, 0.7, 1.0, 1.0},
     };
     GPU.set_topology(cb, .TRIANGLE_STRIP);
@@ -152,3 +150,4 @@ GPU :: #import "GPU";
 #import "File";
 #import "Hash_Table";
 #import "Renderer";
+#import "Utils/types";

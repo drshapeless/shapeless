@@ -106,6 +106,7 @@ Command_Buffer :: struct {
     topology:               Topology;
 
     texture_heap:           [] Texture_Descriptor;
+    sampler_heap:           [] Sampler_Descriptor;
 }
 
 Semaphore :: struct {
@@ -260,9 +261,30 @@ texture_view_descriptor :: (texture: Texture, desc: View_Desc) -> Texture_Descri
     return descriptor;
 }
 
+// In Metal, sampler is an object that has to be released, but in this
+// implementation, we don't release the sampler at all, because the
+// Vulkan implementation does not have a sampler object.
+sampler_descriptor :: (desc: Sampler_Desc) -> Sampler_Descriptor {
+    using context.gpu_context;
+    mtl_descriptor := to_metal_sampler_descriptor(desc);
+
+    state := MTLDevice.newSamplerStateWithDescriptor_(device, mtl_descriptor);
+
+    sampler_descriptor: Sampler_Descriptor;
+    sampler_descriptor[0] = xx state;
+    sampler_descriptor[1] = state.gpuResourceID(state)._impl;
+
+    return sampler_descriptor;
+}
+
 texture_handle :: inline (cb: *Command_Buffer, index: u64) -> u64 {
     descriptor := cb.texture_heap[index];
     return descriptor[0];
+}
+
+sampler_handle :: inline (cb: *Command_Buffer, index: u64) -> u64 {
+    descriptor := cb.sampler_heap[index];
+    return descriptor[1];
 }
 
 load_msl :: (msl: string, entry_points: []string) -> []IR {
@@ -451,7 +473,7 @@ start_command_recording :: () -> *Command_Buffer {
 // the case in Vulkan. In Vulkan the wait and signal semaphores are
 // grouped together in a single submit info, otherwise, it might have
 // a significant performance impact(?)
-submit :: (queue: Queue, command_buffers: *Command_Buffer, wait: []Semaphore_Pair = .[], signal: []Semaphore_Pair = .[]) {
+submit :: (queue: Queue, command_buffer: *Command_Buffer, wait: []Semaphore_Pair = .[], signal: []Semaphore_Pair = .[]) {
     Basic.auto_release_temp();
     for wait {
         MTL4CommandQueue.waitForEvent_value_(queue.mtl, xx it.semaphore.shared_event, it.value);
@@ -465,6 +487,8 @@ submit :: (queue: Queue, command_buffers: *Command_Buffer, wait: []Semaphore_Pai
     for signal {
         MTL4CommandQueue.signalEvent_value_(queue.mtl, xx it.semaphore.shared_event, it.value);
     }
+
+    command_buffer.texture_heap = .[];
 
     command_buffer_index = (command_buffer_index + 1) % xx command_buffers.count;
 }
@@ -493,6 +517,8 @@ submit_and_present :: (queue: Queue, swapchain_texture: Texture, command_buffer:
     MTL4CommandQueue.signalDrawable_(queue.mtl, drawable);
 
     MTLDrawable.present(drawable);
+
+    command_buffer.texture_heap = .[];
 
     command_buffer_index = (command_buffer_index + 1) % xx command_buffers.count;
 }
@@ -771,6 +797,18 @@ destroy_texture_heap :: (heap: [] Texture_Descriptor) {
     Basic.array_free(heap);
 }
 
+create_sampler_heap :: (count: s64) -> [] Sampler_Descriptor {
+    return Basic.NewArray(count, Sampler_Descriptor);
+}
+
+destroy_sampler_heap :: (heap: [] Sampler_Descriptor) {
+    Basic.array_free(heap);
+}
+
+set_active_sampler_heap :: (cb: *Command_Buffer, sampler_heap: [] Sampler_Descriptor) {
+    cb.sampler_heap = sampler_heap;
+}
+
 // This is a dumb function.
 create_blend_state :: (desc: Blend_Desc) -> Blend_State {
     return .{};
@@ -935,13 +973,13 @@ to_metal_compare_function :: (op: OP) -> MTLCompareFunction {
         func = .Less;
     case .EQUAL;
         func = .Equal;
-    case .LESS_EQUAL;
+    case .LESS_OR_EQUAL;
         func = .LessEqual;
     case .GREATER;
         func = .Greater;
     case .NOT_EQUAL;
         func = .NotEqual;
-    case .GREATER_EQUAL;
+    case .GREATER_OR_EQUAL;
         func = .GreaterEqual;
     case .ALWAYS;
         func = .Always;
@@ -1004,7 +1042,7 @@ to_metal_color_attachment :: (target: Render_Pass_Attachment_Desc) -> *MTLRender
     MTLRenderPassAttachmentDescriptor.setStoreAction_(xx desc, to_metal_store_action(target.store_op));
 
     c := target.clear_color;
-    desc.setClearColor_(desc, .{c.r, c.g, c.b, c.a});
+    desc.setClearColor_(desc, .{c.x, c.y, c.z, c.w});
 
     return desc;
 }
@@ -1322,6 +1360,101 @@ metal_texture_size :: (metal_texture: *MTLTexture) -> MTLSize {
         height = MTLTexture.height(metal_texture),
         depth = MTLTexture.depth(metal_texture),
     };
+}
+
+to_metal_sampler_min_mag_filter :: (filter: Sampler_Min_Mag_Filter) -> MTLSamplerMinMagFilter {
+    mtl: MTLSamplerMinMagFilter;
+    if #complete filter == {
+    case .NEAREST;
+        mtl = .Nearest;
+    case .LINEAR;
+        mtl = .Linear;
+    }
+
+    return mtl;
+}
+
+to_metal_sampler_mip_filter :: (filter: Sampler_Mip_Filter) -> MTLSamplerMipFilter {
+    mtl: MTLSamplerMipFilter;
+    if #complete filter == {
+    case .NONE;
+        mtl = .NotMipmapped;
+    case .NEAREST;
+        mtl = .Nearest;
+    case .LINEAR;
+        mtl = .Linear;
+    }
+    return mtl;
+}
+
+to_metal_sampler_address_mode :: (mode: Sampler_Address_Mode) -> MTLSamplerAddressMode {
+    mtl: MTLSamplerAddressMode;
+    if #complete mode == {
+    case .CLAMP_TO_EDGE;
+        mtl = .ClampToEdge;
+    case .MIRROR_CLAMP_TO_EDGE;
+        mtl = .MirrorClampToEdge;
+    case .REPEAT;
+        mtl = .Repeat;
+    case .MIRROR_REPEAT;
+        mtl = .MirrorRepeat;
+    case .CLAMP_TO_ZERO;
+        mtl = .ClampToZero;
+    case .CLAMP_TO_BORDER_COLOR;
+        mtl = .ClampToBorderColor;
+    }
+
+    return mtl;
+}
+
+to_metal_sampler_border_color :: (color: Sampler_Border_Color) -> MTLSamplerBorderColor {
+    mtl: MTLSamplerBorderColor;
+    if #complete color == {
+    case .TRANSPARENT_BLACK;
+        mtl = .TransparentBlack;
+    case .OPAQUE_BLACK;
+        mtl = .OpaqueBlack;
+    case .OPAQUE_WHITE;
+        mtl = .OpaqueWhite;
+    }
+    return mtl;
+}
+
+to_metal_sampler_reduction_mode :: (mode: Sampler_Reduction_Mode) -> MTLSamplerReductionMode {
+    mtl: MTLSamplerReductionMode;
+    if #complete mode == {
+    case .WEIGHTED_AVERAGE;
+        mtl = .WeightedAverage;
+    case .MINIMUM;
+        mtl = .Minimum;
+    case .MAXIMUM;
+        mtl = .Maximum;
+    }
+
+    return mtl;
+}
+
+to_metal_sampler_descriptor :: (desc: Sampler_Desc) -> *MTLSamplerDescriptor {
+    mtl := objc_new(MTLSamplerDescriptor);
+    MTLSamplerDescriptor.setMinFilter_(mtl, to_metal_sampler_min_mag_filter(desc.min_filter));
+    MTLSamplerDescriptor.setMagFilter_(mtl, to_metal_sampler_min_mag_filter(desc.mag_filter));
+    MTLSamplerDescriptor.setMipFilter_(mtl, to_metal_sampler_mip_filter(desc.mip_filter));
+    MTLSamplerDescriptor.setMaxAnisotropy_(mtl, xx desc.max_anisotropy);
+    MTLSamplerDescriptor.setSAddressMode_(mtl, to_metal_sampler_address_mode(desc.s_address_mode));
+    MTLSamplerDescriptor.setTAddressMode_(mtl, to_metal_sampler_address_mode(desc.t_address_mode));
+    MTLSamplerDescriptor.setRAddressMode_(mtl, to_metal_sampler_address_mode(desc.r_address_mode));
+    MTLSamplerDescriptor.setBorderColor_(mtl, to_metal_sampler_border_color(desc.border_color));
+    MTLSamplerDescriptor.setReductionMode_(mtl, to_metal_sampler_reduction_mode(desc.reduction_mode));
+    MTLSamplerDescriptor.setNormalizedCoordinates_(mtl, ifx desc.normalized_coordinates then YES else NO);
+    MTLSamplerDescriptor.setLodMinClamp_(mtl, desc.lod_min_clamp);
+    MTLSamplerDescriptor.setLodMaxClamp_(mtl, desc.lod_max_clamp);
+    MTLSamplerDescriptor.setLodBias_(mtl, desc.lod_bias);
+    MTLSamplerDescriptor.setCompareFunction_(mtl, to_metal_compare_function(desc.compare_op));
+
+    // lodAverage??
+    // TODO: supportArgumentBuffers???
+
+    return mtl;
 }
 
 #import "Metal";

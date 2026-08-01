@@ -105,21 +105,6 @@ Queue_Type :: enum {
     TRANSFER :: 2;
 }
 
-u32x2 :: struct {
-    x: u32;
-    y: u32;
-}
-
-s32x3 :: struct {
-    x, y, z: s32;
-}
-
-u32x3 :: struct {
-    x: u32;
-    y: u32;
-    z: u32;
-}
-
 Texture_Usage :: enum_flags u32 {
     UNKNOWN                  :: 0x0000;
     TRANSFER_SRC             :: 1 << 0;
@@ -159,10 +144,60 @@ View_Desc :: struct {
     layer_count: u32 = ALL_LAYERS;
 }
 
+Sampler_Min_Mag_Filter :: enum u32 {
+    NEAREST :: 0;
+    LINEAR  :: 1;
+}
+
+Sampler_Mip_Filter :: enum u32 {
+    NONE    :: 0;
+    NEAREST :: 1;
+    LINEAR  :: 2;
+}
+
+Sampler_Address_Mode :: enum u32 {
+    CLAMP_TO_EDGE         :: 0;
+    MIRROR_CLAMP_TO_EDGE  :: 1;
+    REPEAT                :: 2;
+    MIRROR_REPEAT         :: 3;
+    CLAMP_TO_ZERO         :: 4;
+    CLAMP_TO_BORDER_COLOR :: 5;
+}
+
+Sampler_Border_Color :: enum u32 {
+    TRANSPARENT_BLACK :: 0;
+    OPAQUE_BLACK      :: 1;
+    OPAQUE_WHITE      :: 2;
+}
+
+Sampler_Reduction_Mode :: enum u32 {
+    WEIGHTED_AVERAGE :: 0;
+    MINIMUM          :: 1;
+    MAXIMUM          :: 2;
+}
+
+Sampler_Desc :: struct {
+    min_filter:             Sampler_Min_Mag_Filter = .LINEAR;
+    mag_filter:             Sampler_Min_Mag_Filter = .LINEAR;
+    mip_filter:             Sampler_Mip_Filter     = .LINEAR;
+    max_anisotropy:         u32 = 1;
+    s_address_mode:         Sampler_Address_Mode = .REPEAT;
+    t_address_mode:         Sampler_Address_Mode = .REPEAT;
+    r_address_mode:         Sampler_Address_Mode = .REPEAT;
+    border_color:           Sampler_Border_Color = .OPAQUE_BLACK;
+    reduction_mode:         Sampler_Reduction_Mode = .WEIGHTED_AVERAGE;
+    normalized_coordinates: bool = true;
+    lod_min_clamp:          float32 = 0.0;
+    lod_max_clamp:          float32 = Math.FLOAT32_MAX;
+    lod_bias:               float32 = 0.0;
+    compare_op:             OP = .NEVER;
+}
+
 // This is the raw blob of descriptor data, in my AMD gpu, this is 32
 // bytes for a texture descriptor. This is completely useless in
 // Metal.
 Texture_Descriptor :: [4]u64;
+Sampler_Descriptor :: [2]u64; // The size of a sampler descriptor is 16 bytes
 
 // Topology is copied from VkPrimitiveTopology.
 Topology :: enum {
@@ -317,13 +352,6 @@ Hazard :: enum_flags {
     DEPTH_STENCIL :: 0x4;
 }
 
-Color :: struct {
-    r: float;
-    g: float;
-    b: float;
-    a: float;
-}
-
 Load_OP :: enum {
     DONT_CARE;
     LOAD;
@@ -340,7 +368,7 @@ Render_Pass_Attachment_Desc :: struct {
     load_op: Load_OP = .CLEAR;
     store_op: Store_OP = .STORE;
     union {
-        clear_color: Color;
+        clear_color: Math.Vector4;
         clear_value: struct {
             depth: float;
             stencil: u32;
@@ -476,11 +504,20 @@ array_copy :: (array: [] $T) -> [] T {
 
 Ptr :: u64;
 
+// This is a hash table for storing recent search.
+// TODO: Make a table that store only a limited number of searches, delete
+// the old entries that is rarely used.
+host_device_pointer_table: Table(*void, Ptr);
+
 host_to_device_pointer :: (ptr: *void) -> Ptr {
     using context.gpu_context;
 
-    allocation: Allocation;
     found := false;
+    gpu_ptr: Ptr;
+    found, gpu_ptr = table_find(*host_device_pointer_table, ptr);
+    if found return gpu_ptr;
+
+    allocation: Allocation;
     for cpu_pointer_table {
         if ptr >= it.cpu && ptr < (it.cpu + it.size) {
             found = true;
@@ -491,7 +528,10 @@ host_to_device_pointer :: (ptr: *void) -> Ptr {
 
     offset := ptr - allocation.cpu;
 
-    return allocation.gpu + xx offset;
+    gpu_ptr = allocation.gpu + xx offset;
+    table_add(*host_device_pointer_table, ptr, gpu_ptr);
+
+    return gpu_ptr;
 }
 
 cpu_pointer_to_allocation :: (ptr: *void) -> Allocation {
@@ -568,9 +608,11 @@ load_graphics_ir :: (shader_name: string, vertex_entry_point: string = "vertex_m
     #load "vulkan.jai";
 }
 #load "arena.jai";
+#import "Utils/types";
 
 #scope_file
 Basic :: #import "Basic";
 get_alignment_padding :: (current_position: u64, alignment: u64) -> u64 {
     return (alignment - (current_position % alignment)) % alignment;
 }
+Math :: #import "Math";

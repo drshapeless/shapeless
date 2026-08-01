@@ -26,7 +26,6 @@ init_renderer :: (sdl_window: *SDL_Window) {
         z = 1
     };
 
-    GPU.init(*all_params_arena);
     frame_count := GPU.frame_count();
 
     {
@@ -58,15 +57,11 @@ init_renderer :: (sdl_window: *SDL_Window) {
         defer GPU.destroy_ir(fir);
         rectangle_pipeline = GPU.create_graphics_pipeline(vir, fir, desc);
     }
-
     {
-        GPU.push_allocator(GPU.arena_allocator_proc, *all_params_arena);
-
-        clear_params = GPU.NewArray(frame_count, Clear_Data);
-        clear_params_base_gpu = GPU.host_to_device_pointer(clear_params.data);
-
-        solid_rectangle_params = GPU.NewArray(frame_count, Solid_Rectangle_Data);
-        solid_rectangle_params_base_gpu = GPU.host_to_device_pointer(solid_rectangle_params.data);
+        vir, fir := GPU.load_graphics_ir("simple_uv");
+        defer GPU.destroy_ir(vir);
+        defer GPU.destroy_ir(fir);
+        simple_uv_pipeline = GPU.create_graphics_pipeline(vir, fir, desc);
     }
 
     frame_arenas = NewArray(frame_count, GPU.Arena);
@@ -75,10 +70,19 @@ init_renderer :: (sdl_window: *SDL_Window) {
         GPU.init(it, 32 * 1024 * 1024); // 32 MB per frames
     }
 
-    draw_heap = GPU.create_texture_heap(1);
-    if draw_heap.count > 0 {
-        draw_heap[0] = draw_texture_descriptor;
+    {
+        sampler_desc: GPU.Sampler_Desc = .{
+
+        };
+
+        simple_sampler_descriptor = GPU.sampler_descriptor(sampler_desc);
     }
+
+    draw_heap = GPU.create_texture_heap(1);
+    draw_heap[0] = draw_texture_descriptor;
+
+    sampler_heap = GPU.create_sampler_heap(1);
+    sampler_heap[0] = simple_sampler_descriptor;
 }
 
 deinit_renderer :: () {
@@ -91,7 +95,6 @@ deinit_renderer :: () {
         GPU.fini(it);
     }
     array_free(frame_arenas);
-    GPU.fini(*all_params_arena);
     GPU.destroy_texture(draw_texture);
     GPU.free(draw_heap.data);
     GPU.fini(*draw_arena);
@@ -131,9 +134,10 @@ resize_callback :: () {
     }
 }
 
-window_dimensions: GPU.u32x3;
+window_dimensions: u32x3;
 
 draw_heap: [] GPU.Texture_Descriptor;
+sampler_heap: [] GPU.Sampler_Descriptor;
 
 draw_texture:             GPU.Texture;
 frame_arenas: [] GPU.Arena;
@@ -142,9 +146,10 @@ clear_pipeline:           GPU.Pipeline;
 solid_rectangle_pipeline: GPU.Pipeline;
 simple_pipeline:          GPU.Pipeline;
 rectangle_pipeline:       GPU.Pipeline;
+simple_uv_pipeline:       GPU.Pipeline;
 
 Clear_Data :: struct {
-    clear_color: Color;
+    clear_color: Vector4;
     texture_index: u64;
 }
 
@@ -155,37 +160,33 @@ Solid_Rectangle_Data :: struct {
 
 Simple_Data :: struct {
     position:  Vector4;
-    color:     Color;
-}
-
-s32x2 :: struct {
-    x: s32;
-    y: s32;
-
-    #overlay (x) w: s32;
-    #overlay (y) h: s32;
-}
-
-Rectangle :: struct {
-    origin: s32x2;
-    size:   s32x2;
+    color:     Vector4;
 }
 
 Color_Rectangle :: struct {
-    using rect: Rectangle;
-    color: Color;
+    using rect: Rect;
+    color: Vector4;
 }
 
-clear_screen :: (cb: *GPU.Command_Buffer, clear_color: Color) {
+UV_Rectangle :: struct {
+    rect: Rect;
+    uv: Rect;
+    color: Vector4;
+}
+
+clear_screen :: (cb: *GPU.Command_Buffer, clear_color: Vector4) {
     i := GPU.frame_index();
+    GPU.push_allocator(GPU.arena_allocator_proc, *frame_arenas[i]);
 
-    clear_params[i].texture_index = GPU.texture_handle(cb, 0);
-    clear_params[i].clear_color = clear_color;
+    clear_param := GPU.alloc(Clear_Data);
 
-    threads_size: GPU.u32x3 = .{8, 8, 1};
+    clear_param.texture_index = GPU.texture_handle(cb, 0);
+    clear_param.clear_color = clear_color;
+
+    threads_size: u32x3 = .{8, 8, 1};
     group_size := calculate_group_size(window_dimensions, threads_size);
 
-    GPU.dispatch(cb, clear_params_base_gpu + cast(u64) (size_of(Clear_Data) * i), group_size, threads_size);
+    GPU.dispatch(cb, clear_param, group_size, threads_size);
 }
 
 // This way of drawing is very much like ray tracing
@@ -232,18 +233,46 @@ draw_rectangles :: (cb: *GPU.Command_Buffer, rects: .. Color_Rectangle) {
     input := GPU.New(Vertex_Input);
     input.rectangles = GPU.host_to_device_pointer(gpu_rects.data);
 
-    input.projection._11 = 2.0 / cast(float) window_dimensions.x;
-    input.projection._22 = 2.0 / cast(float) window_dimensions.y;
-    input.projection._33 = 1.0;
-    input.projection._44 = 1.0;
-    input.projection._41 = -1.0;
-    input.projection._42 = -1.0;
+    input.projection = make_projection();
 
     GPU.draw(cb, GPU.host_to_device_pointer(input), 0, 4, xx rects.count);
 }
 
-#load "font.jai";
+// Set the topology to triangle strip before calling this function
+draw_uv :: (cb: *GPU.Command_Buffer, rects: .. UV_Rectangle, texture_index: u64, sampler_index: u64) {
+    i := GPU.frame_index();
+    GPU.push_allocator(GPU.arena_allocator_proc, *frame_arenas[i]);
 
+    gpu_rects := GPU.array_copy(rects);
+
+    Unified_Input :: struct {
+        projection: Matrix4;
+        rectangles: GPU.Ptr;
+        tex: u64;
+        sampler: u64;
+    }
+
+    unified_input := GPU.New(Unified_Input);
+    unified_input.rectangles = GPU.host_to_device_pointer(gpu_rects.data);
+    unified_input.projection = make_projection();
+    unified_input.tex = GPU.texture_handle(cb, texture_index);
+
+    unified_input.sampler = GPU.sampler_handle(cb, sampler_index);
+
+    gpu_ptr := GPU.host_to_device_pointer(unified_input);
+
+    GPU.draw(cb, gpu_ptr, gpu_ptr, 4, xx rects.count);
+}
+
+draw_text :: (cb: *GPU.Command_Buffer, font: Font, text: string, origin: s32x2) {
+    i := GPU.frame_index();
+    GPU.push_allocator(GPU.arena_allocator_proc, *frame_arenas[i]);
+
+
+}
+
+#import "Font";
+#import "Utils/types";
 #scope_file
 GPU :: #import "GPU";
 #import "Basic";
@@ -256,16 +285,7 @@ window: *SDL_Window;
 draw_arena:   GPU.Arena;
 draw_texture_descriptor: GPU.Texture_Descriptor;
 
-clear_params: [] Clear_Data;
-clear_params_base_gpu: u64;
-
-solid_rectangle_params: [] Solid_Rectangle_Data;
-solid_rectangle_params_base_gpu: u64;
-
-simple_params: [] Simple_Data;
-simple_params_base_gpu: u64;
-
-all_params_arena: GPU.Arena;
+simple_sampler_descriptor: GPU.Sampler_Descriptor;
 
 create_graphics_pipeline_from_file :: (shader_path: string, desc: GPU.Raster_Desc) -> GPU.Pipeline {
     shader := read_entire_file(shader_path);
@@ -277,9 +297,7 @@ create_graphics_pipeline_from_file :: (shader_path: string, desc: GPU.Raster_Des
     return GPU.create_graphics_pipeline(irs[0], irs[1], desc);
 }
 
-Color :: GPU.Color;
-
-calculate_group_size :: (dimensions: GPU.u32x3, threads_per_group: GPU.u32x3) -> GPU.u32x3 {
+calculate_group_size :: (dimensions: u32x3, threads_per_group: u32x3) -> u32x3 {
     group_size: GPU.u32x3 = .{
         x = ((dimensions.x + threads_per_group.x - 1) / threads_per_group.x),
         y = ((dimensions.y + threads_per_group.y - 1) / threads_per_group.y),
@@ -294,4 +312,15 @@ to_ndc :: (dimensions: s32x2) -> Vector2 {
         x = cast(float)(2 * dimensions.x) / cast(float) window_dimensions.x - 1.0,
         y = cast(float)(2 * dimensions.y) / cast(float) window_dimensions.y - 1.0,
     };
+}
+
+make_projection :: () -> Matrix4 {
+    projection: Matrix4;
+    projection._11 = 2.0 / cast(float) window_dimensions.x;
+    projection._22 = 2.0 / cast(float) window_dimensions.y;
+    projection._33 = 1.0;
+    projection._44 = 1.0;
+    projection._41 = -1.0;
+    projection._42 = -1.0;
+    return projection;
 }

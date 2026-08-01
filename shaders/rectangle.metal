@@ -2,14 +2,18 @@
 using namespace metal;
 
 struct Rect {
-    int2 origin;
-    int2 size;
+    float x, y;
+    float w, h;
+};
+
+struct Color_Rect {
+    Rect rect;
     float4 color;
 };
 
 struct Vertex_Input {
     float4x4 projection;
-    device Rect *rectangles;
+    device Color_Rect *rectangles;
 };
 
 struct Vertex_Output {
@@ -20,12 +24,12 @@ struct Vertex_Output {
 vertex Vertex_Output vertex_main(uint vid [[vertex_id]], uint iid [[instance_id]], constant Vertex_Input *input [[buffer(0)]]) {
     Vertex_Output output;
 
-    Rect rect = input->rectangles[iid];
+    Rect rect = input->rectangles[iid].rect;
 
-    float min_x = (float)rect.origin.x;
-    float min_y = (float)rect.origin.y;
-    float max_x = (float)(rect.origin.x + rect.size.x);
-    float max_y = (float)(rect.origin.y + rect.size.y);
+    float min_x = rect.x;
+    float min_y = rect.y;
+    float max_x = rect.x + rect.w;
+    float max_y = rect.y + rect.h;
 
     float2 positions[4];
 

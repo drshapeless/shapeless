@@ -468,7 +468,7 @@ texture_view_descriptor :: (texture: Texture, desc: View_Desc) -> Texture_Descri
     return texture_descriptor;
 }
 
-texture_handle :: inline (texture: Texture, index: u64) -> u64 {
+texture_handle :: inline (cb: *Command_Buffer, index: u64) -> u64 {
     return index;
 }
 
@@ -1217,6 +1217,21 @@ create_texture_heap :: (count: s64) -> [] Texture_Descriptor {
 }
 
 destroy_texture_heap :: (heap: [] Texture_Descriptor) {
+    allocation := cpu_pointer_to_allocation(heap.data);
+    vulkan_deallocate(allocation);
+}
+
+create_sampler_heap :: (count: s64) -> [] Sampler_Descriptor {
+    allocation := vulkan_allocate(xx (count * size_of(Sampler_Descriptor)), .SHADER_DEVICE_ADDRESS | .DESCRIPTOR_HEAP_EXT);
+
+    heap: [] Sampler_Descriptor;
+    heap.count = count;
+    heap.data = allocation.cpu;
+
+    return heap;
+}
+
+destroy_sampler_heap :: (heap: [] Sampler_Descriptor) {
     allocation := cpu_pointer_to_allocation(heap.data);
     vulkan_deallocate(allocation);
 }
