@@ -573,7 +573,7 @@ CTLineBreakMode :: enum u8 {
                 The writing direction is right to left.
 */
 CTWritingDirection :: enum s8 {
-    kNatural :: 255;
+    kNatural :: -1;
     kLeftToRight :: 0;
     kRightToLeft :: 1;
 }
