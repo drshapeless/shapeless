@@ -264,7 +264,7 @@ draw_uv :: (cb: *GPU.Command_Buffer, rects: .. UV_Rectangle, texture_index: u64,
     GPU.draw(cb, gpu_ptr, gpu_ptr, 4, xx rects.count);
 }
 
-draw_text :: (cb: *GPU.Command_Buffer, font: Font, text: string, origin: s32x2) {
+draw_text :: (cb: *GPU.Command_Buffer, font: Font, text: string, origin: Vector2) {
     i := GPU.frame_index();
     GPU.push_allocator(GPU.arena_allocator_proc, *frame_arenas[i]);
 

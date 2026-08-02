@@ -102,6 +102,54 @@ load_glyph :: (cb: *GPU.Command_Buffer, font: *Font, glyph_index: u32) -> Glyph 
     return glyph;
 }
 
+get_text_draw_info :: (font: *Font, text: string, origin: Vector2) -> positions: []Rect, uvs: []Rect {
+    // Reset the buffer
+    hb_buffer_reset(hb_buffer);
+
+    hb_buffer_add_utf8(hb_buffer, text.data, xx text.count, 0, -1);
+    hb_buffer_guess_segment_properties(hb_buffer);
+
+    hb_shape(font.hb_font, hb_buffer, null, 0);
+
+    glyph_count: u32;
+    info := hb_buffer_get_glyph_infos(hb_buffer, *glyph_count);
+    pos  := hb_buffer_get_glyph_positions(hb_buffer, *glyph_count);
+
+
+    cursor: s32x2;
+    cursor.x = cast(s32) origin.x * 64;
+    cursor.y = cast(s32) origin.y * 64;
+
+    positions: [..] Rect;
+    uvs:       [..] Rect;
+
+    for i: 0..glyph_count - 1 {
+        gid := info[i].codepoint;
+
+        x_off := pos[i].x_offset;
+        y_off := pos[i].y_offset;
+        x_advance := pos[i].x_advance;
+        y_advance := pos[i].y_advance;
+
+        position: Rect;
+
+        position.x = xx (cursor.x + x_off);
+        position.y = xx (cursor.y + y_off);
+
+        // TODO: unfinished
+
+        uv:      Rect;
+
+        cursor.x += x_advance;
+        cursor.y += y_advance;
+
+        array_add(*positions, position);
+        array_add(*uvs, uv);
+    }
+
+    return positions, uvs;
+}
+
 #scope_file
 ft: FT_Library;
 current_index: s64 = 0;
@@ -114,3 +162,5 @@ temp_arena: GPU.Arena;
 #import "HarfBuzz";
 #import "Hash_Table";
 GPU :: #import "GPU";
+#import "Math";
+#import "Utils/types";
