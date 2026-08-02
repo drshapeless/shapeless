@@ -5,11 +5,11 @@ App_State :: struct {
     queue: GPU.Queue;
 
     window_resize_requested := false;
-
-    rect_origin: s32x2;
-    rect_size: s32x2;
-    rect_direction: s32x2 = .{1, 1};
 }
+
+app_arena: GPU.Arena;
+monkey_texture: GPU.Texture;
+
 
 app_init :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
     appstate.* = New(App_State);
@@ -31,8 +31,25 @@ app_init :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
 
     queue = GPU.create_queue();
 
-    rect_origin = .{0, 0};
-    rect_size = .{200, 200};
+    // TEMP
+
+    {
+        GPU.init(*app_arena);
+        image_width, image_height: s32;
+        channels: s32;
+        image_data := stbi_load("longhairmonkey.jpg", *image_width, *image_height, *channels, 4);
+        desc: GPU.Texture_Desc = .{
+            dimensions = .{xx image_width, xx image_height, 1},
+            format = .R8G8B8A8_UNORM,
+            usage = .SAMPLED | .TRANSFER_DST | .HOST_TRANSFER,
+        };
+        size_align := GPU.texture_size_align(desc);
+        ptr := GPU.get(*app_arena, xx size_align.size, xx size_align.align);
+        gpu_ptr := GPU.host_to_device_pointer(ptr);
+        monkey_texture = GPU.create_texture(desc, gpu_ptr);
+
+        GPU.host_copy_to_texture(monkey_texture, image_data);
+    }
 
     return .CONTINUE;
 }
@@ -86,40 +103,11 @@ app_iter :: (appstate: *void) -> SDL_AppResult {
     };
     GPU.begin_render_pass(cb, render_pass_desc);
 
-    GPU.set_pipeline(cb, simple_pipeline);
+    GPU.set_pipeline(cb, simple_uv_pipeline);
     GPU.set_topology(cb, .TRIANGLE_LIST);
-    viewport: GPU.Viewport;
-    viewport.width  = xx window_dimensions.x;
-    viewport.height = xx window_dimensions.y;
-    GPU.set_viewport(cb, viewport);
-    scissor: GPU.Rect;
-    scissor.size.x  = window_dimensions.x;
-    scissor.size.y  = window_dimensions.y;
-    GPU.set_scissor(cb, scissor);
 
-    vertices: [3] Simple_Data;
-    vertices[0].position = .{0.0, 0.0, 0.0, 1.0};
-    vertices[1].position = .{0.5, 0.5, 0.0, 1.0};
-    vertices[2].position = .{0, 0.5, 0.0, 1.0};
-    vertices[0].color = .{0.0, 1.0, 0.0, 1.0};
-    vertices[1].color = .{1.0, 0.0, 0.0, 1.0};
-    vertices[2].color = .{1.0, 0.0, 0.0, 1.0};
 
-    indices: [3]u32 = .[0, 1, 2];
 
-    draw_simple(cb, vertices, indices);
-
-    GPU.set_pipeline(cb, rectangle_pipeline);
-    rect1: Color_Rectangle = .{
-        rect = .{0, 0, 200, 200},
-        color  = .{0.0, 1.0, 1.0, 1.0},
-    };
-    rect2: Color_Rectangle = .{
-        rect = .{150, 200, 400, 300},
-        color  = .{0.0, 0.7, 1.0, 1.0},
-    };
-    GPU.set_topology(cb, .TRIANGLE_STRIP);
-    draw_rectangles(cb, rect2, rect1);
     GPU.end_render_pass(cb);
 
     GPU.barrier(cb, .ALL, .BLIT);
@@ -133,6 +121,8 @@ app_quit :: (appstate: *void, result: SDL_AppResult) {
     state := cast(*App_State) appstate;
     using state;
 
+    GPU.destroy_texture(monkey_texture);
+    GPU.fini(*app_arena);
     deinit_renderer();
     GPU.deinit();
     SDL_DestroyWindow(window);
@@ -151,3 +141,4 @@ GPU :: #import "GPU";
 #import "Hash_Table";
 #import "Renderer";
 #import "Utils/types";
+#import "stb_image";

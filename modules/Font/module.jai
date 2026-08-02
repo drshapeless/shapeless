@@ -2,9 +2,8 @@
 
 // This is a module for Font rendering and management. Using native CoreText on macOS.
 Glyph :: struct {
-    x, y: u32; // Relative to the texture
-    w, h: u32;
-    x_off, y_off: s32;
+    uv: Rect;
+    bitmap_left, bitmap_top: s32;
 }
 
 Font :: struct {
@@ -13,8 +12,7 @@ Font :: struct {
     hb_font: *hb_font_t;
     cache: Table(u32, Glyph);
     texture: GPU.Texture;
-    pen_x: u32;
-    pen_y: u32;
+    pen: u32x2;
 }
 
 init_font :: () {
@@ -71,13 +69,12 @@ load_glyph :: (cb: *GPU.Command_Buffer, font: *Font, glyph_index: u32) -> Glyph 
 
     bmp := font.face.glyph.bitmap;
 
-
-    glyph.x = font.pen_x;
-    glyph.y = font.pen_y;
-    glyph.w = bmp.width;
-    glyph.h = bmp.rows;
-    glyph.x_off = font.face.glyph.bitmap_left;
-    glyph.y_off = font.face.glyph.bitmap_top;
+    glyph.uv.x = cast(float) font.pen.x;
+    glyph.uv.y = cast(float) font.pen.y;
+    glyph.uv.w = cast(float) bmp.width;
+    glyph.uv.h = cast(float) bmp.rows;
+    glyph.bitmap_left = font.face.glyph.bitmap_left;
+    glyph.bitmap_top  = font.face.glyph.bitmap_top;
 
     GPU.push_allocator(GPU.arena_allocator_proc, *temp_arena);
 
@@ -95,14 +92,19 @@ load_glyph :: (cb: *GPU.Command_Buffer, font: *Font, glyph_index: u32) -> Glyph 
 
     table_add(*font.cache, glyph_index, glyph);
 
-    font.pen_x += GRID_SIZE;
+    font.pen.x += GRID_SIZE;
 
-    if font.pen_x >= font.texture.dimensions
+    if font.pen.x >= font.texture.dimensions.x {
+        font.pen.x = 0;
+        font.pen.y += GRID_SIZE;
+
+        assert(font.pen_y < font.texture.dimensions.y, "The font texture is fulled, do something");
+    }
 
     return glyph;
 }
 
-get_text_draw_info :: (font: *Font, text: string, origin: Vector2) -> positions: []Rect, uvs: []Rect {
+get_text_draw_info :: (cb: *GPU.Command_Buffer, font: *Font, text: string, origin: Vector2) -> positions: []Rect, uvs: []Rect {
     // Reset the buffer
     hb_buffer_reset(hb_buffer);
 
@@ -133,15 +135,21 @@ get_text_draw_info :: (font: *Font, text: string, origin: Vector2) -> positions:
 
         position: Rect;
 
-        position.x = xx (cursor.x + x_off);
-        position.y = xx (cursor.y + y_off);
+        position.x = cast(float) (cursor.x + x_off) / 64.0;
+        position.y = cast(float) (cursor.y + y_off) / 64.0;
 
         // TODO: unfinished
+        glyph := load_glyph(cb, font, gid);
 
-        uv:      Rect;
+        uv:      Rect = glyph.uv;
 
-        cursor.x += x_advance;
-        cursor.y += y_advance;
+        position.x += glyph.bitmap_left;
+        position.y += glyph.bitmap_top;
+        position.w = glyph.uv.w;
+        position.h = glyph.uv.h;
+
+        cursor.x += cast(float) x_advance;
+        cursor.y += cast(float) y_advance;
 
         array_add(*positions, position);
         array_add(*uvs, uv);

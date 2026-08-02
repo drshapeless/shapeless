@@ -1,6 +1,6 @@
 struct Rect {
-    int2 origin;
-    int2 size;
+    float2 origin;
+    float2 size;
     float4 color;
 };
 

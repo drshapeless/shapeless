@@ -113,6 +113,7 @@ Texture_Usage :: enum_flags u32 {
     STORAGE                  :: 1 << 3;
     COLOR_ATTACHMENT         :: 1 << 4;
     DEPTH_STENCIL_ATTACHMENT :: 1 << 5;
+    HOST_TRANSFER            :: 1 << 22;
 }
 
 Texture_Desc :: struct {
@@ -160,6 +161,8 @@ Sampler_Address_Mode :: enum u32 {
     MIRROR_CLAMP_TO_EDGE  :: 1;
     REPEAT                :: 2;
     MIRROR_REPEAT         :: 3;
+    // This is exclusive in Metal, if you use CLAMP_TO_ZERO in Vulkan,
+    // it will be CLAMP_TO_EDGE.
     CLAMP_TO_ZERO         :: 4;
     CLAMP_TO_BORDER_COLOR :: 5;
 }

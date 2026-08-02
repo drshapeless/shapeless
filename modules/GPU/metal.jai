@@ -819,6 +819,10 @@ set_blend_state :: (cb: *Command_Buffer, state: Blend_State) {
     Basic.log("Metal does not support dynamic blend state yet");
 }
 
+// Currently, we cannot do wait device idle in Metal API.
+wait_device_idle :: () {
+}
+
 #scope_file
 to_metal_texture_descriptor :: (metal_descriptor: *MTLTextureDescriptor, desc: Texture_Desc) {
     // WTF is this ugly shit.

@@ -86,7 +86,8 @@ init_renderer :: (sdl_window: *SDL_Window) {
 }
 
 deinit_renderer :: () {
-    GPU.destroy_texture_heap(draw_heap);
+    GPU.wait_device_idle();
+    GPU.destroy_pipeline(simple_uv_pipeline);
     GPU.destroy_pipeline(rectangle_pipeline);
     GPU.destroy_pipeline(simple_pipeline);
     GPU.destroy_pipeline(clear_pipeline);
@@ -96,7 +97,6 @@ deinit_renderer :: () {
     }
     array_free(frame_arenas);
     GPU.destroy_texture(draw_texture);
-    GPU.free(draw_heap.data);
     GPU.fini(*draw_arena);
 }
 

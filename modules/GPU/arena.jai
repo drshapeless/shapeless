@@ -16,6 +16,7 @@ init :: (using arena: *Arena, reserve: s64 = 256 * 1024 * 1024) {
 
 fini :: (arena: *Arena) {
     if !arena.memory_base return;
+    if !arena.allocator.proc return;
     a := arena.allocator;
     a.proc(.FREE, 0, 0, arena.memory_base, a.data);
 }

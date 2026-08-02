@@ -69,9 +69,12 @@ GPU_Context :: struct {
     command_buffer_index: s64;
 
     descriptor_heap_properties: VkPhysicalDeviceDescriptorHeapPropertiesEXT;
+    descriptor_heap_allocation: Allocation;
+    descriptor_heap_arena: Arena;
 
-    // This only contains the texture currently
-    set_and_binding_mapping: VkDescriptorSetAndBindingMappingEXT;
+    // This contains sampler heap and texture heap, where sampler heap
+    // is the first.
+    set_and_binding_mapping: [2] VkDescriptorSetAndBindingMappingEXT;
 }
 #add_context gpu_context: GPU_Context;
 
@@ -221,15 +224,31 @@ init :: (window: *SDL_Window = null) {
 
     Basic.assert(descriptor_heap_properties.minResourceHeapReservedRange == 0, "The minResourceHeapReservedRange is not zero, if you want to support your gpu, you have to work on the create_texture_heap function");
 
-    set_and_binding_mapping.descriptorSet = 0;
-    set_and_binding_mapping.firstBinding = 2;
-    set_and_binding_mapping.bindingCount = 1;
-    set_and_binding_mapping.resourceMask = .SAMPLED_IMAGE | .READ_WRITE_IMAGE;
-    set_and_binding_mapping.source = .HEAP_WITH_CONSTANT_OFFSET;
-    set_and_binding_mapping.sourceData.constantOffset = .{
+    Basic.assert(descriptor_heap_properties.samplerDescriptorSize == 16, "The sampler descriptor size is not 16, %", descriptor_heap_properties.samplerDescriptorSize);
+
+    set_and_binding_mapping[0].descriptorSet = 0;
+    set_and_binding_mapping[0].firstBinding = 2;
+    set_and_binding_mapping[0].bindingCount = 1;
+    set_and_binding_mapping[0].resourceMask = .SAMPLED_IMAGE | .READ_WRITE_IMAGE;
+    set_and_binding_mapping[0].source = .HEAP_WITH_CONSTANT_OFFSET;
+    set_and_binding_mapping[0].sourceData.constantOffset = .{
         heapOffset = 0,
         heapArrayStride = xx descriptor_heap_properties.imageDescriptorSize,
     };
+
+    set_and_binding_mapping[1].descriptorSet = 0;
+    set_and_binding_mapping[1].firstBinding = 0;
+    set_and_binding_mapping[1].bindingCount = 1;
+    set_and_binding_mapping[1].resourceMask = .SAMPLER;
+    set_and_binding_mapping[1].source = .HEAP_WITH_CONSTANT_OFFSET;
+    set_and_binding_mapping[1].sourceData.constantOffset = .{
+        heapOffset = 0,
+        heapArrayStride = xx descriptor_heap_properties.samplerDescriptorSize,
+    };
+
+    // 16 MB should be enough for all descriptor
+    descriptor_heap_allocation = vulkan_allocate(16 * 1024 * 1024, .SHADER_DEVICE_ADDRESS | .DESCRIPTOR_HEAP_EXT);
+    init_arena_with_vulkan_allocation(*descriptor_heap_arena, descriptor_heap_allocation);
 }
 
 deinit :: () {
@@ -238,6 +257,7 @@ deinit :: () {
     result = vkDeviceWaitIdle(device);
     assert_vk_result(result);
 
+    vulkan_deallocate(descriptor_heap_allocation);
     if slang_global_session {
         slang.ISlangUnknown_release(xx slang_global_session);
     }
@@ -443,7 +463,7 @@ destroy_texture :: (texture: Texture) {
 }
 
 // This returns a 32 bytes texture descriptor that can be written in a texture heap
-texture_view_descriptor :: (texture: Texture, desc: View_Desc) -> Texture_Descriptor {
+texture_view_descriptor :: (texture: Texture, desc: View_Desc, $read_write: bool = false) -> Texture_Descriptor {
     using context.gpu_context;
     image_view_create_info := to_vulkan_image_view_create_info(texture, desc);
 
@@ -452,9 +472,12 @@ texture_view_descriptor :: (texture: Texture, desc: View_Desc) -> Texture_Descri
         layout = .GENERAL,
     };
 
-    resource_descriptor_info := VkResourceDescriptorInfoEXT.{
-        type = .STORAGE_IMAGE,
-    };
+    resource_descriptor_info := VkResourceDescriptorInfoEXT.{};
+    #if read_write {
+        resource_descriptor_info.type = .STORAGE_IMAGE;
+    } else {
+        resource_descriptor_info.type = .SAMPLED_IMAGE;
+    }
     resource_descriptor_info.data.pImage = *image_descriptor_info;
 
     texture_descriptor: Texture_Descriptor;
@@ -469,6 +492,25 @@ texture_view_descriptor :: (texture: Texture, desc: View_Desc) -> Texture_Descri
 }
 
 texture_handle :: inline (cb: *Command_Buffer, index: u64) -> u64 {
+    return index;
+}
+
+sampler_descriptor :: (desc: Sampler_Desc) -> Sampler_Descriptor {
+    using context.gpu_context;
+    sampler_create_info := to_vulkan_sampler_create_info(desc);
+
+    sampler_descriptor: Sampler_Descriptor;
+    host_address_range := VkHostAddressRangeEXT.{
+        address = sampler_descriptor.data,
+        size = descriptor_heap_properties.samplerDescriptorSize,
+    };
+
+    vkWriteSamplerDescriptorsEXT(device, 1, *sampler_create_info, *host_address_range);
+
+    return sampler_descriptor;
+}
+
+sampler_handle :: inline (cb: *Command_Buffer, index: u64) -> u64 {
     return index;
 }
 
@@ -505,8 +547,8 @@ create_compute_pipeline :: (ir: IR) -> Pipeline {
     using context.gpu_context;
     Basic.auto_release_temp();
     descriptor_set_and_binding_mapping_info := VkShaderDescriptorSetAndBindingMappingInfoEXT.{
-        mappingCount = 1,
-        pMappings = *set_and_binding_mapping,
+        mappingCount = xx set_and_binding_mapping.count,
+        pMappings = set_and_binding_mapping.data,
     };
     create_info := VkShaderCreateInfoEXT.{
         pNext = *descriptor_set_and_binding_mapping_info,
@@ -540,8 +582,8 @@ create_graphics_pipeline :: (vertex_ir: IR, fragment_ir: IR, desc: Raster_Desc) 
     Basic.auto_release_temp();
 
     descriptor_set_and_binding_mapping_info := VkShaderDescriptorSetAndBindingMappingInfoEXT.{
-        mappingCount = 1,
-        pMappings = *set_and_binding_mapping,
+        mappingCount = xx set_and_binding_mapping.count,
+        pMappings = set_and_binding_mapping.data,
     };
 
     create_infos: [2]VkShaderCreateInfoEXT;
@@ -657,20 +699,19 @@ start_command_recording :: () -> *Command_Buffer {
     return cb;
 }
 
-submit :: (queue: Queue, command_buffers: ..*Command_Buffer, wait: []Semaphore_Pair = .[], signal: []Semaphore_Pair = .[]) {
+submit :: (queue: Queue, command_buffer: *Command_Buffer, wait: []Semaphore_Pair = .[], signal: []Semaphore_Pair = .[]) {
+    using context.gpu_context;
     Basic.auto_release_temp();
     Basic.push_allocator(Basic.temp);
 
-    command_buffer_submit_infos := Basic.NewArray(command_buffers.count, VkCommandBufferSubmitInfo,, Basic.temp);
+    command_buffer_submit_info: VkCommandBufferSubmitInfo;
 
-    for cb: command_buffers {
-        vkEndCommandBuffer(cb.vk);
-        command_buffer_submit_infos[it_index].commandBuffer = cb.vk;
-    }
+    vkEndCommandBuffer(command_buffer.vk);
+    command_buffer_submit_info.commandBuffer = command_buffer.vk;
 
     submit_info := VkSubmitInfo2.{
-        commandBufferInfoCount = xx command_buffers.count,
-        pCommandBufferInfos = command_buffer_submit_infos.data,
+        commandBufferInfoCount = 1,
+        pCommandBufferInfos = *command_buffer_submit_info,
     };
 
     if wait.count > 0 {
@@ -836,6 +877,37 @@ memcpy :: (cb: *Command_Buffer, dst: Ptr, src: Ptr, size: u64) {
     };
 
     vkCmdCopyBuffer2(cb.vk, *copy_info);
+}
+
+// This perform image copy on host
+host_copy_to_texture :: (dst: Texture, src: *void) {
+    using context.gpu_context;
+    memory_to_image_copy := VkMemoryToImageCopy.{
+        pHostPointer = src,
+        memoryRowLength = 0,
+        memoryImageHeight = 0,
+        imageSubresource = VkImageSubresourceLayers.{
+            aspectMask = .COLOR,
+            mipLevel = 0,
+            baseArrayLayer = 0,
+            layerCount = 1,
+        },
+        imageOffset = VkOffset3D.{},
+        imageExtent = VkExtent3D.{
+            width = dst.dimensions.x,
+            height = dst.dimensions.y,
+            depth = dst.dimensions.z,
+        },
+    };
+
+    copy_memory_info := VkCopyMemoryToImageInfo.{
+        dstImage = dst.image,
+        dstImageLayout = .GENERAL,
+        regionCount = 1,
+        pRegions = *memory_to_image_copy,
+    };
+
+    vkCopyMemoryToImage(device, *copy_memory_info);
 }
 
 copy_to_texture :: (cb: *Command_Buffer, dst: Texture, src: Ptr) {
@@ -1207,33 +1279,28 @@ set_active_texture_heap :: (cb: *Command_Buffer, texture_heap: [] Texture_Descri
 // DESCRIPTOR_HEAP seems to be a bad idea. Also, by making a special
 // function, the Metal implementation can be a dummy function.
 create_texture_heap :: (count: s64) -> [] Texture_Descriptor {
-    allocation := vulkan_allocate(xx (count * size_of(Texture_Descriptor)), .SHADER_DEVICE_ADDRESS | .DESCRIPTOR_HEAP_EXT);
+    using context.gpu_context;
 
     heap: [] Texture_Descriptor;
     heap.count = count;
-    heap.data = allocation.cpu;
+    heap.data = get(*descriptor_heap_arena, count * size_of(Texture_Descriptor), xx descriptor_heap_properties.imageDescriptorAlignment);
 
     return heap;
-}
-
-destroy_texture_heap :: (heap: [] Texture_Descriptor) {
-    allocation := cpu_pointer_to_allocation(heap.data);
-    vulkan_deallocate(allocation);
 }
 
 create_sampler_heap :: (count: s64) -> [] Sampler_Descriptor {
-    allocation := vulkan_allocate(xx (count * size_of(Sampler_Descriptor)), .SHADER_DEVICE_ADDRESS | .DESCRIPTOR_HEAP_EXT);
+    using context.gpu_context;
 
     heap: [] Sampler_Descriptor;
     heap.count = count;
-    heap.data = allocation.cpu;
+    heap.data = get(*descriptor_heap_arena, count * size_of(Sampler_Descriptor), xx descriptor_heap_properties.samplerDescriptorAlignment);
 
     return heap;
 }
 
-destroy_sampler_heap :: (heap: [] Sampler_Descriptor) {
-    allocation := cpu_pointer_to_allocation(heap.data);
-    vulkan_deallocate(allocation);
+reset_descriptor_heap_arena :: () {
+    using context.gpu_context;
+    reset(*descriptor_heap_arena);
 }
 
 set_viewport :: (cb: *Command_Buffer, viewport: Viewport) {
@@ -1374,6 +1441,11 @@ set_depth_stencil_state :: (cb: *Command_Buffer, state: Depth_Stencil_State) {
     vkCmdSetStencilWriteMask(cb.vk, .FRONT_AND_BACK, cast(u32) state.stencil_write_mask);
     vkCmdSetStencilReference(cb.vk, .FRONT, cast(u32)state.stencil_front.reference);
     vkCmdSetStencilReference(cb.vk, .BACK, cast(u32)state.stencil_back.reference);
+}
+
+wait_device_idle :: () {
+    using context.gpu_context;
+    vkDeviceWaitIdle(device);
 }
 
 #scope_file
@@ -1998,7 +2070,7 @@ to_vulkan_store_op :: (op: Store_OP) -> VkAttachmentStoreOp {
     }
 }
 
-to_vulkan_clear_color :: (color: Color) -> VkClearValue {
+to_vulkan_clear_color :: (color: Math.Vector4) -> VkClearValue {
     clear_value: VkClearValue;
 
     memcpy(*clear_value.color.float32_, *color, size_of(float32) * 4);
@@ -2079,6 +2151,94 @@ to_vulkan_compare_op :: (op: OP) -> VkCompareOp {
 
 to_vulkan_stencil_op :: (op: OP) -> VkStencilOp {
     return cast,force(VkStencilOp) op;
+}
+
+to_vulkan_filter :: (filter: Sampler_Min_Mag_Filter) -> VkFilter {
+    vk: VkFilter;
+    if #complete filter == {
+    case .LINEAR;
+        vk = .LINEAR;
+    case .NEAREST;
+        vk = .NEAREST;
+    }
+
+    return vk;
+}
+
+to_vulkan_mipmap_mode :: (mip_filter: Sampler_Mip_Filter) -> VkSamplerMipmapMode {
+    vk: VkSamplerMipmapMode;
+    if #complete mip_filter == {
+    case .NONE;
+    // Default to NEAREST
+    case .NEAREST;
+        vk = .NEAREST;
+    case .LINEAR;
+        vk = .LINEAR;
+    }
+
+    return vk;
+}
+
+to_vulkan_address_mode :: (mode: Sampler_Address_Mode) -> VkSamplerAddressMode {
+    vk: VkSamplerAddressMode;
+    if #complete mode == {
+    case .CLAMP_TO_EDGE;
+        vk = .CLAMP_TO_EDGE;
+    case .MIRROR_CLAMP_TO_EDGE;
+        vk = .MIRROR_CLAMP_TO_EDGE;
+    case .REPEAT;
+        vk = .REPEAT;
+    case .MIRROR_REPEAT;
+        vk = .MIRRORED_REPEAT;
+    case .CLAMP_TO_ZERO;
+        vk = .CLAMP_TO_EDGE;
+    case .CLAMP_TO_BORDER_COLOR;
+        vk = .CLAMP_TO_BORDER;
+    }
+
+    return vk;
+}
+
+to_vulkan_border_color :: (color: Sampler_Border_Color) -> VkBorderColor {
+    vk: VkBorderColor;
+    if #complete color == {
+    case .TRANSPARENT_BLACK;
+        vk = .FLOAT_TRANSPARENT_BLACK;
+    case .OPAQUE_BLACK;
+        vk = .FLOAT_OPAQUE_BLACK;
+    case .OPAQUE_WHITE;
+        vk = .FLOAT_OPAQUE_WHITE;
+    }
+
+    return vk;
+}
+
+to_vulkan_sampler_create_info :: (desc: Sampler_Desc) -> VkSamplerCreateInfo {
+    info := VkSamplerCreateInfo.{
+        magFilter = to_vulkan_filter(desc.mag_filter),
+        minFilter = to_vulkan_filter(desc.min_filter),
+        mipmapMode = to_vulkan_mipmap_mode(desc.mip_filter),
+        addressModeU = to_vulkan_address_mode(desc.s_address_mode),
+        addressModeV = to_vulkan_address_mode(desc.t_address_mode),
+        addressModeW = to_vulkan_address_mode(desc.r_address_mode),
+        mipLodBias = desc.lod_bias,
+        anisotropyEnable = ifx desc.max_anisotropy == 1 then VK_FALSE else VK_TRUE,
+        maxAnisotropy = xx desc.max_anisotropy,
+        compareEnable = ifx desc.compare_op == .NEVER then VK_FALSE else VK_TRUE,
+        compareOp = to_vulkan_compare_op(desc.compare_op),
+        minLod = desc.lod_min_clamp,
+        maxLod = desc.lod_max_clamp,
+        borderColor = to_vulkan_border_color(desc.border_color),
+        unnormalizedCoordinates = ifx desc.normalized_coordinates then VK_FALSE else VK_TRUE,
+    };
+
+    return info;
+}
+
+init_arena_with_vulkan_allocation :: (arena: *Arena, allocation: Allocation) {
+    arena.memory_base = allocation.cpu;
+    arena.current_point = allocation.cpu;
+    arena.address_limit = allocation.cpu + allocation.size;
 }
 
 #import "Vulkan";
