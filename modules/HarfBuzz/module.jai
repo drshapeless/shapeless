@@ -5,4 +5,5 @@
     #import "freetype";
 } else #if OS == .LINUX {
     #load "linux/bindings.jai";
+    #import "freetype";
 }
