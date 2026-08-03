@@ -52,8 +52,8 @@ vertex Vertex_Output vertex_main(uint vid [[vertex_id]], uint iid [[instance_id]
     Rect uv = input->rectangles[iid].uv;
     float uv_min_x = uv.x / texture_size.x;
     float uv_min_y = uv.y / texture_size.y;
-    float uv_max_x = (uv.x + rect.w) / texture_size.x;
-    float uv_max_y = (uv.y + rect.h) / texture_size.y;
+    float uv_max_x = (uv.x + uv.w) / texture_size.x;
+    float uv_max_y = (uv.y + uv.h) / texture_size.y;
 
     float2 uvs[4];
     uvs[0] = float2(uv_min_x, uv_min_y);
@@ -67,6 +67,6 @@ vertex Vertex_Output vertex_main(uint vid [[vertex_id]], uint iid [[instance_id]
 }
 
 fragment float4 fragment_main(Vertex_Output vertex_output [[stage_in]], constant Unified_Input *input [[buffer(0)]]) {
-    float value = input->tex.sample(input->sam, vertex_output.uv).r;
-    return float4(vertex_output.color.xyz, value);
+    float4 value = input->tex.sample(input->sam, vertex_output.uv);
+    return value;
 }

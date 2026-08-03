@@ -39,6 +39,8 @@ GPU_Context :: struct {
     fragment_argument_table: *MTL4ArgumentTable;
 
     residency_set: *MTLResidencySet;
+
+    descriptor_heap_pool: Flat_Pool;
 }
 
 #add_context gpu_context: GPU_Context;
@@ -273,6 +275,8 @@ sampler_descriptor :: (desc: Sampler_Desc) -> Sampler_Descriptor {
     sampler_descriptor: Sampler_Descriptor;
     sampler_descriptor[0] = xx state;
     sampler_descriptor[1] = state.gpuResourceID(state)._impl;
+
+    Basic.log("%", sampler_descriptor[1]);
 
     return sampler_descriptor;
 }
@@ -556,6 +560,12 @@ memcpy :: (cb: *Command_Buffer, dest: Ptr, src: Ptr, size: s64) {
     cb.compute_encoder.copyFromBuffer_sourceOffset_toBuffer_destinationOffset_size_(cb.compute_encoder, src_allocation.buffer, src - src_allocation.gpu, dest_allocation.buffer, dest - dest_allocation.gpu, xx size);
 }
 
+// Assume that the texture has 4 channels
+host_copy_to_texture :: (dst: Texture, src: *void) {
+    region := MTLRegionMake2D(0, 0, dst.dimensions.x, dst.dimensions.y);
+    MTLTexture.replaceRegion_mipmapLevel_withBytes_bytesPerRow_(dst.mtl, region, 0, src, 4 * dst.dimensions.x);
+}
+
 // The original API is
 // void gpuCopyToTexture(GpuCommandBuffer cb, void* destGpu, void* srcGpu, GpuTexture texture);
 // But I scratch my head to find the value of the bytes_per_row and source size, maybe those thing can be calculated from the texture...
@@ -700,10 +710,10 @@ set_viewport :: (cb: *Command_Buffer, viewport: Viewport) {
 
 set_scissor :: (cb: *Command_Buffer, scissor: Rect) {
     mtl: MTLScissorRect;
-    mtl.x      = scissor.origin.x;
-    mtl.y      = scissor.origin.y;
-    mtl.width  = scissor.size.x;
-    mtl.height = scissor.size.y;
+    mtl.x      = xx scissor.x;
+    mtl.y      = xx scissor.y;
+    mtl.width  = xx scissor.w;
+    mtl.height = xx scissor.h;
     MTL4RenderCommandEncoder.setScissorRect_(cb.render_encoder, mtl);
 }
 
@@ -786,27 +796,28 @@ set_active_texture_heap :: (cb: *Command_Buffer, texture_heap: [] Texture_Descri
     cb.texture_heap = texture_heap;
 }
 
+set_active_sampler_heap :: (cb: *Command_Buffer, sampler_heap: [] Sampler_Descriptor) {
+    cb.sampler_heap = sampler_heap;
+}
+
 // I used to ignore descriptor heap in Metal, but managing a separate
 // thing along side with a pure index is a pain in the ass. Texture
 // heap in Metal is CPU memory, we imitate the behaviour on host side.
 create_texture_heap :: (count: s64) -> [] Texture_Descriptor {
+    using context.gpu_context;
+    Basic.push_allocator(flat_pool_allocator_proc, *descriptor_heap_pool);
     return Basic.NewArray(count, Texture_Descriptor);
 }
 
-destroy_texture_heap :: (heap: [] Texture_Descriptor) {
-    Basic.array_free(heap);
-}
-
 create_sampler_heap :: (count: s64) -> [] Sampler_Descriptor {
+    using context.gpu_context;
+    Basic.push_allocator(flat_pool_allocator_proc, *descriptor_heap_pool);
     return Basic.NewArray(count, Sampler_Descriptor);
 }
 
-destroy_sampler_heap :: (heap: [] Sampler_Descriptor) {
-    Basic.array_free(heap);
-}
-
-set_active_sampler_heap :: (cb: *Command_Buffer, sampler_heap: [] Sampler_Descriptor) {
-    cb.sampler_heap = sampler_heap;
+reset_descriptor_heap :: () {
+    using context.gpu_context;
+    reset(*descriptor_heap_pool);
 }
 
 // This is a dumb function.
@@ -1456,7 +1467,11 @@ to_metal_sampler_descriptor :: (desc: Sampler_Desc) -> *MTLSamplerDescriptor {
     MTLSamplerDescriptor.setCompareFunction_(mtl, to_metal_compare_function(desc.compare_op));
 
     // lodAverage??
-    // TODO: supportArgumentBuffers???
+
+    // This line is a necessary. In this implementation, sampler is
+    // passed as a resouce id to the shader, without this line, the
+    // sampler is not valid in the shader, resulting in a black image.
+    MTLSamplerDescriptor.setSupportArgumentBuffers_(mtl, YES);
 
     return mtl;
 }
@@ -1471,3 +1486,4 @@ String :: #import "String";
 #import "Hash_Table";
 Vulkan :: #import "Vulkan";
 #load "format.jai";
+#import "Flat_Pool";

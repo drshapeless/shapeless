@@ -80,9 +80,6 @@ init_renderer :: (sdl_window: *SDL_Window) {
 
     draw_heap = GPU.create_texture_heap(1);
     draw_heap[0] = draw_texture_descriptor;
-
-    sampler_heap = GPU.create_sampler_heap(1);
-    sampler_heap[0] = simple_sampler_descriptor;
 }
 
 deinit_renderer :: () {
@@ -137,7 +134,6 @@ resize_callback :: () {
 window_dimensions: u32x3;
 
 draw_heap: [] GPU.Texture_Descriptor;
-sampler_heap: [] GPU.Sampler_Descriptor;
 
 draw_texture:             GPU.Texture;
 frame_arenas: [] GPU.Arena;
@@ -147,6 +143,9 @@ solid_rectangle_pipeline: GPU.Pipeline;
 simple_pipeline:          GPU.Pipeline;
 rectangle_pipeline:       GPU.Pipeline;
 simple_uv_pipeline:       GPU.Pipeline;
+
+simple_sampler_descriptor: GPU.Sampler_Descriptor;
+
 
 Clear_Data :: struct {
     clear_color: Vector4;
@@ -284,8 +283,6 @@ window: *SDL_Window;
 
 draw_arena:   GPU.Arena;
 draw_texture_descriptor: GPU.Texture_Descriptor;
-
-simple_sampler_descriptor: GPU.Sampler_Descriptor;
 
 create_graphics_pipeline_from_file :: (shader_path: string, desc: GPU.Raster_Desc) -> GPU.Pipeline {
     shader := read_entire_file(shader_path);

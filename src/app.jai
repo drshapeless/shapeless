@@ -9,7 +9,8 @@ App_State :: struct {
 
 app_arena: GPU.Arena;
 monkey_texture: GPU.Texture;
-
+texture_heap: [] GPU.Texture_Descriptor;
+sampler_heap: [] GPU.Sampler_Descriptor;
 
 app_init :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
     appstate.* = New(App_State);
@@ -38,6 +39,7 @@ app_init :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
         image_width, image_height: s32;
         channels: s32;
         image_data := stbi_load("longhairmonkey.jpg", *image_width, *image_height, *channels, 4);
+
         desc: GPU.Texture_Desc = .{
             dimensions = .{xx image_width, xx image_height, 1},
             format = .R8G8B8A8_UNORM,
@@ -49,6 +51,11 @@ app_init :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
         monkey_texture = GPU.create_texture(desc, gpu_ptr);
 
         GPU.host_copy_to_texture(monkey_texture, image_data);
+
+        texture_heap = GPU.create_texture_heap(1);
+        texture_heap[0] = GPU.texture_view_descriptor(monkey_texture, .{format = .R8G8B8A8_UNORM});
+        sampler_heap = GPU.create_sampler_heap(1);
+        sampler_heap[0] = simple_sampler_descriptor;
     }
 
     return .CONTINUE;
@@ -103,10 +110,27 @@ app_iter :: (appstate: *void) -> SDL_AppResult {
     };
     GPU.begin_render_pass(cb, render_pass_desc);
 
+    viewport: GPU.Viewport;
+    viewport.width = xx draw_texture.dimensions.x;
+    viewport.height = xx draw_texture.dimensions.y;
+    GPU.set_viewport(cb, viewport);
+    scissor: Rect;
+    scissor.w = xx draw_texture.dimensions.x;
+    scissor.h = xx draw_texture.dimensions.y;
+    GPU.set_scissor(cb, scissor);
+
     GPU.set_pipeline(cb, simple_uv_pipeline);
-    GPU.set_topology(cb, .TRIANGLE_LIST);
+    GPU.set_topology(cb, .TRIANGLE_STRIP);
 
 
+    GPU.set_active_texture_heap(cb, texture_heap);
+    GPU.set_active_sampler_heap(cb, sampler_heap);
+    rect := UV_Rectangle.{
+        rect = .{50, 100, 300, 300},
+        uv   = .{0, 0, xx monkey_texture.dimensions.x, xx monkey_texture.dimensions.y},
+    };
+
+    draw_uv(cb, rect, texture_index = 0, sampler_index = 0);
 
     GPU.end_render_pass(cb);
 

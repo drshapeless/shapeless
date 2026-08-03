@@ -394,11 +394,6 @@ Viewport :: struct {
     max_depth: float = 1;
 }
 
-Rect :: struct {
-    origin: u32x2 = .{0, 0};
-    size:   u32x2;
-}
-
 // load_compute_ir :: inline (shader: string, entry_point: string = "compute_main") -> IR {
 //     Basic.auto_release_temp();
 //     Basic.push_allocator(Basic.temp);
