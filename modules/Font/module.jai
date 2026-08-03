@@ -69,6 +69,8 @@ load_glyph :: (cb: *GPU.Command_Buffer, font: *Font, glyph_index: u32) -> Glyph 
 
     bmp := font.face.glyph.bitmap;
 
+    assert(bmp.width < GRID_SIZE);
+
     glyph.uv.x = cast(float) font.pen.x;
     glyph.uv.y = cast(float) font.pen.y;
     glyph.uv.w = cast(float) bmp.width;
