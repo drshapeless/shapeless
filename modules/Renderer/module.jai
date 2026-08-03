@@ -4,22 +4,6 @@ init_renderer :: (sdl_window: *SDL_Window) {
     GPU.init(*draw_arena, 32 * 1024 * 1024); // 32MB should be enough for draw texture
     ok, window_width, window_height := SDL_GetWindowSizeInPixels(window);
     assert(ok, "failed to get sdl window size");
-    draw_texture_desc: GPU.Texture_Desc = .{
-        dimensions = .{xx window_width, xx window_height, 1},
-        format = .B8G8R8A8_UNORM,
-        usage = .STORAGE | .COLOR_ATTACHMENT | .TRANSFER_SRC,
-    };
-
-    draw_size_align := GPU.texture_size_align(draw_texture_desc);
-
-    draw_ptr := GPU.get(*draw_arena, xx draw_size_align.size, xx draw_size_align.align);
-    draw_ptr_gpu := GPU.host_to_device_pointer(draw_ptr);
-    draw_texture = GPU.create_texture(draw_texture_desc, draw_ptr_gpu);
-    draw_texture_view_desc: GPU.View_Desc = .{
-        format = .B8G8R8A8_UNORM,
-    };
-    draw_texture_descriptor = GPU.texture_view_descriptor(draw_texture, draw_texture_view_desc);
-
     window_dimensions = .{
         x = xx window_width,
         y = xx window_height,
@@ -27,6 +11,21 @@ init_renderer :: (sdl_window: *SDL_Window) {
     };
 
     frame_count := GPU.frame_count();
+
+    {
+        desc := draw_texture_desc();
+        draw_size_align := GPU.texture_size_align(desc);
+
+
+        draw_ptr := GPU.get(*draw_arena, xx draw_size_align.size, xx draw_size_align.align);
+        draw_ptr_gpu := GPU.host_to_device_pointer(draw_ptr);
+        draw_texture = GPU.create_texture(desc, draw_ptr_gpu);
+        draw_texture_view_desc: GPU.View_Desc = .{
+            format = .B8G8R8A8_UNORM,
+        };
+        draw_texture_descriptor = GPU.texture_view_descriptor(draw_texture, draw_texture_view_desc);
+
+    }
 
     {
         ir := GPU.load_compute_ir("clear_texture");
@@ -112,23 +111,16 @@ resize_callback :: () {
         z = 1
     };
 
-    draw_texture_desc := GPU.Texture_Desc.{
-        dimensions = .{xx window_width, xx window_height, 1},
-        format = .B8G8R8A8_UNORM,
-        usage = .STORAGE | .COLOR_ATTACHMENT | .TRANSFER_SRC,
-    };
-    draw_size_align := GPU.texture_size_align(draw_texture_desc);
+    desc := draw_texture_desc();
+    draw_size_align := GPU.texture_size_align(desc);
     draw_ptr := GPU.get(*draw_arena, xx draw_size_align.size, xx draw_size_align.align);
     draw_ptr_gpu := GPU.host_to_device_pointer(draw_ptr);
-    draw_texture = GPU.create_texture(draw_texture_desc, draw_ptr_gpu);
+    draw_texture = GPU.create_texture(desc, draw_ptr_gpu);
     draw_texture_view_desc: GPU.View_Desc = .{
         format = .B8G8R8A8_UNORM,
     };
 
-    if draw_heap.count {
-        draw_texture_descriptor = GPU.texture_view_descriptor(draw_texture, draw_texture_view_desc);
-        draw_heap[0] = draw_texture_descriptor;
-    }
+    draw_texture_descriptor = GPU.texture_view_descriptor(draw_texture, draw_texture_view_desc);
 }
 
 window_dimensions: u32x3;
@@ -238,7 +230,7 @@ draw_rectangles :: (cb: *GPU.Command_Buffer, rects: .. Color_Rectangle) {
 }
 
 // Set the topology to triangle strip before calling this function
-draw_uv :: (cb: *GPU.Command_Buffer, rects: .. UV_Rectangle, texture_index: u64, sampler_index: u64) {
+draw_uv :: (cb: *GPU.Command_Buffer, rects: .. UV_Rectangle, texture_index: u64 = 0, sampler_index: u64 = 0) {
     i := GPU.frame_index();
     GPU.push_allocator(GPU.arena_allocator_proc, *frame_arenas[i]);
 
@@ -283,6 +275,14 @@ window: *SDL_Window;
 
 draw_arena:   GPU.Arena;
 draw_texture_descriptor: GPU.Texture_Descriptor;
+
+draw_texture_desc :: () -> GPU.Texture_Desc {
+    return .{
+        dimensions = .{xx window_dimensions.x, xx window_dimensions.y, 1},
+        format = .B8G8R8A8_UNORM,
+        usage = .SAMPLED | .STORAGE | .COLOR_ATTACHMENT | .TRANSFER_SRC,
+    };
+}
 
 create_graphics_pipeline_from_file :: (shader_path: string, desc: GPU.Raster_Desc) -> GPU.Pipeline {
     shader := read_entire_file(shader_path);

@@ -61,8 +61,8 @@ Vertex_Output vertex_main(uint vid : SV_VertexID, uint iid : SV_InstanceID) {
     Rect uv = pc.vertex_input.rectangles[iid].uv;
     float uv_min_x = uv.x / texture_size.x;
     float uv_min_y = uv.y / texture_size.y;
-    float uv_max_x = (uv.x + rect.w) / texture_size.x;
-    float uv_max_y = (uv.y + rect.h) / texture_size.y;
+    float uv_max_x = (uv.x + uv.w) / texture_size.x;
+    float uv_max_y = (uv.y + uv.h) / texture_size.y;
 
     float2 uvs[4];
     uvs[0] = float2(uv_min_x, uv_min_y);
@@ -70,7 +70,7 @@ Vertex_Output vertex_main(uint vid : SV_VertexID, uint iid : SV_InstanceID) {
     uvs[2] = float2(uv_max_x, uv_min_y);
     uvs[3] = float2(uv_max_x, uv_max_y);
 
-    output.uv = uvs[iid];
+    output.uv = uvs[vid];
 
     return output;
 }

@@ -226,6 +226,8 @@ init :: (window: *SDL_Window = null) {
 
     Basic.assert(descriptor_heap_properties.samplerDescriptorSize == 16, "The sampler descriptor size is not 16, %", descriptor_heap_properties.samplerDescriptorSize);
 
+    Basic.assert(descriptor_heap_properties.minSamplerHeapReservedRange == 0, "The minSamplerHeapReservedRange is not zero, if you want to support your gpu, you have to work on the create_sampler_heap function");
+
     set_and_binding_mapping[0].descriptorSet = 0;
     set_and_binding_mapping[0].firstBinding = 2;
     set_and_binding_mapping[0].bindingCount = 1;
@@ -1272,6 +1274,18 @@ set_active_texture_heap :: (cb: *Command_Buffer, texture_heap: [] Texture_Descri
     vkCmdBindResourceHeapEXT(cb.vk, *bind_heap_info);
 }
 
+set_active_sampler_heap :: (cb: *Command_Buffer, sampler_heap: [] Sampler_Descriptor) {
+    gpu := host_to_device_pointer(sampler_heap.data);
+    bind_heap_info := VkBindHeapInfoEXT.{
+        heapRange = .{
+            address = gpu,
+            size    = xx (size_of(Sampler_Descriptor) * sampler_heap.count),
+        },
+    };
+
+    vkCmdBindSamplerHeapEXT(cb.vk, *bind_heap_info);
+}
+
 // The reason why we have a dedicated function for creating texture
 // heap than letting users to allocate arbitary buffer is because
 // descriptor heap requires a special buffer flags
@@ -1317,9 +1331,10 @@ set_viewport :: (cb: *Command_Buffer, viewport: Viewport) {
 
 set_scissor :: (cb: *Command_Buffer, scissor: Rect) {
     rect: VkRect2D;
-    rect.offset.x = xx scissor.origin.x;
-    rect.offset.y = xx scissor.origin.y;
-    rect.extent = cast,force(VkExtent2D) scissor.size;
+    rect.offset.x = xx scissor.x;
+    rect.offset.y = xx scissor.y;
+    rect.extent.width = xx scissor.w;
+    rect.extent.height = xx scissor.h;
     // vkCmdSetScissor(cb.vk, 0, 1, *rect);
     vkCmdSetScissorWithCount(cb.vk, 1, *rect);
 }

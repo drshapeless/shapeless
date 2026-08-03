@@ -113,7 +113,6 @@ Texture_Usage :: enum_flags u32 {
     STORAGE                  :: 1 << 3;
     COLOR_ATTACHMENT         :: 1 << 4;
     DEPTH_STENCIL_ATTACHMENT :: 1 << 5;
-    HOST_TRANSFER            :: 1 << 22;
 }
 
 Texture_Desc :: struct {

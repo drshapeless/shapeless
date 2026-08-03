@@ -43,7 +43,7 @@ app_init :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
         desc: GPU.Texture_Desc = .{
             dimensions = .{xx image_width, xx image_height, 1},
             format = .R8G8B8A8_UNORM,
-            usage = .SAMPLED | .TRANSFER_DST | .HOST_TRANSFER,
+            usage = .SAMPLED | .TRANSFER_DST,
         };
         size_align := GPU.texture_size_align(desc);
         ptr := GPU.get(*app_arena, xx size_align.size, xx size_align.align);
@@ -130,7 +130,7 @@ app_iter :: (appstate: *void) -> SDL_AppResult {
         uv   = .{0, 0, xx monkey_texture.dimensions.x, xx monkey_texture.dimensions.y},
     };
 
-    draw_uv(cb, rect, texture_index = 0, sampler_index = 0);
+    draw_uv(cb, rect);
 
     GPU.end_render_pass(cb);
 
