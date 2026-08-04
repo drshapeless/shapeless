@@ -13,6 +13,8 @@ texture_heap: [] GPU.Texture_Descriptor;
 sampler_heap: [] GPU.Sampler_Descriptor;
 font: Font;
 
+loaded_ascii := false;
+
 app_init :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
     appstate.* = New(App_State);
     state: *App_State = appstate.*;
@@ -62,7 +64,7 @@ app_init :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
     }
 
     font = create_font("Hack-Regular.ttf");
-    set_font_size(font, 18);
+    set_font_size(*font, 48);
 
     return .CONTINUE;
 }
@@ -107,6 +109,11 @@ app_iter :: (appstate: *void) -> SDL_AppResult {
 
     cb := GPU.start_command_recording();
 
+    if !loaded_ascii {
+        load_ascii(cb, *font);
+        loaded_ascii = true;
+    }
+
     color_target: GPU.Render_Pass_Attachment_Desc = .{
         texture = draw_texture,
     };
@@ -137,8 +144,8 @@ app_iter :: (appstate: *void) -> SDL_AppResult {
 
     draw_uv(cb, rect);
 
-    // begin_draw_text(cb);
-    // draw_text(cb, *font, "bello", .{350, 350}, .{1, 1, 1, 1});
+    begin_draw_text(cb);
+    draw_text(cb, *font, "bello", .{50, 50}, .{1, 1, 1, 1});
 
     GPU.end_render_pass(cb);
 

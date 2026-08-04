@@ -27,13 +27,13 @@ init_renderer :: (sdl_window: *SDL_Window) {
 
     }
 
-     clear_pipeline = create_compute_pipeline("clear_texture");
-     solid_rectangle_pipeline = create_compute_pipeline("solid_rectangle");
+    clear_pipeline = create_compute_pipeline("clear_texture");
+    solid_rectangle_pipeline = create_compute_pipeline("solid_rectangle");
 
-     simple_pipeline = create_graphics_pipeline("simple");
-     rectangle_pipeline = create_graphics_pipeline("rectangle");
-     simple_uv_pipeline = create_graphics_pipeline("simple_uv");
-     mono_color_font_pipeline = create_graphics_pipeline("mono_color_font");
+    simple_pipeline = create_graphics_pipeline("simple");
+    rectangle_pipeline = create_graphics_pipeline("rectangle");
+    simple_uv_pipeline = create_graphics_pipeline("simple_uv");
+    mono_color_font_pipeline = create_graphics_pipeline("mono_color_font", .{});
 
     frame_arenas = NewArray(frame_count, GPU.Arena);
 
@@ -234,6 +234,7 @@ draw_uv :: (cb: *GPU.Command_Buffer, rects: .. UV_Rectangle, texture_index: u64 
 }
 
 begin_draw_text :: (cb: *GPU.Command_Buffer)  {
+    GPU.set_pipeline(cb, mono_color_font_pipeline);
     GPU.set_active_texture_heap(cb, font_texture_heap);
     GPU.set_active_sampler_heap(cb, default_sampler_heap);
     GPU.set_topology(cb, .TRIANGLE_STRIP);
@@ -256,6 +257,8 @@ draw_text :: (cb: *GPU.Command_Buffer, font: *Font, text: string, origin: Vector
         it.rect = positions[it_index];
         it.uv   = uvs[it_index];
     }
+
+    // log("%", rects);
 
     Vertex_Input :: struct {
         projection: Matrix4;
@@ -359,4 +362,17 @@ create_graphics_pipeline :: (name: string) -> GPU.Pipeline {
     defer GPU.destroy_ir(vir);
     defer GPU.destroy_ir(fir);
     return GPU.create_graphics_pipeline(vir, fir, .{color_targets = default_color_targets});
+}
+
+create_graphics_pipeline :: (name: string, blend_state: GPU.Blend_Desc) -> GPU.Pipeline {
+    default_color_targets: [1]GPU.Color_Target: .[
+.{
+    format = .B8G8R8A8_UNORM,
+}
+    ];
+
+    vir, fir := GPU.load_graphics_ir(name);
+    defer GPU.destroy_ir(vir);
+    defer GPU.destroy_ir(fir);
+    return GPU.create_graphics_pipeline(vir, fir, .{color_targets = default_color_targets, blendstate = *blend_state});
 }

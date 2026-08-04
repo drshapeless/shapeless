@@ -255,8 +255,8 @@ Factor :: enum u32 {
 
 Blend_Desc :: struct {
     color_op:         Blend = .ADD;
-    src_color_factor: Factor = .ONE;
-    dst_color_factor: Factor = .ZERO;
+    src_color_factor: Factor = .SRC_ALPHA;
+    dst_color_factor: Factor = .ONE_MINUS_SRC_ALPHA;
     alpha_op:         Blend = .ADD;
     src_alpha_factor: Factor = .ONE;
     dst_alpha_factor: Factor = .ZERO;

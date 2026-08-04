@@ -104,6 +104,8 @@ Pipeline :: struct {
     // For compute shader, only the first is useful
     shaders: [2]VkShaderEXT;
     is_compute: bool;
+    has_embedded_blend_state := false;
+    embedded_blend_state: Blend_State;
 }
 
 Queue :: struct {
@@ -642,6 +644,11 @@ create_graphics_pipeline :: (vertex_ir: IR, fragment_ir: IR, desc: Raster_Desc) 
     pipeline.shaders[1] = shaders[1];
     pipeline.is_compute = false;
 
+    if desc.blendstate {
+        pipeline.has_embedded_blend_state = true;
+        pipeline.embedded_blend_state = create_blend_state(desc.blendstate.*);
+    }
+
     return pipeline;
 }
 
@@ -1111,6 +1118,9 @@ set_pipeline :: (cb: *Command_Buffer, pipeline: Pipeline) {
     } else {
         stages := VkShaderStageFlagBits.[.VERTEX, .FRAGMENT];
         vkCmdBindShadersEXT(cb, 2, stages.data, pipeline.shaders.data);
+        if pipeline.has_embedded_blend_state {
+            set_blend_state(cb, pipeline.embedded_blend_state);
+        }
     }
 }
 
@@ -1421,7 +1431,10 @@ create_blend_state :: (desc: Blend_Desc) -> Blend_State {
         dstAlphaBlendFactor = to_vulkan_blend_factor(desc.dst_alpha_factor),
         alphaBlendOp = to_vulkan_blend_op(desc.alpha_op),
     };
-    state.color_write_mask = cast,force(VkColorWriteMask) desc.color_write_mask;
+
+    state.color_write_mask = cast,force(VkColorComponentFlags) desc.color_write_mask;
+
+    state.color_write_mask = .R | .G | .B | .A;
 
     return state;
 }

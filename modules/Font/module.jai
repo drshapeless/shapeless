@@ -37,8 +37,10 @@ create_font :: (path: string) -> Font {
     f: Font;
     FT_New_Face(ft, temp_c_string(path), xx current_index, *f.face);
     f.index = current_index;
+    FT_Set_Pixel_Sizes(f.face, 0, 32);
 
     f.hb_font = hb_ft_font_create_referenced(f.face);
+    // hb_ft_font_set_load_flags(f.hb_font, FT_LOAD_FORCE_AUTOHINT);
     hb_ft_font_set_funcs(f.hb_font);
 
     texture_desc: GPU.Texture_Desc = .{
@@ -62,23 +64,43 @@ destroy_font :: (font: Font) {
     FT_Done_Face(font.face);
 }
 
-set_font_size :: (font: Font, size: s64, resolution: u32 = 0) {
-    FT_Set_Char_Size(font.face, size * 64, 0, resolution, 0);
+set_font_size :: (font: *Font, size: s64) {
+    // Both hb_ft_hb_font_changed and hb_ft_font_changed have
+    // absolutely no effect at all
+    hb_font_set_scale(font.hb_font, xx (size * 64), xx (size * 64));
+
+    FT_Set_Pixel_Sizes(font.face, 0, xx size);
 }
 
-load_glyph :: (cb: *GPU.Command_Buffer, font: *Font, glyph_index: u32) -> Glyph {
+load_ascii :: (cb: *GPU.Command_Buffer, font: *Font) {
+    for i: 32..126 {
+        glyph_index := FT_Get_Char_Index(font.face, xx i);
+
+        load_glyph(cb, font, glyph_index);
+    }
+}
+
+load_glyph :: (cb: *GPU.Command_Buffer, font: *Font, glyph_index: u32) -> Glyph, dimensions:Vector2 {
     glyph: Glyph;
+
+    err: FT_Error;
+    err = FT_Load_Glyph(font.face, glyph_index, FT_LOAD_DEFAULT);
+    assert(err == xx FT_Err.Ok);
+    dimensions: Vector2;
+    dimensions.x = cast(float) font.face.glyph.metrics.width / 64.0;
+    dimensions.y = cast(float) font.face.glyph.metrics.height / 64.0;
+
     found:, glyph = table_find(*font.cache, glyph_index);
     if found {
-        return glyph;
+        return glyph, dimensions;
     }
 
-    err := FT_Load_Glyph(font.face, glyph_index, FT_LOAD_RENDER | FT_LOAD_FORCE_AUTOHINT);
+    err = FT_Load_Glyph(font.face, glyph_index, FT_LOAD_RENDER | FT_LOAD_FORCE_AUTOHINT);
     assert(err == xx FT_Err.Ok);
 
     bmp := font.face.glyph.bitmap;
 
-    assert(bmp.width < GRID_SIZE);
+    assert(bmp.width < GRID_SIZE, "The bitmap is larger than GRID_SIZE. If you want to support larger font, use a bigger GRID_SIZE or rethink the logic here");
 
     glyph.uv.x = cast(float) font.pen.x;
     glyph.uv.y = cast(float) font.pen.y;
@@ -86,6 +108,10 @@ load_glyph :: (cb: *GPU.Command_Buffer, font: *Font, glyph_index: u32) -> Glyph 
     glyph.uv.h = cast(float) bmp.rows;
     glyph.bitmap_left = font.face.glyph.bitmap_left;
     glyph.bitmap_top  = font.face.glyph.bitmap_top;
+
+    if bmp.width == 0 {
+        return glyph, dimensions;
+    }
 
     GPU.push_allocator(GPU.arena_allocator_proc, *temp_arena);
 
@@ -112,7 +138,7 @@ load_glyph :: (cb: *GPU.Command_Buffer, font: *Font, glyph_index: u32) -> Glyph 
         assert(font.pen.y < font.texture.dimensions.y, "The font texture is fulled, do something");
     }
 
-    return glyph;
+    return glyph, dimensions;
 }
 
 get_text_draw_info :: (cb: *GPU.Command_Buffer, font: *Font, text: string, origin: Vector2) -> positions: []Rect, uvs: []Rect {
@@ -129,9 +155,7 @@ get_text_draw_info :: (cb: *GPU.Command_Buffer, font: *Font, text: string, origi
     pos  := hb_buffer_get_glyph_positions(hb_buffer, *glyph_count);
 
 
-    cursor: s32x2;
-    cursor.x = cast(s32) origin.x * 64;
-    cursor.y = cast(s32) origin.y * 64;
+    cursor := origin;
 
     positions: [..] Rect;
     uvs:       [..] Rect;
@@ -139,28 +163,31 @@ get_text_draw_info :: (cb: *GPU.Command_Buffer, font: *Font, text: string, origi
     for i: 0..glyph_count - 1 {
         gid := info[i].codepoint;
 
-        x_off := pos[i].x_offset;
-        y_off := pos[i].y_offset;
-        x_advance := pos[i].x_advance;
-        y_advance := pos[i].y_advance;
+        x_off := cast(float) pos[i].x_offset / 64.0;
+        y_off := cast(float) pos[i].y_offset / 64.0;
+        x_advance := cast(float) pos[i].x_advance / 64.0;
+        y_advance := cast(float) pos[i].y_advance / 64.0;
+
+        // log("xa = %", x_advance);
 
         position: Rect;
 
-        position.x = cast(float) (cursor.x + x_off) / 64.0;
-        position.y = cast(float) (cursor.y + y_off) / 64.0;
+        position.x = cursor.x + x_off;
+        position.y = cursor.y - y_off;
 
-        // TODO: unfinished
-        glyph := load_glyph(cb, font, gid);
+        glyph, dimensions := load_glyph(cb, font, gid);
 
         uv:      Rect = glyph.uv;
 
         position.x += glyph.bitmap_left;
-        position.y += glyph.bitmap_top;
-        position.w = glyph.uv.w;
-        position.h = glyph.uv.h;
+        position.y -= glyph.bitmap_top;
+        position.w = dimensions.x;
+        position.h = dimensions.y;
+
+        // log("position = %, uv = %", position, uv);
 
         cursor.x += x_advance;
-        cursor.y += y_advance;
+        cursor.y -= y_advance;
 
         array_add(*positions, position);
         array_add(*uvs, uv);
