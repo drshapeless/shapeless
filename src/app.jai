@@ -11,6 +11,7 @@ app_arena: GPU.Arena;
 monkey_texture: GPU.Texture;
 texture_heap: [] GPU.Texture_Descriptor;
 sampler_heap: [] GPU.Sampler_Descriptor;
+font: Font;
 
 app_init :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
     appstate.* = New(App_State);
@@ -29,6 +30,7 @@ app_init :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
 
     GPU.init(window);
     init_renderer(window);
+    init_font();
 
     queue = GPU.create_queue();
 
@@ -56,7 +58,11 @@ app_init :: (appstate: **void, argc: s32, argv: **u8) -> SDL_AppResult {
         texture_heap[0] = GPU.texture_view_descriptor(monkey_texture, .{format = .R8G8B8A8_UNORM});
         sampler_heap = GPU.create_sampler_heap(1);
         sampler_heap[0] = simple_sampler_descriptor;
+
     }
+
+    font = create_font("Hack-Regular.ttf");
+    set_font_size(font, 18);
 
     return .CONTINUE;
 }
@@ -122,7 +128,6 @@ app_iter :: (appstate: *void) -> SDL_AppResult {
     GPU.set_pipeline(cb, simple_uv_pipeline);
     GPU.set_topology(cb, .TRIANGLE_STRIP);
 
-
     GPU.set_active_texture_heap(cb, texture_heap);
     GPU.set_active_sampler_heap(cb, sampler_heap);
     rect := UV_Rectangle.{
@@ -131,6 +136,9 @@ app_iter :: (appstate: *void) -> SDL_AppResult {
     };
 
     draw_uv(cb, rect);
+
+    // begin_draw_text(cb);
+    // draw_text(cb, *font, "bello", .{350, 350}, .{1, 1, 1, 1});
 
     GPU.end_render_pass(cb);
 
@@ -147,6 +155,8 @@ app_quit :: (appstate: *void, result: SDL_AppResult) {
 
     GPU.destroy_texture(monkey_texture);
     GPU.fini(*app_arena);
+    destroy_font(font);
+    deinit_font();
     deinit_renderer();
     GPU.deinit();
     SDL_DestroyWindow(window);
@@ -166,3 +176,4 @@ GPU :: #import "GPU";
 #import "Renderer";
 #import "Utils/types";
 #import "stb_image";
+#import "Font";

@@ -1,4 +1,4 @@
-#module_parameters(GRID_SIZE: u32 = 64, TEXTURE_SIZE: u32 = 1024, DEFAULT_ATLAS_TEXTURE_COUNT: u32 = 256);
+#module_parameters(GRID_SIZE: u32 = 64, TEXTURE_SIZE: u32 = 1024, DEFAULT_ATLAS_TEXTURE_COUNT: u32 = 256, DEFAULT_FONT_TEXTURE_HEAP_SIZE := 64);
 
 // This is a module for Font rendering and management. Using native CoreText on macOS.
 Glyph :: struct {
@@ -7,7 +7,7 @@ Glyph :: struct {
 }
 
 Font :: struct {
-    index: s64;
+    index: u64;
     face: FT_Face;
     hb_font: *hb_font_t;
     cache: Table(u32, Glyph);
@@ -15,11 +15,15 @@ Font :: struct {
     pen: u32x2;
 }
 
+font_texture_heap: [] GPU.Texture_Descriptor;
+
 init_font :: () {
     FT_Init_FreeType(*ft);
     hb_buffer = hb_buffer_create();
     GPU.init(*atlas_arena, TEXTURE_SIZE * TEXTURE_SIZE * DEFAULT_ATLAS_TEXTURE_COUNT);
     GPU.init(*temp_arena, TEXTURE_SIZE * TEXTURE_SIZE);
+
+    font_texture_heap = GPU.create_texture_heap(DEFAULT_FONT_TEXTURE_HEAP_SIZE);
 }
 
 deinit_font :: () {
@@ -31,7 +35,8 @@ deinit_font :: () {
 
 create_font :: (path: string) -> Font {
     f: Font;
-    FT_New_Face(ft, temp_c_string(path), current_index, *f.face);
+    FT_New_Face(ft, temp_c_string(path), xx current_index, *f.face);
+    f.index = current_index;
 
     f.hb_font = hb_ft_font_create_referenced(f.face);
     hb_ft_font_set_funcs(f.hb_font);
@@ -39,12 +44,16 @@ create_font :: (path: string) -> Font {
     texture_desc: GPU.Texture_Desc = .{
         dimensions = .{TEXTURE_SIZE, TEXTURE_SIZE, 1},
         format = .R8_UNORM,
+        usage = .SAMPLED | .TRANSFER_DST
     };
     size_align := GPU.texture_size_align(texture_desc);
-    memory_ptr := GPU.get(*atlas_arena, size_align.size, size_align.align);
+    memory_ptr := GPU.get(*atlas_arena, xx size_align.size, xx size_align.align);
     gpu_ptr := GPU.host_to_device_pointer(memory_ptr);
-    GPU.create_texture(texture_desc, gpu_ptr);
+    f.texture = GPU.create_texture(texture_desc, gpu_ptr);
 
+    font_texture_heap[f.index] = GPU.texture_descriptor(f.texture);
+
+    current_index += 1;
     return f;
 }
 
@@ -65,7 +74,7 @@ load_glyph :: (cb: *GPU.Command_Buffer, font: *Font, glyph_index: u32) -> Glyph 
     }
 
     err := FT_Load_Glyph(font.face, glyph_index, FT_LOAD_RENDER | FT_LOAD_FORCE_AUTOHINT);
-    assert(err == .Ok);
+    assert(err == xx FT_Err.Ok);
 
     bmp := font.face.glyph.bitmap;
 
@@ -82,15 +91,15 @@ load_glyph :: (cb: *GPU.Command_Buffer, font: *Font, glyph_index: u32) -> Glyph 
 
     staging_memory := GPU.alloc(bmp.width * bmp.rows);
     // Check if there pitch equals width
-    if bmp.width == bmp.pitch {
+    if bmp.width == xx bmp.pitch {
         memcpy(staging_memory, bmp.buffer, bmp.width * bmp.rows);
     } else {
         for i: 0..bmp.rows-1 {
-            memcpy(staging_memory + i * bmp.rows, bmp.buffer + i * bmp.pitch, bmp.width);
+            memcpy(staging_memory + i * bmp.rows, bmp.buffer + cast(u64) (i * xx bmp.pitch), bmp.width);
         }
     }
 
-    GPU.copy_to_texture(cb, font.texture, GPU.host_to_device_pointer(staging_memory), .{xx font.pen_x, xx font.pen_y, 0}, .{bmp.width, bmp.rows, 1});
+    GPU.copy_to_texture(cb, font.texture, GPU.host_to_device_pointer(staging_memory), .{xx font.pen.x, xx font.pen.y, 0}, .{bmp.width, bmp.rows, 1});
 
     table_add(*font.cache, glyph_index, glyph);
 
@@ -100,7 +109,7 @@ load_glyph :: (cb: *GPU.Command_Buffer, font: *Font, glyph_index: u32) -> Glyph 
         font.pen.x = 0;
         font.pen.y += GRID_SIZE;
 
-        assert(font.pen_y < font.texture.dimensions.y, "The font texture is fulled, do something");
+        assert(font.pen.y < font.texture.dimensions.y, "The font texture is fulled, do something");
     }
 
     return glyph;
@@ -150,8 +159,8 @@ get_text_draw_info :: (cb: *GPU.Command_Buffer, font: *Font, text: string, origi
         position.w = glyph.uv.w;
         position.h = glyph.uv.h;
 
-        cursor.x += cast(float) x_advance;
-        cursor.y += cast(float) y_advance;
+        cursor.x += x_advance;
+        cursor.y += y_advance;
 
         array_add(*positions, position);
         array_add(*uvs, uv);
@@ -162,11 +171,12 @@ get_text_draw_info :: (cb: *GPU.Command_Buffer, font: *Font, text: string, origi
 
 #scope_file
 ft: FT_Library;
-current_index: s64 = 0;
+current_index: u64 = 0;
 
 hb_buffer: *hb_buffer_t;
 atlas_arena: GPU.Arena;
 temp_arena: GPU.Arena;
+
 #import "freetype";
 #import "Basic";
 #import "HarfBuzz";

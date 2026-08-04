@@ -248,7 +248,8 @@ init :: (window: *SDL_Window = null) {
         heapArrayStride = xx descriptor_heap_properties.samplerDescriptorSize,
     };
 
-    // 16 MB should be enough for all descriptor
+    // 16 MB should be enough for all descriptor, it can contains
+    // 500000 texture descriptor
     descriptor_heap_allocation = vulkan_allocate(16 * 1024 * 1024, .SHADER_DEVICE_ADDRESS | .DESCRIPTOR_HEAP_EXT);
     init_arena_with_vulkan_allocation(*descriptor_heap_arena, descriptor_heap_allocation);
 }
@@ -462,6 +463,15 @@ destroy_texture :: (texture: Texture) {
     if texture.view {
         vkDestroyImageView(device, texture.view, vka);
     }
+}
+
+// This is a handy function to omit a view desc when requesting
+// texture view of the same format
+texture_descriptor :: (texture: Texture, $read_write: bool = false) -> Texture_Descriptor {
+    desc: View_Desc;
+    desc.format = texture.format;
+
+    return texture_view_descriptor(texture, desc, read_write);
 }
 
 // This returns a 32 bytes texture descriptor that can be written in a texture heap

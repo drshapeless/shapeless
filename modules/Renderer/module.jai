@@ -27,41 +27,13 @@ init_renderer :: (sdl_window: *SDL_Window) {
 
     }
 
-    {
-        ir := GPU.load_compute_ir("clear_texture");
-        defer GPU.destroy_ir(ir);
-        clear_pipeline = GPU.create_compute_pipeline(ir);
-    }
-    {
-        ir := GPU.load_compute_ir("solid_rectangle");
-        defer GPU.destroy_ir(ir);
-        solid_rectangle_pipeline = GPU.create_compute_pipeline(ir);
-    }
+     clear_pipeline = create_compute_pipeline("clear_texture");
+     solid_rectangle_pipeline = create_compute_pipeline("solid_rectangle");
 
-    color_targets: [1]GPU.Color_Target;
-    color_targets[0].format = .B8G8R8A8_UNORM;
-
-    desc: GPU.Raster_Desc = .{
-        color_targets = color_targets,
-    };
-    {
-        vir, fir := GPU.load_graphics_ir("simple");
-        defer GPU.destroy_ir(vir);
-        defer GPU.destroy_ir(fir);
-        simple_pipeline = GPU.create_graphics_pipeline(vir, fir, desc);
-    }
-    {
-        vir, fir := GPU.load_graphics_ir("rectangle");
-        defer GPU.destroy_ir(vir);
-        defer GPU.destroy_ir(fir);
-        rectangle_pipeline = GPU.create_graphics_pipeline(vir, fir, desc);
-    }
-    {
-        vir, fir := GPU.load_graphics_ir("simple_uv");
-        defer GPU.destroy_ir(vir);
-        defer GPU.destroy_ir(fir);
-        simple_uv_pipeline = GPU.create_graphics_pipeline(vir, fir, desc);
-    }
+     simple_pipeline = create_graphics_pipeline("simple");
+     rectangle_pipeline = create_graphics_pipeline("rectangle");
+     simple_uv_pipeline = create_graphics_pipeline("simple_uv");
+     mono_color_font_pipeline = create_graphics_pipeline("mono_color_font");
 
     frame_arenas = NewArray(frame_count, GPU.Arena);
 
@@ -79,10 +51,14 @@ init_renderer :: (sdl_window: *SDL_Window) {
 
     draw_heap = GPU.create_texture_heap(1);
     draw_heap[0] = draw_texture_descriptor;
+
+    default_sampler_heap = GPU.create_sampler_heap(1);
+    default_sampler_heap[0] = simple_sampler_descriptor;
 }
 
 deinit_renderer :: () {
     GPU.wait_device_idle();
+    GPU.destroy_pipeline(mono_color_font_pipeline);
     GPU.destroy_pipeline(simple_uv_pipeline);
     GPU.destroy_pipeline(rectangle_pipeline);
     GPU.destroy_pipeline(simple_pipeline);
@@ -127,6 +103,8 @@ window_dimensions: u32x3;
 
 draw_heap: [] GPU.Texture_Descriptor;
 
+default_sampler_heap: [] GPU.Sampler_Descriptor;
+
 draw_texture:             GPU.Texture;
 frame_arenas: [] GPU.Arena;
 
@@ -135,9 +113,9 @@ solid_rectangle_pipeline: GPU.Pipeline;
 simple_pipeline:          GPU.Pipeline;
 rectangle_pipeline:       GPU.Pipeline;
 simple_uv_pipeline:       GPU.Pipeline;
+mono_color_font_pipeline: GPU.Pipeline;
 
 simple_sampler_descriptor: GPU.Sampler_Descriptor;
-
 
 Clear_Data :: struct {
     clear_color: Vector4;
@@ -255,11 +233,53 @@ draw_uv :: (cb: *GPU.Command_Buffer, rects: .. UV_Rectangle, texture_index: u64 
     GPU.draw(cb, gpu_ptr, gpu_ptr, 4, xx rects.count);
 }
 
-draw_text :: (cb: *GPU.Command_Buffer, font: Font, text: string, origin: Vector2) {
+begin_draw_text :: (cb: *GPU.Command_Buffer)  {
+    GPU.set_active_texture_heap(cb, font_texture_heap);
+    GPU.set_active_sampler_heap(cb, default_sampler_heap);
+    GPU.set_topology(cb, .TRIANGLE_STRIP);
+}
+
+draw_text :: (cb: *GPU.Command_Buffer, font: *Font, text: string, origin: Vector2, color: Vector4) {
     i := GPU.frame_index();
     GPU.push_allocator(GPU.arena_allocator_proc, *frame_arenas[i]);
 
+    positions, uvs := get_text_draw_info(cb, font, text, origin);
 
+    UV_Rect :: struct {
+        rect: Rect;
+        uv: Rect;
+    }
+
+    rects := GPU.NewArray(positions.count, UV_Rect);
+
+    for * rects {
+        it.rect = positions[it_index];
+        it.uv   = uvs[it_index];
+    }
+
+    Vertex_Input :: struct {
+        projection: Matrix4;
+        rectangles: GPU.Ptr;
+        tex: u64;
+    }
+
+    Fragment_Input :: struct {
+        color: Vector4;
+        tex: u64;
+        sam: u64;
+    }
+
+    vertex_input := GPU.New(Vertex_Input);
+    vertex_input.projection = make_projection();
+    vertex_input.rectangles = GPU.host_to_device_pointer(rects.data);
+    vertex_input.tex = GPU.texture_handle(cb, font.index);
+
+    fragment_input := GPU.New(Fragment_Input);
+    fragment_input.color = color;
+    fragment_input.tex = GPU.texture_handle(cb, font.index);
+    fragment_input.sam = GPU.sampler_handle(cb, 0);
+
+    GPU.draw(cb, GPU.host_to_device_pointer(vertex_input), GPU.host_to_device_pointer(fragment_input), 4, xx rects.count);
 }
 
 #import "Font";
@@ -320,4 +340,23 @@ make_projection :: () -> Matrix4 {
     projection._41 = -1.0;
     projection._42 = -1.0;
     return projection;
+}
+
+create_compute_pipeline :: (name: string) -> GPU.Pipeline {
+    ir := GPU.load_compute_ir(name);
+    defer GPU.destroy_ir(ir);
+    return GPU.create_compute_pipeline(ir);
+}
+
+create_graphics_pipeline :: (name: string) -> GPU.Pipeline {
+    default_color_targets: [1]GPU.Color_Target: .[
+.{
+    format = .B8G8R8A8_UNORM,
+}
+    ];
+
+    vir, fir := GPU.load_graphics_ir(name);
+    defer GPU.destroy_ir(vir);
+    defer GPU.destroy_ir(fir);
+    return GPU.create_graphics_pipeline(vir, fir, .{color_targets = default_color_targets});
 }
