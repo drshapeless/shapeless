@@ -256,6 +256,12 @@ destroy_texture :: (texture: Texture) {
     release(texture.mtl);
 }
 
+texture_descriptor :: (texture: Texture) -> Texture_Descriptor {
+    descriptor: Texture_Descriptor;
+    descriptor[0] = texture.resource_id._impl;
+    return descriptor;
+}
+
 // TODO: We don't care about the View_Desc for now.
 texture_view_descriptor :: (texture: Texture, desc: View_Desc) -> Texture_Descriptor {
     descriptor: Texture_Descriptor;
