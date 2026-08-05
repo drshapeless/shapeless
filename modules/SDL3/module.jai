@@ -4,23 +4,23 @@
     #load "linux/linux.jai";
 } else #if OS == .MACOS {
     #load "macos/macos.jai";
-    // libsdl3 :: #library,system "libSDL3";
-    libsdl3 :: #library "macos/libsdl3";
+    libsdl3 :: #library,system "libSDL3";
+    // libsdl3 :: #library "macos/libSDL3";
     // The following mess is the cost of linking SDL staticly
-    AVFoundation           :: #library,system,link_always "AVFoundation";
-    AudioToolbox           :: #library,system,link_always "AudioToolbox";
-    Carbon                 :: #library,system,link_always "Carbon";
-    Cocoa                  :: #library,system,link_always "Cocoa";
-    CoreAudio              :: #library,system,link_always "CoreAudio";
-    CoreHaptics            :: #library,system,link_always "CoreHaptics";
-    CoreMedia              :: #library,system,link_always "CoreMedia";
-    CoreVideo              :: #library,system,link_always "CoreVideo";
-    ForceFeedback          :: #library,system,link_always "ForceFeedback";
-    Foundation             :: #library,system,link_always "Foundation";
-    GameController         :: #library,system,link_always "GameController";
-    IOKit                  :: #library,system,link_always "IOKit";
-    QuartzCore             :: #library,system,link_always "QuartzCore";
-    UniformTypeIdentifiers :: #library,system,link_always "UniformTypeIdentifiers";
+    // AVFoundation           :: #library,system,link_always "AVFoundation";
+    // AudioToolbox           :: #library,system,link_always "AudioToolbox";
+    // Carbon                 :: #library,system,link_always "Carbon";
+    // Cocoa                  :: #library,system,link_always "Cocoa";
+    // CoreAudio              :: #library,system,link_always "CoreAudio";
+    // CoreHaptics            :: #library,system,link_always "CoreHaptics";
+    // CoreMedia              :: #library,system,link_always "CoreMedia";
+    // CoreVideo              :: #library,system,link_always "CoreVideo";
+    // ForceFeedback          :: #library,system,link_always "ForceFeedback";
+    // Foundation             :: #library,system,link_always "Foundation";
+    // GameController         :: #library,system,link_always "GameController";
+    // IOKit                  :: #library,system,link_always "IOKit";
+    // QuartzCore             :: #library,system,link_always "QuartzCore";
+    // UniformTypeIdentifiers :: #library,system,link_always "UniformTypeIdentifiers";
 }
 
 SDL_GetWindowSize :: (window: *SDL_Window) -> bool, width:s32, height:s32 {
