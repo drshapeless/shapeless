@@ -2796,10 +2796,10 @@ SpvOp :: SpvOp_;
 * Gets the SPVC_C_API_VERSION_* used to build this library.
 * Can be used to check for ABI mismatch if so-versioning did not catch it.
 */
-spvc_get_version :: (major: *u32, minor: *u32, patch: *u32) -> void #foreign libspirv_cross_c_shared;
+spvc_get_version :: (major: *u32, minor: *u32, patch: *u32) -> void #foreign libspirv_cross;
 
 /* Gets a human readable version string to identify which commit a particular binary was created from. */
-spvc_get_commit_revision_and_timestamp :: () -> *u8 #foreign libspirv_cross_c_shared;
+spvc_get_commit_revision_and_timestamp :: () -> *u8 #foreign libspirv_cross;
 
 spvc_context_s :: struct {}
 /* These types are opaque to the user. */
@@ -3027,7 +3027,7 @@ spvc_msl_vertex_attribute :: struct {
 /*
 * Initializes the vertex attribute struct.
 */
-spvc_msl_vertex_attribute_init :: (attr: *spvc_msl_vertex_attribute) -> void #foreign libspirv_cross_c_shared;
+spvc_msl_vertex_attribute_init :: (attr: *spvc_msl_vertex_attribute) -> void #foreign libspirv_cross;
 
 /* Maps to C++ API. Deprecated; use spvc_msl_shader_interface_var_2. */
 spvc_msl_shader_interface_var :: struct {
@@ -3044,12 +3044,12 @@ spvc_msl_shader_input :: spvc_msl_shader_interface_var;
 * Initializes the shader input struct.
 * Deprecated. Use spvc_msl_shader_interface_var_init_2().
 */
-spvc_msl_shader_interface_var_init :: (var: *spvc_msl_shader_interface_var) -> void #foreign libspirv_cross_c_shared;
+spvc_msl_shader_interface_var_init :: (var: *spvc_msl_shader_interface_var) -> void #foreign libspirv_cross;
 
 /*
 * Deprecated. Use spvc_msl_shader_interface_var_init_2().
 */
-spvc_msl_shader_input_init :: (input: *spvc_msl_shader_input) -> void #foreign libspirv_cross_c_shared;
+spvc_msl_shader_input_init :: (input: *spvc_msl_shader_input) -> void #foreign libspirv_cross;
 
 /* Maps to C++ API. */
 spvc_msl_shader_variable_rate :: enum u32 {
@@ -3071,7 +3071,7 @@ spvc_msl_shader_interface_var_2 :: struct {
 /*
 * Initializes the shader interface variable struct.
 */
-spvc_msl_shader_interface_var_init_2 :: (var: *spvc_msl_shader_interface_var_2) -> void #foreign libspirv_cross_c_shared;
+spvc_msl_shader_interface_var_init_2 :: (var: *spvc_msl_shader_interface_var_2) -> void #foreign libspirv_cross;
 
 /* Maps to C++ API.
 * Deprecated. Use spvc_msl_resource_binding_2. */
@@ -3099,11 +3099,11 @@ spvc_msl_resource_binding_2 :: struct {
 * The defaults are non-zero.
 * Deprecated: Use spvc_msl_resource_binding_init_2.
 */
-spvc_msl_resource_binding_init :: (binding: *spvc_msl_resource_binding) -> void #foreign libspirv_cross_c_shared;
-spvc_msl_resource_binding_init_2 :: (binding: *spvc_msl_resource_binding_2) -> void #foreign libspirv_cross_c_shared;
+spvc_msl_resource_binding_init :: (binding: *spvc_msl_resource_binding) -> void #foreign libspirv_cross;
+spvc_msl_resource_binding_init_2 :: (binding: *spvc_msl_resource_binding_2) -> void #foreign libspirv_cross;
 
 /* Runtime check for incompatibility. Obsolete. */
-spvc_msl_get_aux_buffer_struct_version :: () -> u32 #foreign libspirv_cross_c_shared;
+spvc_msl_get_aux_buffer_struct_version :: () -> u32 #foreign libspirv_cross;
 
 /* Maps to C++ API. */
 spvc_msl_sampler_coord :: enum u32 {
@@ -3225,7 +3225,7 @@ spvc_msl_constexpr_sampler :: struct {
 * Initializes the constexpr sampler struct.
 * The defaults are non-zero.
 */
-spvc_msl_constexpr_sampler_init :: (sampler: *spvc_msl_constexpr_sampler) -> void #foreign libspirv_cross_c_shared;
+spvc_msl_constexpr_sampler_init :: (sampler: *spvc_msl_constexpr_sampler) -> void #foreign libspirv_cross;
 
 /* Maps to the sampler Y'CbCr conversion-related portions of MSLConstexprSampler. See C++ API for defaults and details. */
 spvc_msl_sampler_ycbcr_conversion :: struct {
@@ -3244,7 +3244,7 @@ spvc_msl_sampler_ycbcr_conversion :: struct {
 * Initializes the constexpr sampler struct.
 * The defaults are non-zero.
 */
-spvc_msl_sampler_ycbcr_conversion_init :: (conv: *spvc_msl_sampler_ycbcr_conversion) -> void #foreign libspirv_cross_c_shared;
+spvc_msl_sampler_ycbcr_conversion_init :: (conv: *spvc_msl_sampler_ycbcr_conversion) -> void #foreign libspirv_cross;
 
 /* Maps to C++ API. */
 spvc_hlsl_binding_flag_bits :: enum u32 {
@@ -3279,7 +3279,7 @@ spvc_hlsl_resource_binding :: struct {
 * Initializes the resource binding struct.
 * The defaults are non-zero.
 */
-spvc_hlsl_resource_binding_init :: (binding: *spvc_hlsl_resource_binding) -> void #foreign libspirv_cross_c_shared;
+spvc_hlsl_resource_binding_init :: (binding: *spvc_hlsl_resource_binding) -> void #foreign libspirv_cross;
 
 /* Maps to the various spirv_cross::Compiler*::Option structures. See C++ API for defaults and details. */
 spvc_compiler_option :: enum u32 {
@@ -3390,273 +3390,273 @@ spvc_compiler_option :: enum u32 {
 * All pointers handed out by the APIs are only valid as long as the context
 * is alive and spvc_context_release_allocations has not been called.
 */
-spvc_context_create :: (_context: *spvc_context) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_context_create :: (_context: *spvc_context) -> spvc_result #foreign libspirv_cross;
 
 /* Frees all memory allocations and objects associated with the context and its child objects. */
-spvc_context_destroy :: (_context: spvc_context) -> void #foreign libspirv_cross_c_shared;
+spvc_context_destroy :: (_context: spvc_context) -> void #foreign libspirv_cross;
 
 /* Frees all memory allocations and objects associated with the context and its child objects, but keeps the context alive. */
-spvc_context_release_allocations :: (_context: spvc_context) -> void #foreign libspirv_cross_c_shared;
+spvc_context_release_allocations :: (_context: spvc_context) -> void #foreign libspirv_cross;
 
 /* Get the string for the last error which was logged. */
-spvc_context_get_last_error_string :: (_context: spvc_context) -> *u8 #foreign libspirv_cross_c_shared;
+spvc_context_get_last_error_string :: (_context: spvc_context) -> *u8 #foreign libspirv_cross;
 
 /* Get notified in a callback when an error triggers. Useful for debugging. */
 spvc_error_callback :: #type (userdata: *void, error: *u8) -> void #c_call;
-spvc_context_set_error_callback :: (_context: spvc_context, cb: spvc_error_callback, userdata: *void) -> void #foreign libspirv_cross_c_shared;
+spvc_context_set_error_callback :: (_context: spvc_context, cb: spvc_error_callback, userdata: *void) -> void #foreign libspirv_cross;
 
 /* SPIR-V parsing interface. Maps to Parser which then creates a ParsedIR, and that IR is extracted into the handle. */
-spvc_context_parse_spirv :: (_context: spvc_context, spirv: *SpvId, word_count: u64, parsed_ir: *spvc_parsed_ir) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_context_parse_spirv :: (_context: spvc_context, spirv: *SpvId, word_count: u64, parsed_ir: *spvc_parsed_ir) -> spvc_result #foreign libspirv_cross;
 
 /*
 * Create a compiler backend. Capture mode controls if we construct by copy or move semantics.
 * It is always recommended to use SPVC_CAPTURE_MODE_TAKE_OWNERSHIP if you only intend to cross-compile the IR once.
 */
-spvc_context_create_compiler :: (_context: spvc_context, backend: spvc_backend, parsed_ir: spvc_parsed_ir, mode: spvc_capture_mode, compiler: *spvc_compiler) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_context_create_compiler :: (_context: spvc_context, backend: spvc_backend, parsed_ir: spvc_parsed_ir, mode: spvc_capture_mode, compiler: *spvc_compiler) -> spvc_result #foreign libspirv_cross;
 
 /* Maps directly to C++ API. */
-spvc_compiler_get_current_id_bound :: (compiler: spvc_compiler) -> u32 #foreign libspirv_cross_c_shared;
+spvc_compiler_get_current_id_bound :: (compiler: spvc_compiler) -> u32 #foreign libspirv_cross;
 
 /* Create compiler options, which will initialize defaults. */
-spvc_compiler_create_compiler_options :: (compiler: spvc_compiler, options: *spvc_compiler_options) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_compiler_create_compiler_options :: (compiler: spvc_compiler, options: *spvc_compiler_options) -> spvc_result #foreign libspirv_cross;
 
 /* Override options. Will return error if e.g. MSL options are used for the HLSL backend, etc. */
-spvc_compiler_options_set_bool :: (options: spvc_compiler_options, option: spvc_compiler_option, value: spvc_bool) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_compiler_options_set_bool :: (options: spvc_compiler_options, option: spvc_compiler_option, value: spvc_bool) -> spvc_result #foreign libspirv_cross;
 
-spvc_compiler_options_set_uint :: (options: spvc_compiler_options, option: spvc_compiler_option, value: u32) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_compiler_options_set_uint :: (options: spvc_compiler_options, option: spvc_compiler_option, value: u32) -> spvc_result #foreign libspirv_cross;
 
 /* Set compiler options. */
-spvc_compiler_install_compiler_options :: (compiler: spvc_compiler, options: spvc_compiler_options) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_compiler_install_compiler_options :: (compiler: spvc_compiler, options: spvc_compiler_options) -> spvc_result #foreign libspirv_cross;
 
 /* Compile IR into a string. *source is owned by the context, and caller must not free it themselves. */
-spvc_compiler_compile :: (compiler: spvc_compiler, source: **u8) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_compiler_compile :: (compiler: spvc_compiler, source: **u8) -> spvc_result #foreign libspirv_cross;
 
 /* Maps to C++ API. */
-spvc_compiler_add_header_line :: (compiler: spvc_compiler, line: *u8) -> spvc_result #foreign libspirv_cross_c_shared;
-spvc_compiler_require_extension :: (compiler: spvc_compiler, ext: *u8) -> spvc_result #foreign libspirv_cross_c_shared;
-spvc_compiler_get_num_required_extensions :: (compiler: spvc_compiler) -> u64 #foreign libspirv_cross_c_shared;
-spvc_compiler_get_required_extension :: (compiler: spvc_compiler, index: u64) -> *u8 #foreign libspirv_cross_c_shared;
-spvc_compiler_flatten_buffer_block :: (compiler: spvc_compiler, id: spvc_variable_id) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_compiler_add_header_line :: (compiler: spvc_compiler, line: *u8) -> spvc_result #foreign libspirv_cross;
+spvc_compiler_require_extension :: (compiler: spvc_compiler, ext: *u8) -> spvc_result #foreign libspirv_cross;
+spvc_compiler_get_num_required_extensions :: (compiler: spvc_compiler) -> u64 #foreign libspirv_cross;
+spvc_compiler_get_required_extension :: (compiler: spvc_compiler, index: u64) -> *u8 #foreign libspirv_cross;
+spvc_compiler_flatten_buffer_block :: (compiler: spvc_compiler, id: spvc_variable_id) -> spvc_result #foreign libspirv_cross;
 
-spvc_compiler_variable_is_depth_or_compare :: (compiler: spvc_compiler, id: spvc_variable_id) -> spvc_bool #foreign libspirv_cross_c_shared;
+spvc_compiler_variable_is_depth_or_compare :: (compiler: spvc_compiler, id: spvc_variable_id) -> spvc_bool #foreign libspirv_cross;
 
-spvc_compiler_mask_stage_output_by_location :: (compiler: spvc_compiler, location: u32, component: u32) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_compiler_mask_stage_output_by_location :: (compiler: spvc_compiler, location: u32, component: u32) -> spvc_result #foreign libspirv_cross;
 
-spvc_compiler_mask_stage_output_by_builtin :: (compiler: spvc_compiler, builtin: SpvBuiltIn) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_compiler_mask_stage_output_by_builtin :: (compiler: spvc_compiler, builtin: SpvBuiltIn) -> spvc_result #foreign libspirv_cross;
 
 /*
 * HLSL specifics.
 * Maps to C++ API.
 */
-spvc_compiler_hlsl_set_root_constants_layout :: (compiler: spvc_compiler, constant_info: *spvc_hlsl_root_constants, count: u64) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_compiler_hlsl_set_root_constants_layout :: (compiler: spvc_compiler, constant_info: *spvc_hlsl_root_constants, count: u64) -> spvc_result #foreign libspirv_cross;
 
-spvc_compiler_hlsl_add_vertex_attribute_remap :: (compiler: spvc_compiler, remap: *spvc_hlsl_vertex_attribute_remap, remaps: u64) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_compiler_hlsl_add_vertex_attribute_remap :: (compiler: spvc_compiler, remap: *spvc_hlsl_vertex_attribute_remap, remaps: u64) -> spvc_result #foreign libspirv_cross;
 
-spvc_compiler_hlsl_remap_num_workgroups_builtin :: (compiler: spvc_compiler) -> spvc_variable_id #foreign libspirv_cross_c_shared;
+spvc_compiler_hlsl_remap_num_workgroups_builtin :: (compiler: spvc_compiler) -> spvc_variable_id #foreign libspirv_cross;
 
-spvc_compiler_hlsl_set_resource_binding_flags :: (compiler: spvc_compiler, flags: spvc_hlsl_binding_flags) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_compiler_hlsl_set_resource_binding_flags :: (compiler: spvc_compiler, flags: spvc_hlsl_binding_flags) -> spvc_result #foreign libspirv_cross;
 
-spvc_compiler_hlsl_add_resource_binding :: (compiler: spvc_compiler, binding: *spvc_hlsl_resource_binding) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_compiler_hlsl_add_resource_binding :: (compiler: spvc_compiler, binding: *spvc_hlsl_resource_binding) -> spvc_result #foreign libspirv_cross;
 
-spvc_compiler_hlsl_is_resource_used :: (compiler: spvc_compiler, model: SpvExecutionModel, set: u32, binding: u32) -> spvc_bool #foreign libspirv_cross_c_shared;
+spvc_compiler_hlsl_is_resource_used :: (compiler: spvc_compiler, model: SpvExecutionModel, set: u32, binding: u32) -> spvc_bool #foreign libspirv_cross;
 
 /*
 * MSL specifics.
 * Maps to C++ API.
 */
-spvc_compiler_msl_is_rasterization_disabled :: (compiler: spvc_compiler) -> spvc_bool #foreign libspirv_cross_c_shared;
+spvc_compiler_msl_is_rasterization_disabled :: (compiler: spvc_compiler) -> spvc_bool #foreign libspirv_cross;
 
 /* Obsolete. Renamed to needs_swizzle_buffer. */
-spvc_compiler_msl_needs_aux_buffer :: (compiler: spvc_compiler) -> spvc_bool #foreign libspirv_cross_c_shared;
-spvc_compiler_msl_needs_swizzle_buffer :: (compiler: spvc_compiler) -> spvc_bool #foreign libspirv_cross_c_shared;
-spvc_compiler_msl_needs_buffer_size_buffer :: (compiler: spvc_compiler) -> spvc_bool #foreign libspirv_cross_c_shared;
+spvc_compiler_msl_needs_aux_buffer :: (compiler: spvc_compiler) -> spvc_bool #foreign libspirv_cross;
+spvc_compiler_msl_needs_swizzle_buffer :: (compiler: spvc_compiler) -> spvc_bool #foreign libspirv_cross;
+spvc_compiler_msl_needs_buffer_size_buffer :: (compiler: spvc_compiler) -> spvc_bool #foreign libspirv_cross;
 
-spvc_compiler_msl_needs_output_buffer :: (compiler: spvc_compiler) -> spvc_bool #foreign libspirv_cross_c_shared;
-spvc_compiler_msl_needs_patch_output_buffer :: (compiler: spvc_compiler) -> spvc_bool #foreign libspirv_cross_c_shared;
-spvc_compiler_msl_needs_input_threadgroup_mem :: (compiler: spvc_compiler) -> spvc_bool #foreign libspirv_cross_c_shared;
-spvc_compiler_msl_add_vertex_attribute :: (compiler: spvc_compiler, attrs: *spvc_msl_vertex_attribute) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_compiler_msl_needs_output_buffer :: (compiler: spvc_compiler) -> spvc_bool #foreign libspirv_cross;
+spvc_compiler_msl_needs_patch_output_buffer :: (compiler: spvc_compiler) -> spvc_bool #foreign libspirv_cross;
+spvc_compiler_msl_needs_input_threadgroup_mem :: (compiler: spvc_compiler) -> spvc_bool #foreign libspirv_cross;
+spvc_compiler_msl_add_vertex_attribute :: (compiler: spvc_compiler, attrs: *spvc_msl_vertex_attribute) -> spvc_result #foreign libspirv_cross;
 
 /* Deprecated; use spvc_compiler_msl_add_resource_binding_2(). */
-spvc_compiler_msl_add_resource_binding :: (compiler: spvc_compiler, binding: *spvc_msl_resource_binding) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_compiler_msl_add_resource_binding :: (compiler: spvc_compiler, binding: *spvc_msl_resource_binding) -> spvc_result #foreign libspirv_cross;
 
-spvc_compiler_msl_add_resource_binding_2 :: (compiler: spvc_compiler, binding: *spvc_msl_resource_binding_2) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_compiler_msl_add_resource_binding_2 :: (compiler: spvc_compiler, binding: *spvc_msl_resource_binding_2) -> spvc_result #foreign libspirv_cross;
 
 /* Deprecated; use spvc_compiler_msl_add_shader_input_2(). */
-spvc_compiler_msl_add_shader_input :: (compiler: spvc_compiler, input: *spvc_msl_shader_interface_var) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_compiler_msl_add_shader_input :: (compiler: spvc_compiler, input: *spvc_msl_shader_interface_var) -> spvc_result #foreign libspirv_cross;
 
-spvc_compiler_msl_add_shader_input_2 :: (compiler: spvc_compiler, input: *spvc_msl_shader_interface_var_2) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_compiler_msl_add_shader_input_2 :: (compiler: spvc_compiler, input: *spvc_msl_shader_interface_var_2) -> spvc_result #foreign libspirv_cross;
 
 /* Deprecated; use spvc_compiler_msl_add_shader_output_2(). */
-spvc_compiler_msl_add_shader_output :: (compiler: spvc_compiler, output: *spvc_msl_shader_interface_var) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_compiler_msl_add_shader_output :: (compiler: spvc_compiler, output: *spvc_msl_shader_interface_var) -> spvc_result #foreign libspirv_cross;
 
-spvc_compiler_msl_add_shader_output_2 :: (compiler: spvc_compiler, output: *spvc_msl_shader_interface_var_2) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_compiler_msl_add_shader_output_2 :: (compiler: spvc_compiler, output: *spvc_msl_shader_interface_var_2) -> spvc_result #foreign libspirv_cross;
 
-spvc_compiler_msl_add_discrete_descriptor_set :: (compiler: spvc_compiler, desc_set: u32) -> spvc_result #foreign libspirv_cross_c_shared;
-spvc_compiler_msl_set_argument_buffer_device_address_space :: (compiler: spvc_compiler, desc_set: u32, device_address: spvc_bool) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_compiler_msl_add_discrete_descriptor_set :: (compiler: spvc_compiler, desc_set: u32) -> spvc_result #foreign libspirv_cross;
+spvc_compiler_msl_set_argument_buffer_device_address_space :: (compiler: spvc_compiler, desc_set: u32, device_address: spvc_bool) -> spvc_result #foreign libspirv_cross;
 
 /* Obsolete, use is_shader_input_used. */
-spvc_compiler_msl_is_vertex_attribute_used :: (compiler: spvc_compiler, location: u32) -> spvc_bool #foreign libspirv_cross_c_shared;
-spvc_compiler_msl_is_shader_input_used :: (compiler: spvc_compiler, location: u32) -> spvc_bool #foreign libspirv_cross_c_shared;
-spvc_compiler_msl_is_shader_output_used :: (compiler: spvc_compiler, location: u32) -> spvc_bool #foreign libspirv_cross_c_shared;
+spvc_compiler_msl_is_vertex_attribute_used :: (compiler: spvc_compiler, location: u32) -> spvc_bool #foreign libspirv_cross;
+spvc_compiler_msl_is_shader_input_used :: (compiler: spvc_compiler, location: u32) -> spvc_bool #foreign libspirv_cross;
+spvc_compiler_msl_is_shader_output_used :: (compiler: spvc_compiler, location: u32) -> spvc_bool #foreign libspirv_cross;
 
-spvc_compiler_msl_is_resource_used :: (compiler: spvc_compiler, model: SpvExecutionModel, set: u32, binding: u32) -> spvc_bool #foreign libspirv_cross_c_shared;
+spvc_compiler_msl_is_resource_used :: (compiler: spvc_compiler, model: SpvExecutionModel, set: u32, binding: u32) -> spvc_bool #foreign libspirv_cross;
 
-spvc_compiler_msl_remap_constexpr_sampler :: (compiler: spvc_compiler, id: spvc_variable_id, sampler: *spvc_msl_constexpr_sampler) -> spvc_result #foreign libspirv_cross_c_shared;
-spvc_compiler_msl_remap_constexpr_sampler_by_binding :: (compiler: spvc_compiler, desc_set: u32, binding: u32, sampler: *spvc_msl_constexpr_sampler) -> spvc_result #foreign libspirv_cross_c_shared;
-spvc_compiler_msl_remap_constexpr_sampler_ycbcr :: (compiler: spvc_compiler, id: spvc_variable_id, sampler: *spvc_msl_constexpr_sampler, conv: *spvc_msl_sampler_ycbcr_conversion) -> spvc_result #foreign libspirv_cross_c_shared;
-spvc_compiler_msl_remap_constexpr_sampler_by_binding_ycbcr :: (compiler: spvc_compiler, desc_set: u32, binding: u32, sampler: *spvc_msl_constexpr_sampler, conv: *spvc_msl_sampler_ycbcr_conversion) -> spvc_result #foreign libspirv_cross_c_shared;
-spvc_compiler_msl_set_fragment_output_components :: (compiler: spvc_compiler, location: u32, components: u32) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_compiler_msl_remap_constexpr_sampler :: (compiler: spvc_compiler, id: spvc_variable_id, sampler: *spvc_msl_constexpr_sampler) -> spvc_result #foreign libspirv_cross;
+spvc_compiler_msl_remap_constexpr_sampler_by_binding :: (compiler: spvc_compiler, desc_set: u32, binding: u32, sampler: *spvc_msl_constexpr_sampler) -> spvc_result #foreign libspirv_cross;
+spvc_compiler_msl_remap_constexpr_sampler_ycbcr :: (compiler: spvc_compiler, id: spvc_variable_id, sampler: *spvc_msl_constexpr_sampler, conv: *spvc_msl_sampler_ycbcr_conversion) -> spvc_result #foreign libspirv_cross;
+spvc_compiler_msl_remap_constexpr_sampler_by_binding_ycbcr :: (compiler: spvc_compiler, desc_set: u32, binding: u32, sampler: *spvc_msl_constexpr_sampler, conv: *spvc_msl_sampler_ycbcr_conversion) -> spvc_result #foreign libspirv_cross;
+spvc_compiler_msl_set_fragment_output_components :: (compiler: spvc_compiler, location: u32, components: u32) -> spvc_result #foreign libspirv_cross;
 
-spvc_compiler_msl_get_automatic_resource_binding :: (compiler: spvc_compiler, id: spvc_variable_id) -> u32 #foreign libspirv_cross_c_shared;
-spvc_compiler_msl_get_automatic_resource_binding_secondary :: (compiler: spvc_compiler, id: spvc_variable_id) -> u32 #foreign libspirv_cross_c_shared;
+spvc_compiler_msl_get_automatic_resource_binding :: (compiler: spvc_compiler, id: spvc_variable_id) -> u32 #foreign libspirv_cross;
+spvc_compiler_msl_get_automatic_resource_binding_secondary :: (compiler: spvc_compiler, id: spvc_variable_id) -> u32 #foreign libspirv_cross;
 
-spvc_compiler_msl_add_dynamic_buffer :: (compiler: spvc_compiler, desc_set: u32, binding: u32, index: u32) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_compiler_msl_add_dynamic_buffer :: (compiler: spvc_compiler, desc_set: u32, binding: u32, index: u32) -> spvc_result #foreign libspirv_cross;
 
-spvc_compiler_msl_add_inline_uniform_block :: (compiler: spvc_compiler, desc_set: u32, binding: u32) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_compiler_msl_add_inline_uniform_block :: (compiler: spvc_compiler, desc_set: u32, binding: u32) -> spvc_result #foreign libspirv_cross;
 
-spvc_compiler_msl_set_combined_sampler_suffix :: (compiler: spvc_compiler, suffix: *u8) -> spvc_result #foreign libspirv_cross_c_shared;
-spvc_compiler_msl_get_combined_sampler_suffix :: (compiler: spvc_compiler) -> *u8 #foreign libspirv_cross_c_shared;
+spvc_compiler_msl_set_combined_sampler_suffix :: (compiler: spvc_compiler, suffix: *u8) -> spvc_result #foreign libspirv_cross;
+spvc_compiler_msl_get_combined_sampler_suffix :: (compiler: spvc_compiler) -> *u8 #foreign libspirv_cross;
 
 /*
 * Reflect resources.
 * Maps almost 1:1 to C++ API.
 */
-spvc_compiler_get_active_interface_variables :: (compiler: spvc_compiler, set: *spvc_set) -> spvc_result #foreign libspirv_cross_c_shared;
-spvc_compiler_set_enabled_interface_variables :: (compiler: spvc_compiler, set: spvc_set) -> spvc_result #foreign libspirv_cross_c_shared;
-spvc_compiler_create_shader_resources :: (compiler: spvc_compiler, resources: *spvc_resources) -> spvc_result #foreign libspirv_cross_c_shared;
-spvc_compiler_create_shader_resources_for_active_variables :: (compiler: spvc_compiler, resources: *spvc_resources, active: spvc_set) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_compiler_get_active_interface_variables :: (compiler: spvc_compiler, set: *spvc_set) -> spvc_result #foreign libspirv_cross;
+spvc_compiler_set_enabled_interface_variables :: (compiler: spvc_compiler, set: spvc_set) -> spvc_result #foreign libspirv_cross;
+spvc_compiler_create_shader_resources :: (compiler: spvc_compiler, resources: *spvc_resources) -> spvc_result #foreign libspirv_cross;
+spvc_compiler_create_shader_resources_for_active_variables :: (compiler: spvc_compiler, resources: *spvc_resources, active: spvc_set) -> spvc_result #foreign libspirv_cross;
 
-spvc_resources_get_resource_list_for_type :: (resources: spvc_resources, type: spvc_resource_type, resource_list: **spvc_reflected_resource, resource_size: *u64) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_resources_get_resource_list_for_type :: (resources: spvc_resources, type: spvc_resource_type, resource_list: **spvc_reflected_resource, resource_size: *u64) -> spvc_result #foreign libspirv_cross;
 
-spvc_resources_get_builtin_resource_list_for_type :: (resources: spvc_resources, type: spvc_builtin_resource_type, resource_list: **spvc_reflected_builtin_resource, resource_size: *u64) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_resources_get_builtin_resource_list_for_type :: (resources: spvc_resources, type: spvc_builtin_resource_type, resource_list: **spvc_reflected_builtin_resource, resource_size: *u64) -> spvc_result #foreign libspirv_cross;
 
 /*
 * Decorations.
 * Maps to C++ API.
 */
-spvc_compiler_set_decoration :: (compiler: spvc_compiler, id: SpvId, decoration: SpvDecoration, argument: u32) -> void #foreign libspirv_cross_c_shared;
+spvc_compiler_set_decoration :: (compiler: spvc_compiler, id: SpvId, decoration: SpvDecoration, argument: u32) -> void #foreign libspirv_cross;
 
-spvc_compiler_set_decoration_string :: (compiler: spvc_compiler, id: SpvId, decoration: SpvDecoration, argument: *u8) -> void #foreign libspirv_cross_c_shared;
+spvc_compiler_set_decoration_string :: (compiler: spvc_compiler, id: SpvId, decoration: SpvDecoration, argument: *u8) -> void #foreign libspirv_cross;
 
-spvc_compiler_set_name :: (compiler: spvc_compiler, id: SpvId, argument: *u8) -> void #foreign libspirv_cross_c_shared;
-spvc_compiler_set_member_decoration :: (compiler: spvc_compiler, id: spvc_type_id, member_index: u32, decoration: SpvDecoration, argument: u32) -> void #foreign libspirv_cross_c_shared;
+spvc_compiler_set_name :: (compiler: spvc_compiler, id: SpvId, argument: *u8) -> void #foreign libspirv_cross;
+spvc_compiler_set_member_decoration :: (compiler: spvc_compiler, id: spvc_type_id, member_index: u32, decoration: SpvDecoration, argument: u32) -> void #foreign libspirv_cross;
 
-spvc_compiler_set_member_decoration_string :: (compiler: spvc_compiler, id: spvc_type_id, member_index: u32, decoration: SpvDecoration, argument: *u8) -> void #foreign libspirv_cross_c_shared;
+spvc_compiler_set_member_decoration_string :: (compiler: spvc_compiler, id: spvc_type_id, member_index: u32, decoration: SpvDecoration, argument: *u8) -> void #foreign libspirv_cross;
 
-spvc_compiler_set_member_name :: (compiler: spvc_compiler, id: spvc_type_id, member_index: u32, argument: *u8) -> void #foreign libspirv_cross_c_shared;
+spvc_compiler_set_member_name :: (compiler: spvc_compiler, id: spvc_type_id, member_index: u32, argument: *u8) -> void #foreign libspirv_cross;
 
-spvc_compiler_unset_decoration :: (compiler: spvc_compiler, id: SpvId, decoration: SpvDecoration) -> void #foreign libspirv_cross_c_shared;
-spvc_compiler_unset_member_decoration :: (compiler: spvc_compiler, id: spvc_type_id, member_index: u32, decoration: SpvDecoration) -> void #foreign libspirv_cross_c_shared;
+spvc_compiler_unset_decoration :: (compiler: spvc_compiler, id: SpvId, decoration: SpvDecoration) -> void #foreign libspirv_cross;
+spvc_compiler_unset_member_decoration :: (compiler: spvc_compiler, id: spvc_type_id, member_index: u32, decoration: SpvDecoration) -> void #foreign libspirv_cross;
 
-spvc_compiler_has_decoration :: (compiler: spvc_compiler, id: SpvId, decoration: SpvDecoration) -> spvc_bool #foreign libspirv_cross_c_shared;
-spvc_compiler_has_member_decoration :: (compiler: spvc_compiler, id: spvc_type_id, member_index: u32, decoration: SpvDecoration) -> spvc_bool #foreign libspirv_cross_c_shared;
+spvc_compiler_has_decoration :: (compiler: spvc_compiler, id: SpvId, decoration: SpvDecoration) -> spvc_bool #foreign libspirv_cross;
+spvc_compiler_has_member_decoration :: (compiler: spvc_compiler, id: spvc_type_id, member_index: u32, decoration: SpvDecoration) -> spvc_bool #foreign libspirv_cross;
 
-spvc_compiler_get_name :: (compiler: spvc_compiler, id: SpvId) -> *u8 #foreign libspirv_cross_c_shared;
-spvc_compiler_get_decoration :: (compiler: spvc_compiler, id: SpvId, decoration: SpvDecoration) -> u32 #foreign libspirv_cross_c_shared;
-spvc_compiler_get_decoration_string :: (compiler: spvc_compiler, id: SpvId, decoration: SpvDecoration) -> *u8 #foreign libspirv_cross_c_shared;
+spvc_compiler_get_name :: (compiler: spvc_compiler, id: SpvId) -> *u8 #foreign libspirv_cross;
+spvc_compiler_get_decoration :: (compiler: spvc_compiler, id: SpvId, decoration: SpvDecoration) -> u32 #foreign libspirv_cross;
+spvc_compiler_get_decoration_string :: (compiler: spvc_compiler, id: SpvId, decoration: SpvDecoration) -> *u8 #foreign libspirv_cross;
 
-spvc_compiler_get_member_decoration :: (compiler: spvc_compiler, id: spvc_type_id, member_index: u32, decoration: SpvDecoration) -> u32 #foreign libspirv_cross_c_shared;
+spvc_compiler_get_member_decoration :: (compiler: spvc_compiler, id: spvc_type_id, member_index: u32, decoration: SpvDecoration) -> u32 #foreign libspirv_cross;
 
-spvc_compiler_get_member_decoration_string :: (compiler: spvc_compiler, id: spvc_type_id, member_index: u32, decoration: SpvDecoration) -> *u8 #foreign libspirv_cross_c_shared;
+spvc_compiler_get_member_decoration_string :: (compiler: spvc_compiler, id: spvc_type_id, member_index: u32, decoration: SpvDecoration) -> *u8 #foreign libspirv_cross;
 
-spvc_compiler_get_member_name :: (compiler: spvc_compiler, id: spvc_type_id, member_index: u32) -> *u8 #foreign libspirv_cross_c_shared;
+spvc_compiler_get_member_name :: (compiler: spvc_compiler, id: spvc_type_id, member_index: u32) -> *u8 #foreign libspirv_cross;
 
 /*
 * Entry points.
 * Maps to C++ API.
 */
-spvc_compiler_get_entry_points :: (compiler: spvc_compiler, entry_points: **spvc_entry_point, num_entry_points: *u64) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_compiler_get_entry_points :: (compiler: spvc_compiler, entry_points: **spvc_entry_point, num_entry_points: *u64) -> spvc_result #foreign libspirv_cross;
 
-spvc_compiler_set_entry_point :: (compiler: spvc_compiler, name: *u8, model: SpvExecutionModel) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_compiler_set_entry_point :: (compiler: spvc_compiler, name: *u8, model: SpvExecutionModel) -> spvc_result #foreign libspirv_cross;
 
-spvc_compiler_rename_entry_point :: (compiler: spvc_compiler, old_name: *u8, new_name: *u8, model: SpvExecutionModel) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_compiler_rename_entry_point :: (compiler: spvc_compiler, old_name: *u8, new_name: *u8, model: SpvExecutionModel) -> spvc_result #foreign libspirv_cross;
 
-spvc_compiler_get_cleansed_entry_point_name :: (compiler: spvc_compiler, name: *u8, model: SpvExecutionModel) -> *u8 #foreign libspirv_cross_c_shared;
+spvc_compiler_get_cleansed_entry_point_name :: (compiler: spvc_compiler, name: *u8, model: SpvExecutionModel) -> *u8 #foreign libspirv_cross;
 
-spvc_compiler_set_execution_mode :: (compiler: spvc_compiler, mode: SpvExecutionMode) -> void #foreign libspirv_cross_c_shared;
-spvc_compiler_unset_execution_mode :: (compiler: spvc_compiler, mode: SpvExecutionMode) -> void #foreign libspirv_cross_c_shared;
-spvc_compiler_set_execution_mode_with_arguments :: (compiler: spvc_compiler, mode: SpvExecutionMode, arg0: u32, arg1: u32, arg2: u32) -> void #foreign libspirv_cross_c_shared;
+spvc_compiler_set_execution_mode :: (compiler: spvc_compiler, mode: SpvExecutionMode) -> void #foreign libspirv_cross;
+spvc_compiler_unset_execution_mode :: (compiler: spvc_compiler, mode: SpvExecutionMode) -> void #foreign libspirv_cross;
+spvc_compiler_set_execution_mode_with_arguments :: (compiler: spvc_compiler, mode: SpvExecutionMode, arg0: u32, arg1: u32, arg2: u32) -> void #foreign libspirv_cross;
 
-spvc_compiler_get_execution_modes :: (compiler: spvc_compiler, modes: **SpvExecutionMode, num_modes: *u64) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_compiler_get_execution_modes :: (compiler: spvc_compiler, modes: **SpvExecutionMode, num_modes: *u64) -> spvc_result #foreign libspirv_cross;
 
-spvc_compiler_get_execution_mode_argument :: (compiler: spvc_compiler, mode: SpvExecutionMode) -> u32 #foreign libspirv_cross_c_shared;
-spvc_compiler_get_execution_mode_argument_by_index :: (compiler: spvc_compiler, mode: SpvExecutionMode, index: u32) -> u32 #foreign libspirv_cross_c_shared;
+spvc_compiler_get_execution_mode_argument :: (compiler: spvc_compiler, mode: SpvExecutionMode) -> u32 #foreign libspirv_cross;
+spvc_compiler_get_execution_mode_argument_by_index :: (compiler: spvc_compiler, mode: SpvExecutionMode, index: u32) -> u32 #foreign libspirv_cross;
 
-spvc_compiler_get_execution_model :: (compiler: spvc_compiler) -> SpvExecutionModel #foreign libspirv_cross_c_shared;
-spvc_compiler_update_active_builtins :: (compiler: spvc_compiler) -> void #foreign libspirv_cross_c_shared;
-spvc_compiler_has_active_builtin :: (compiler: spvc_compiler, builtin: SpvBuiltIn, storage: SpvStorageClass) -> spvc_bool #foreign libspirv_cross_c_shared;
+spvc_compiler_get_execution_model :: (compiler: spvc_compiler) -> SpvExecutionModel #foreign libspirv_cross;
+spvc_compiler_update_active_builtins :: (compiler: spvc_compiler) -> void #foreign libspirv_cross;
+spvc_compiler_has_active_builtin :: (compiler: spvc_compiler, builtin: SpvBuiltIn, storage: SpvStorageClass) -> spvc_bool #foreign libspirv_cross;
 
 /*
 * Type query interface.
 * Maps to C++ API, except it's read-only.
 */
-spvc_compiler_get_type_handle :: (compiler: spvc_compiler, id: spvc_type_id) -> spvc_type #foreign libspirv_cross_c_shared;
+spvc_compiler_get_type_handle :: (compiler: spvc_compiler, id: spvc_type_id) -> spvc_type #foreign libspirv_cross;
 
 /* Pulls out SPIRType::self. This effectively gives the type ID without array or pointer qualifiers.
 * This is necessary when reflecting decoration/name information on members of a struct,
 * which are placed in the base type, not the qualified type.
 * This is similar to spvc_reflected_resource::base_type_id. */
-spvc_type_get_base_type_id :: (type: spvc_type) -> spvc_type_id #foreign libspirv_cross_c_shared;
+spvc_type_get_base_type_id :: (type: spvc_type) -> spvc_type_id #foreign libspirv_cross;
 
-spvc_type_get_basetype :: (type: spvc_type) -> spvc_basetype #foreign libspirv_cross_c_shared;
-spvc_type_get_bit_width :: (type: spvc_type) -> u32 #foreign libspirv_cross_c_shared;
-spvc_type_get_vector_size :: (type: spvc_type) -> u32 #foreign libspirv_cross_c_shared;
-spvc_type_get_columns :: (type: spvc_type) -> u32 #foreign libspirv_cross_c_shared;
-spvc_type_get_num_array_dimensions :: (type: spvc_type) -> u32 #foreign libspirv_cross_c_shared;
-spvc_type_array_dimension_is_literal :: (type: spvc_type, dimension: u32) -> spvc_bool #foreign libspirv_cross_c_shared;
-spvc_type_get_array_dimension :: (type: spvc_type, dimension: u32) -> SpvId #foreign libspirv_cross_c_shared;
-spvc_type_get_num_member_types :: (type: spvc_type) -> u32 #foreign libspirv_cross_c_shared;
-spvc_type_get_member_type :: (type: spvc_type, index: u32) -> spvc_type_id #foreign libspirv_cross_c_shared;
-spvc_type_get_storage_class :: (type: spvc_type) -> SpvStorageClass #foreign libspirv_cross_c_shared;
+spvc_type_get_basetype :: (type: spvc_type) -> spvc_basetype #foreign libspirv_cross;
+spvc_type_get_bit_width :: (type: spvc_type) -> u32 #foreign libspirv_cross;
+spvc_type_get_vector_size :: (type: spvc_type) -> u32 #foreign libspirv_cross;
+spvc_type_get_columns :: (type: spvc_type) -> u32 #foreign libspirv_cross;
+spvc_type_get_num_array_dimensions :: (type: spvc_type) -> u32 #foreign libspirv_cross;
+spvc_type_array_dimension_is_literal :: (type: spvc_type, dimension: u32) -> spvc_bool #foreign libspirv_cross;
+spvc_type_get_array_dimension :: (type: spvc_type, dimension: u32) -> SpvId #foreign libspirv_cross;
+spvc_type_get_num_member_types :: (type: spvc_type) -> u32 #foreign libspirv_cross;
+spvc_type_get_member_type :: (type: spvc_type, index: u32) -> spvc_type_id #foreign libspirv_cross;
+spvc_type_get_storage_class :: (type: spvc_type) -> SpvStorageClass #foreign libspirv_cross;
 
 /* Image type query. */
-spvc_type_get_image_sampled_type :: (type: spvc_type) -> spvc_type_id #foreign libspirv_cross_c_shared;
-spvc_type_get_image_dimension :: (type: spvc_type) -> SpvDim #foreign libspirv_cross_c_shared;
-spvc_type_get_image_is_depth :: (type: spvc_type) -> spvc_bool #foreign libspirv_cross_c_shared;
-spvc_type_get_image_arrayed :: (type: spvc_type) -> spvc_bool #foreign libspirv_cross_c_shared;
-spvc_type_get_image_multisampled :: (type: spvc_type) -> spvc_bool #foreign libspirv_cross_c_shared;
-spvc_type_get_image_is_storage :: (type: spvc_type) -> spvc_bool #foreign libspirv_cross_c_shared;
-spvc_type_get_image_storage_format :: (type: spvc_type) -> SpvImageFormat #foreign libspirv_cross_c_shared;
-spvc_type_get_image_access_qualifier :: (type: spvc_type) -> SpvAccessQualifier #foreign libspirv_cross_c_shared;
+spvc_type_get_image_sampled_type :: (type: spvc_type) -> spvc_type_id #foreign libspirv_cross;
+spvc_type_get_image_dimension :: (type: spvc_type) -> SpvDim #foreign libspirv_cross;
+spvc_type_get_image_is_depth :: (type: spvc_type) -> spvc_bool #foreign libspirv_cross;
+spvc_type_get_image_arrayed :: (type: spvc_type) -> spvc_bool #foreign libspirv_cross;
+spvc_type_get_image_multisampled :: (type: spvc_type) -> spvc_bool #foreign libspirv_cross;
+spvc_type_get_image_is_storage :: (type: spvc_type) -> spvc_bool #foreign libspirv_cross;
+spvc_type_get_image_storage_format :: (type: spvc_type) -> SpvImageFormat #foreign libspirv_cross;
+spvc_type_get_image_access_qualifier :: (type: spvc_type) -> SpvAccessQualifier #foreign libspirv_cross;
 
 /*
 * Buffer layout query.
 * Maps to C++ API.
 */
-spvc_compiler_get_declared_struct_size :: (compiler: spvc_compiler, struct_type: spvc_type, size: *u64) -> spvc_result #foreign libspirv_cross_c_shared;
-spvc_compiler_get_declared_struct_size_runtime_array :: (compiler: spvc_compiler, struct_type: spvc_type, array_size: u64, size: *u64) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_compiler_get_declared_struct_size :: (compiler: spvc_compiler, struct_type: spvc_type, size: *u64) -> spvc_result #foreign libspirv_cross;
+spvc_compiler_get_declared_struct_size_runtime_array :: (compiler: spvc_compiler, struct_type: spvc_type, array_size: u64, size: *u64) -> spvc_result #foreign libspirv_cross;
 
-spvc_compiler_get_declared_struct_member_size :: (compiler: spvc_compiler, type: spvc_type, index: u32, size: *u64) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_compiler_get_declared_struct_member_size :: (compiler: spvc_compiler, type: spvc_type, index: u32, size: *u64) -> spvc_result #foreign libspirv_cross;
 
-spvc_compiler_type_struct_member_offset :: (compiler: spvc_compiler, type: spvc_type, index: u32, offset: *u32) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_compiler_type_struct_member_offset :: (compiler: spvc_compiler, type: spvc_type, index: u32, offset: *u32) -> spvc_result #foreign libspirv_cross;
 
-spvc_compiler_type_struct_member_array_stride :: (compiler: spvc_compiler, type: spvc_type, index: u32, stride: *u32) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_compiler_type_struct_member_array_stride :: (compiler: spvc_compiler, type: spvc_type, index: u32, stride: *u32) -> spvc_result #foreign libspirv_cross;
 
-spvc_compiler_type_struct_member_matrix_stride :: (compiler: spvc_compiler, type: spvc_type, index: u32, stride: *u32) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_compiler_type_struct_member_matrix_stride :: (compiler: spvc_compiler, type: spvc_type, index: u32, stride: *u32) -> spvc_result #foreign libspirv_cross;
 
 /*
 * Workaround helper functions.
 * Maps to C++ API.
 */
-spvc_compiler_build_dummy_sampler_for_combined_images :: (compiler: spvc_compiler, id: *spvc_variable_id) -> spvc_result #foreign libspirv_cross_c_shared;
-spvc_compiler_build_combined_image_samplers :: (compiler: spvc_compiler) -> spvc_result #foreign libspirv_cross_c_shared;
-spvc_compiler_get_combined_image_samplers :: (compiler: spvc_compiler, samplers: **spvc_combined_image_sampler, num_samplers: *u64) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_compiler_build_dummy_sampler_for_combined_images :: (compiler: spvc_compiler, id: *spvc_variable_id) -> spvc_result #foreign libspirv_cross;
+spvc_compiler_build_combined_image_samplers :: (compiler: spvc_compiler) -> spvc_result #foreign libspirv_cross;
+spvc_compiler_get_combined_image_samplers :: (compiler: spvc_compiler, samplers: **spvc_combined_image_sampler, num_samplers: *u64) -> spvc_result #foreign libspirv_cross;
 
 /*
 * Constants
 * Maps to C++ API.
 */
-spvc_compiler_get_specialization_constants :: (compiler: spvc_compiler, constants: **spvc_specialization_constant, num_constants: *u64) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_compiler_get_specialization_constants :: (compiler: spvc_compiler, constants: **spvc_specialization_constant, num_constants: *u64) -> spvc_result #foreign libspirv_cross;
 
-spvc_compiler_get_constant_handle :: (compiler: spvc_compiler, id: spvc_constant_id) -> spvc_constant #foreign libspirv_cross_c_shared;
+spvc_compiler_get_constant_handle :: (compiler: spvc_compiler, id: spvc_constant_id) -> spvc_constant #foreign libspirv_cross;
 
-spvc_compiler_get_work_group_size_specialization_constants :: (compiler: spvc_compiler, x: *spvc_specialization_constant, y: *spvc_specialization_constant, z: *spvc_specialization_constant) -> spvc_constant_id #foreign libspirv_cross_c_shared;
+spvc_compiler_get_work_group_size_specialization_constants :: (compiler: spvc_compiler, x: *spvc_specialization_constant, y: *spvc_specialization_constant, z: *spvc_specialization_constant) -> spvc_constant_id #foreign libspirv_cross;
 
 /*
 * Buffer ranges
 * Maps to C++ API.
 */
-spvc_compiler_get_active_buffer_ranges :: (compiler: spvc_compiler, id: spvc_variable_id, ranges: **spvc_buffer_range, num_ranges: *u64) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_compiler_get_active_buffer_ranges :: (compiler: spvc_compiler, id: spvc_variable_id, ranges: **spvc_buffer_range, num_ranges: *u64) -> spvc_result #foreign libspirv_cross;
 
 /*
 * No stdint.h until C99, sigh :(
@@ -3664,51 +3664,50 @@ spvc_compiler_get_active_buffer_ranges :: (compiler: spvc_compiler, id: spvc_var
 * Maps to C++ API.
 * TODO: The SPIRConstant query interface and modification interface is not quite complete.
 */
-spvc_constant_get_scalar_fp16 :: (constant: spvc_constant, column: u32, row: u32) -> float #foreign libspirv_cross_c_shared;
-spvc_constant_get_scalar_fp32 :: (constant: spvc_constant, column: u32, row: u32) -> float #foreign libspirv_cross_c_shared;
-spvc_constant_get_scalar_fp64 :: (constant: spvc_constant, column: u32, row: u32) -> float64 #foreign libspirv_cross_c_shared;
-spvc_constant_get_scalar_u32 :: (constant: spvc_constant, column: u32, row: u32) -> u32 #foreign libspirv_cross_c_shared;
-spvc_constant_get_scalar_i32 :: (constant: spvc_constant, column: u32, row: u32) -> s32 #foreign libspirv_cross_c_shared;
-spvc_constant_get_scalar_u16 :: (constant: spvc_constant, column: u32, row: u32) -> u32 #foreign libspirv_cross_c_shared;
-spvc_constant_get_scalar_i16 :: (constant: spvc_constant, column: u32, row: u32) -> s32 #foreign libspirv_cross_c_shared;
-spvc_constant_get_scalar_u8 :: (constant: spvc_constant, column: u32, row: u32) -> u32 #foreign libspirv_cross_c_shared;
-spvc_constant_get_scalar_i8 :: (constant: spvc_constant, column: u32, row: u32) -> s32 #foreign libspirv_cross_c_shared;
-spvc_constant_get_subconstants :: (constant: spvc_constant, constituents: **spvc_constant_id, count: *u64) -> void #foreign libspirv_cross_c_shared;
-spvc_constant_get_scalar_u64 :: (constant: spvc_constant, column: u32, row: u32) -> u64 #foreign libspirv_cross_c_shared;
-spvc_constant_get_scalar_i64 :: (constant: spvc_constant, column: u32, row: u32) -> s64 #foreign libspirv_cross_c_shared;
-spvc_constant_get_type :: (constant: spvc_constant) -> spvc_type_id #foreign libspirv_cross_c_shared;
+spvc_constant_get_scalar_fp16 :: (constant: spvc_constant, column: u32, row: u32) -> float #foreign libspirv_cross;
+spvc_constant_get_scalar_fp32 :: (constant: spvc_constant, column: u32, row: u32) -> float #foreign libspirv_cross;
+spvc_constant_get_scalar_fp64 :: (constant: spvc_constant, column: u32, row: u32) -> float64 #foreign libspirv_cross;
+spvc_constant_get_scalar_u32 :: (constant: spvc_constant, column: u32, row: u32) -> u32 #foreign libspirv_cross;
+spvc_constant_get_scalar_i32 :: (constant: spvc_constant, column: u32, row: u32) -> s32 #foreign libspirv_cross;
+spvc_constant_get_scalar_u16 :: (constant: spvc_constant, column: u32, row: u32) -> u32 #foreign libspirv_cross;
+spvc_constant_get_scalar_i16 :: (constant: spvc_constant, column: u32, row: u32) -> s32 #foreign libspirv_cross;
+spvc_constant_get_scalar_u8 :: (constant: spvc_constant, column: u32, row: u32) -> u32 #foreign libspirv_cross;
+spvc_constant_get_scalar_i8 :: (constant: spvc_constant, column: u32, row: u32) -> s32 #foreign libspirv_cross;
+spvc_constant_get_subconstants :: (constant: spvc_constant, constituents: **spvc_constant_id, count: *u64) -> void #foreign libspirv_cross;
+spvc_constant_get_scalar_u64 :: (constant: spvc_constant, column: u32, row: u32) -> u64 #foreign libspirv_cross;
+spvc_constant_get_scalar_i64 :: (constant: spvc_constant, column: u32, row: u32) -> s64 #foreign libspirv_cross;
+spvc_constant_get_type :: (constant: spvc_constant) -> spvc_type_id #foreign libspirv_cross;
 
 /*
 * C implementation of the C++ api.
 */
-spvc_constant_set_scalar_fp16 :: (constant: spvc_constant, column: u32, row: u32, value: u16) -> void #foreign libspirv_cross_c_shared;
-spvc_constant_set_scalar_fp32 :: (constant: spvc_constant, column: u32, row: u32, value: float) -> void #foreign libspirv_cross_c_shared;
-spvc_constant_set_scalar_fp64 :: (constant: spvc_constant, column: u32, row: u32, value: float64) -> void #foreign libspirv_cross_c_shared;
-spvc_constant_set_scalar_u32 :: (constant: spvc_constant, column: u32, row: u32, value: u32) -> void #foreign libspirv_cross_c_shared;
-spvc_constant_set_scalar_i32 :: (constant: spvc_constant, column: u32, row: u32, value: s32) -> void #foreign libspirv_cross_c_shared;
-spvc_constant_set_scalar_u64 :: (constant: spvc_constant, column: u32, row: u32, value: u64) -> void #foreign libspirv_cross_c_shared;
-spvc_constant_set_scalar_i64 :: (constant: spvc_constant, column: u32, row: u32, value: s64) -> void #foreign libspirv_cross_c_shared;
-spvc_constant_set_scalar_u16 :: (constant: spvc_constant, column: u32, row: u32, value: u16) -> void #foreign libspirv_cross_c_shared;
-spvc_constant_set_scalar_i16 :: (constant: spvc_constant, column: u32, row: u32, value: s16) -> void #foreign libspirv_cross_c_shared;
-spvc_constant_set_scalar_u8 :: (constant: spvc_constant, column: u32, row: u32, value: u8) -> void #foreign libspirv_cross_c_shared;
-spvc_constant_set_scalar_i8 :: (constant: spvc_constant, column: u32, row: u32, value: s8) -> void #foreign libspirv_cross_c_shared;
+spvc_constant_set_scalar_fp16 :: (constant: spvc_constant, column: u32, row: u32, value: u16) -> void #foreign libspirv_cross;
+spvc_constant_set_scalar_fp32 :: (constant: spvc_constant, column: u32, row: u32, value: float) -> void #foreign libspirv_cross;
+spvc_constant_set_scalar_fp64 :: (constant: spvc_constant, column: u32, row: u32, value: float64) -> void #foreign libspirv_cross;
+spvc_constant_set_scalar_u32 :: (constant: spvc_constant, column: u32, row: u32, value: u32) -> void #foreign libspirv_cross;
+spvc_constant_set_scalar_i32 :: (constant: spvc_constant, column: u32, row: u32, value: s32) -> void #foreign libspirv_cross;
+spvc_constant_set_scalar_u64 :: (constant: spvc_constant, column: u32, row: u32, value: u64) -> void #foreign libspirv_cross;
+spvc_constant_set_scalar_i64 :: (constant: spvc_constant, column: u32, row: u32, value: s64) -> void #foreign libspirv_cross;
+spvc_constant_set_scalar_u16 :: (constant: spvc_constant, column: u32, row: u32, value: u16) -> void #foreign libspirv_cross;
+spvc_constant_set_scalar_i16 :: (constant: spvc_constant, column: u32, row: u32, value: s16) -> void #foreign libspirv_cross;
+spvc_constant_set_scalar_u8 :: (constant: spvc_constant, column: u32, row: u32, value: u8) -> void #foreign libspirv_cross;
+spvc_constant_set_scalar_i8 :: (constant: spvc_constant, column: u32, row: u32, value: s8) -> void #foreign libspirv_cross;
 
 /*
 * Misc reflection
 * Maps to C++ API.
 */
-spvc_compiler_get_binary_offset_for_decoration :: (compiler: spvc_compiler, id: spvc_variable_id, decoration: SpvDecoration, word_offset: *u32) -> spvc_bool #foreign libspirv_cross_c_shared;
+spvc_compiler_get_binary_offset_for_decoration :: (compiler: spvc_compiler, id: spvc_variable_id, decoration: SpvDecoration, word_offset: *u32) -> spvc_bool #foreign libspirv_cross;
 
-spvc_compiler_buffer_is_hlsl_counter_buffer :: (compiler: spvc_compiler, id: spvc_variable_id) -> spvc_bool #foreign libspirv_cross_c_shared;
-spvc_compiler_buffer_get_hlsl_counter_buffer :: (compiler: spvc_compiler, id: spvc_variable_id, counter_id: *spvc_variable_id) -> spvc_bool #foreign libspirv_cross_c_shared;
+spvc_compiler_buffer_is_hlsl_counter_buffer :: (compiler: spvc_compiler, id: spvc_variable_id) -> spvc_bool #foreign libspirv_cross;
+spvc_compiler_buffer_get_hlsl_counter_buffer :: (compiler: spvc_compiler, id: spvc_variable_id, counter_id: *spvc_variable_id) -> spvc_bool #foreign libspirv_cross;
 
-spvc_compiler_get_declared_capabilities :: (compiler: spvc_compiler, capabilities: **SpvCapability, num_capabilities: *u64) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_compiler_get_declared_capabilities :: (compiler: spvc_compiler, capabilities: **SpvCapability, num_capabilities: *u64) -> spvc_result #foreign libspirv_cross;
 
-spvc_compiler_get_declared_extensions :: (compiler: spvc_compiler, extensions: ***u8, num_extensions: *u64) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_compiler_get_declared_extensions :: (compiler: spvc_compiler, extensions: ***u8, num_extensions: *u64) -> spvc_result #foreign libspirv_cross;
 
-spvc_compiler_get_remapped_declared_block_name :: (compiler: spvc_compiler, id: spvc_variable_id) -> *u8 #foreign libspirv_cross_c_shared;
-spvc_compiler_get_buffer_block_decorations :: (compiler: spvc_compiler, id: spvc_variable_id, decorations: **SpvDecoration, num_decorations: *u64) -> spvc_result #foreign libspirv_cross_c_shared;
+spvc_compiler_get_remapped_declared_block_name :: (compiler: spvc_compiler, id: spvc_variable_id) -> *u8 #foreign libspirv_cross;
+spvc_compiler_get_buffer_block_decorations :: (compiler: spvc_compiler, id: spvc_variable_id, decorations: **SpvDecoration, num_decorations: *u64) -> spvc_result #foreign libspirv_cross;
 
 #scope_file
 
-libspirv_cross_c_shared :: #library,system "libspirv-cross-c-shared";

@@ -21,7 +21,7 @@ generate_bindings :: () -> bool {
     array_add(*include_paths, ".");
     array_add(*source_files, tprint("%/spirv_cross_c.h", PATH));
     array_add(*extra_clang_arguments, "-x", "c");
-    array_add(*system_libraries, .{filename="libspirv-cross-c-shared"});
+    array_add(*system_libraries, .{filename="libspirv-cross-c-shared", identifier="libspirv_cross"});
     // generated_library_path_prefix = "/usr/local/lib";
     mimic_spacing_flags = Mimic_Spacing_Flags.GLOBAL;
     alias_original_enum_names = false;
@@ -29,6 +29,7 @@ generate_bindings :: () -> bool {
     generate_compile_time_struct_checks = false;
     visitor_with_data = spirv_cross_visitor;
     // footer = FOOTER;
+    generate_library_declarations = false;
 
     output_filename: string = "binding.jai";
     #if OS == .MACOS {

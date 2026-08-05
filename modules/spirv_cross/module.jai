@@ -1,5 +1,6 @@
 #if OS == .MACOS {
     #load "macos.jai";
+    libspirv_cross :: #library,no_dll "libspirv-cross";
 } else #if OS == .LINUX {
     #load "linux.jai";
 }
