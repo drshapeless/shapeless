@@ -9,23 +9,26 @@ struct Rect {
 struct UV_Rect {
     Rect rect;
     Rect uv;
-    float4 color;
 };
 
-struct Unified_Input {
+struct Vertex_Input {
     float4x4 projection;
     device UV_Rect *rectangles;
+    texture2d<float> tex;
+};
+
+struct Fragment_Input {
+    float4 color;
     texture2d<float> tex;
     sampler sam;
 };
 
 struct Vertex_Output {
     float4 position [[position]];
-    float4 color;
     float2 uv;
 };
 
-vertex Vertex_Output vertex_main(uint vid [[vertex_id]], uint iid [[instance_id]], constant Unified_Input *input [[buffer(0)]]) {
+vertex Vertex_Output vertex_main(uint vid [[vertex_id]], uint iid [[instance_id]], constant Vertex_Input *input [[buffer(0)]]) {
     Vertex_Output output;
 
     Rect rect = input->rectangles[iid].rect;
@@ -43,7 +46,6 @@ vertex Vertex_Output vertex_main(uint vid [[vertex_id]], uint iid [[instance_id]
     positions[3] = float2(max_x, max_y);
 
     output.position = input->projection * float4(positions[vid], 0.0, 1.0);
-    output.color = input->rectangles[iid].color;
 
     float2 texture_size;
     texture_size.x = input->tex.get_width();
@@ -66,7 +68,7 @@ vertex Vertex_Output vertex_main(uint vid [[vertex_id]], uint iid [[instance_id]
     return output;
 }
 
-fragment float4 fragment_main(Vertex_Output vertex_output [[stage_in]], constant Unified_Input *input [[buffer(0)]]) {
+fragment float4 fragment_main(Vertex_Output vertex_output [[stage_in]], constant Fragment_Input *input [[buffer(0)]]) {
     float value = input->tex.sample(input->sam, vertex_output.uv).r;
-    return float4(vertex_output.color.xyz, value);
+    return float4(input->color.xyz, value);
 }
