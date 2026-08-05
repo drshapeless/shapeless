@@ -282,8 +282,6 @@ sampler_descriptor :: (desc: Sampler_Desc) -> Sampler_Descriptor {
     sampler_descriptor[0] = xx state;
     sampler_descriptor[1] = state.gpuResourceID(state)._impl;
 
-    Basic.log("%", sampler_descriptor[1]);
-
     return sampler_descriptor;
 }
 
@@ -586,7 +584,7 @@ copy_to_texture :: (cb: *Command_Buffer, dest: Texture, src: Ptr) {
     };
 
     bytes_per_row := MTLTexture.bufferBytesPerRow(dest.mtl);
-    MTL4ComputeCommandEncoder.copyFromBuffer_sourceOffset_sourceBytesPerRow_sourceBytesPerImage_sourceSize_toTexture_destinationSlice_destinationLevel_destinationOrigin_(cb.compute_encoder, src_allocation.buffer, src - src_allocation.gpu, bytes_per_row, 0, src_size, dest.mtl, 0, 1, .{0, 0, 0});
+    MTL4ComputeCommandEncoder.copyFromBuffer_sourceOffset_sourceBytesPerRow_sourceBytesPerImage_sourceSize_toTexture_destinationSlice_destinationLevel_destinationOrigin_(cb.compute_encoder, src_allocation.buffer, src - src_allocation.gpu, bytes_per_row, 0, src_size, dest.mtl, 0, 0, .{0, 0, 0});
 }
 
 copy_to_texture :: (cb: *Command_Buffer, dst: Texture, src: Ptr, image_offset: s32x3, image_extent: u32x3) {
@@ -608,7 +606,7 @@ copy_to_texture :: (cb: *Command_Buffer, dst: Texture, src: Ptr, image_offset: s
         y = xx image_offset.y,
         z = xx image_offset.z,
     };
-    MTL4ComputeCommandEncoder.copyFromBuffer_sourceOffset_sourceBytesPerRow_sourceBytesPerImage_sourceSize_toTexture_destinationSlice_destinationLevel_destinationOrigin_(cb.compute_encoder, src_allocation.buffer, src - src_allocation.gpu, bytes_per_row, 0, src_size, dst.mtl, 0, 1, dst_origin);
+    MTL4ComputeCommandEncoder.copyFromBuffer_sourceOffset_sourceBytesPerRow_sourceBytesPerImage_sourceSize_toTexture_destinationSlice_destinationLevel_destinationOrigin_(cb.compute_encoder, src_allocation.buffer, src - src_allocation.gpu, bytes_per_row, 0, src_size, dst.mtl, 0, 0, dst_origin);
 }
 
 copy_from_texture :: (cb: *Command_Buffer, dest: Ptr, src: Texture) {
